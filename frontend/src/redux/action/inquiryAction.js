@@ -62,4 +62,4 @@ export const createInquiry = createAsyncThunk(
   }
 );
 
-// Other inquiry actions (GetVendorInquiries, UpdateInquiryStatus) would follow here.
+
