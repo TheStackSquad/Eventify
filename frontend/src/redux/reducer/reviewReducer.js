@@ -53,12 +53,12 @@ const reviewSlice = createSlice({
         state.createReview.error = null;
       })
       .addCase(createReview.fulfilled, (state, action) => {
-        state.createReview.status = STATUS.SUCCESS;
+        state.createReview.status = STATUS.SUCCEEDED; 
         state.createReview.data = action.payload;
         state.createReview.error = null;
       })
       .addCase(createReview.rejected, (state, action) => {
-        state.createReview.status = STATUS.ERROR;
+        state.createReview.status = STATUS.FAILED; 
         state.createReview.error = action.payload;
         state.createReview.data = null;
       })
@@ -69,13 +69,13 @@ const reviewSlice = createSlice({
         state.vendorReviews.error = null;
       })
       .addCase(getVendorReviews.fulfilled, (state, action) => {
-        state.vendorReviews.status = STATUS.SUCCESS;
+        state.vendorReviews.status = STATUS.SUCCEEDED;
         state.vendorReviews.data = action.payload.reviews || [];
         state.vendorReviews.count = action.payload.count || 0;
         state.vendorReviews.error = null;
       })
       .addCase(getVendorReviews.rejected, (state, action) => {
-        state.vendorReviews.status = STATUS.ERROR;
+        state.vendorReviews.status = STATUS.FAILED;
         state.vendorReviews.error = action.payload;
         state.vendorReviews.data = [];
         state.vendorReviews.count = 0;
@@ -87,7 +87,7 @@ const reviewSlice = createSlice({
         state.updateReview.error = null;
       })
       .addCase(updateReviewStatus.fulfilled, (state, action) => {
-        state.updateReview.status = STATUS.SUCCESS;
+        state.updateReview.status = STATUS.SUCCEEDED;
         state.updateReview.data = action.payload;
         state.updateReview.error = null;
 
@@ -102,7 +102,7 @@ const reviewSlice = createSlice({
         }
       })
       .addCase(updateReviewStatus.rejected, (state, action) => {
-        state.updateReview.status = STATUS.ERROR;
+        state.updateReview.status = STATUS.FAILED;
         state.updateReview.error = action.payload;
         state.updateReview.data = null;
       });
