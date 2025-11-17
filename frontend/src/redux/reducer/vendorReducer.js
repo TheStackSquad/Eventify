@@ -5,8 +5,7 @@ import {
   getVendorProfile,
   registerVendor,
 } from "@/redux/action/vendorAction";
-import { STATUS, VENDOR_DEFAULTS } from "@/utils/constants/globalConstants";
-import { ERROR_MESSAGES } from "@/utils/constants/globalConstants";
+import { STATUS, VENDOR_DEFAULTS, ERROR_MESSAGES } from "@/utils/constants/globalConstants";
 import toastAlert from "@/components/common/toast/toastAlert";
 
 // ✅ SIMPLIFIED: Flat structure, separate statuses per operation
