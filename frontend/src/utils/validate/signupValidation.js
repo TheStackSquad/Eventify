@@ -1,4 +1,4 @@
-//src / utils / validate / signupValidation.js;
+//src / utils / validate / signupValidation.js
 
 export const validateSignup = (formData) => {
   const errors = {};

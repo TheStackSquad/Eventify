@@ -1,13 +1,6 @@
 // src/utils/loginUtils.js
 
-/**
- * Client-side utility to handle the login attempt by calling the backend API.
- * This function handles the fetch logic and returns a structured response.
- *
- * @param {object} axiosInstance - The configured Axios instance.
- * @param {object} credentials - Object containing email and password.
- * @returns {Promise<{success: boolean, message?: string, user?: object}>}
- */
+
 export async function loginUser(axiosInstance, credentials) {
   const { email, password } = credentials;
 
