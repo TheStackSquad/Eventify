@@ -1,4 +1,4 @@
-// frontend/src/middleware.js (must be at root of src/)
+// frontend/src/middleware.js 
 import { NextResponse } from "next/server";
 
 // Routes that require authentication

@@ -1,5 +1,4 @@
 //frontend/src/utils/validate/feedbackValidate.js
-
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
@@ -10,19 +9,24 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const feedbackValidate = (data) => {
   const errors = {};
 
-  if (!data.name.trim()) {
+  // Ensure data.name is a string before trimming
+  if (!(data.name || "").trim()) {
     errors.name = "Name is required.";
   }
 
-  if (!data.email.trim()) {
+  // Ensure data.email is a string before trimming and checking format
+  const emailValue = (data.email || "").trim();
+  if (!emailValue) {
     errors.email = "Email is required.";
-  } else if (!emailRegex.test(data.email)) {
+  } else if (!emailRegex.test(emailValue)) {
     errors.email = "Invalid email format.";
   }
 
-  if (!data.message.trim()) {
+  // Ensure data.message is a string before trimming and checking length
+  const messageValue = (data.message || "").trim();
+  if (!messageValue) {
     errors.message = "Message is required.";
-  } else if (data.message.trim().length < 10) {
+  } else if (messageValue.length < 10) {
     errors.message = "Message must be at least 10 characters long.";
   }
 
@@ -32,5 +36,4 @@ export const feedbackValidate = (data) => {
   };
 };
 
-// Exporting the default is sometimes cleaner for quick imports
 export default feedbackValidate;

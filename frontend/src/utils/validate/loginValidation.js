@@ -1,11 +1,5 @@
 // src/utils/validate/loginValidation.js
 
-/**
- * Performs client-side validation for login credentials (UX focus).
- *
- * @param {object} credentials - Object containing email and password.
- * @returns {string | null} An error message string if validation fails, otherwise null.
- */
 export function validateLogin({ email, password }) {
   if (!email || !password) {
     return "Please enter both your email address and password.";
