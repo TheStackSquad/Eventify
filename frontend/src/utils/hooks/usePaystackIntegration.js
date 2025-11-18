@@ -7,11 +7,7 @@ import { useRouter } from "next/navigation";
 import toastAlert from "@/components/common/toast/toastAlert";
 import axios, { ENDPOINTS } from "@/axiosConfig/axios";
 
-/**
- * ✅ REFACTORED: Builds MINIMAL order initialization payload.
- * NO price calculations - server will fetch prices from database.
- * Client only sends IDENTIFICATION data (what they want to buy).
- */
+
 const buildInitializationPayload = (email, items, metadata) => {
   const customerInfo = metadata?.customer_info || {};
 
@@ -40,10 +36,7 @@ const buildInitializationPayload = (email, items, metadata) => {
   };
 };
 
-/**
- * ✅ REFACTORED: usePaystackIntegration hook
- * NO LONGER accepts amountInKobo prop - server calculates this!
- */
+
 export function usePaystackIntegration({ email, metadata }) {
   const router = useRouter();
   const { clearCart, items } = useCart();
@@ -105,13 +98,7 @@ export function usePaystackIntegration({ email, metadata }) {
     toastAlert.warn("Payment cancelled. You can try again anytime.");
   }, []);
 
-  /**
-   * ✅ REFACTORED: handlePayment
-   * Key changes:
-   * 1. Removed client-side amount calculation
-   * 2. Server returns authoritative amount
-   * 3. Use server's amount for Paystack
-   */
+
   const handlePayment = useCallback(async () => {
     // --- Pre-flight Validation ---
     if (!isScriptLoaded || !window.PaystackPop) {
