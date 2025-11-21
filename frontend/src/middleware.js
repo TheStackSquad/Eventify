@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 // Routes that require authentication
 const protectedRoutes = [
   "/dashboard",
-  "/events/create-events",
+ // "/events/create-events",
   // Add more as needed
 ];
 
@@ -37,7 +37,7 @@ export async function middleware(request) {
 
     // Call your backend /me endpoint with the cookie
     const backendUrl =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
     const response = await fetch(`${backendUrl}/auth/me`, {
       method: "GET",
       headers: {
@@ -88,7 +88,7 @@ function redirectToLogin(request) {
 export const config = {
   matcher: [
     "/dashboard/:path*", // Matches /dashboard and all sub-routes
-    "/events/create-events/:path*", // Matches /events/create-events with any params
+ //   "/events/create-events/:path*", // Matches /events/create-events with any params
     // Add more patterns as needed
   ],
 };

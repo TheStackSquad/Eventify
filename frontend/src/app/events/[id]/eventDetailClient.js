@@ -1,45 +1,30 @@
 // src/app/events/[id]/eventDetailClient.js
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useCart } from "@/context/cartContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useSelector } from "react-redux";
 import Image from "next/image";
 import { ArrowLeft, ShoppingCart, CheckCircle } from "lucide-react";
 
-// Component now accepts the resolved 'eventId' as a regular prop
-const EventDetailClient = ({ eventId }) => {
+// Component now receives the fully-resolved event from server component
+const EventDetailClient = ({ event }) => {
   const router = useRouter();
   const { addItem } = useCart();
 
-  // 1. DATA SELECTION from Redux State
-  // const allEvents = useSelector((state) => state.events?.userEvents || []);
-const allEvents = useSelector((state) => state.events?.allEvents || []);
-
-  // Find the specific event based on the slug ID
-  const event = useMemo(() => {
-    return allEvents.find((e) => e.id === eventId);
-  }, [allEvents, eventId]);
-
   // 2. TICKET SELECTION STATE
   // Initialize state based on the first available ticket tier
-  const [selectedTierId, setSelectedTierId] = useState(null); // Initialize as null
+  const [selectedTierId, setSelectedTierId] = useState(
+    event.tickets[0]?.tierName || null
+  );
   const [quantity, setQuantity] = useState(1);
   const [isAdded, setIsAdded] = useState(false);
 
   // Find the currently selected ticket object
   const selectedTier = useMemo(() => {
-    return event?.tickets.find((t) => t.tierName === selectedTierId);
-  }, [event, selectedTierId]);
-
-  // Sync initial tier selection when event data loads
-  useEffect(() => {
-    if (event && !selectedTierId) {
-      setSelectedTierId(event.tickets[0]?.tierName || null);
-    }
-  }, [event, selectedTierId]);
+    return event.tickets.find((t) => t.tierName === selectedTierId);
+  }, [event.tickets, selectedTierId]);
 
   // 3. HANDLERS
   const handleAddToCart = () => {
@@ -68,15 +53,6 @@ const allEvents = useSelector((state) => state.events?.allEvents || []);
     router.push("/cart");
   };
 
-  // --- Rendering States ---
-  if (!event) {
-    return (
-      <div className="p-10 text-center text-gray-500">
-        Event Not Found or Loading...
-      </div>
-    );
-  }
-
   const isSoldOut = selectedTier && selectedTier.quantity < 1;
 
   return (
@@ -99,6 +75,7 @@ const allEvents = useSelector((state) => state.events?.allEvents || []);
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 640px"
             className="object-cover"
+            priority // Load image with high priority for SEO
           />
         </div>
         <div className="lg:w-1/2 space-y-4">
@@ -110,7 +87,22 @@ const allEvents = useSelector((state) => state.events?.allEvents || []);
             <p className="font-semibold text-gray-700">
               Date:{" "}
               <span className="font-normal">
-                {new Date(event.startDate).toLocaleDateString()}
+                {new Date(event.startDate).toLocaleDateString("en-US", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </span>
+            </p>
+            <p className="font-semibold text-gray-700">
+              Time:{" "}
+              <span className="font-normal">
+                {new Date(event.startDate).toLocaleTimeString("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: true,
+                })}
               </span>
             </p>
             <p className="font-semibold text-gray-700">
@@ -118,6 +110,9 @@ const allEvents = useSelector((state) => state.events?.allEvents || []);
               <span className="font-normal">
                 {event.venueName}, {event.city}
               </span>
+            </p>
+            <p className="font-semibold text-gray-700">
+              Category: <span className="font-normal">{event.category}</span>
             </p>
           </div>
         </div>
@@ -139,7 +134,7 @@ const allEvents = useSelector((state) => state.events?.allEvents || []);
           </label>
           <select
             id="ticket-tier"
-            value={selectedTierId || ""} // Use empty string for controlled select
+            value={selectedTierId || ""}
             onChange={(e) => setSelectedTierId(e.target.value)}
             className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 transition duration-150"
           >
@@ -179,7 +174,7 @@ const allEvents = useSelector((state) => state.events?.allEvents || []);
                       )
                     )
                   )
-                } // Clamp quantity
+                }
                 min="1"
                 max={selectedTier.quantity}
                 disabled={isSoldOut}
@@ -236,7 +231,7 @@ const allEvents = useSelector((state) => state.events?.allEvents || []);
       {/* CONTINUE BROWSING CTA */}
       <div className="mt-8 text-center">
         <Link
-          href="/"
+          href="/events"
           className="text-blue-600 hover:text-blue-700 font-medium"
         >
           <span className="mr-2">←</span> See All Upcoming Events
