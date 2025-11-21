@@ -25,8 +25,9 @@ import passwordResetReducer from "./passwordResetReducer";
 const persistConfig = {
   key: "root",
   storage,
-  whitelist: ["auth"],
+  whitelist: ["auth", "events"],
 };
+
 
 const combinedReducer = combineReducers({
   auth: authReducer,

@@ -62,14 +62,15 @@ export const API_ENDPOINTS = {
 
   EVENTS: {
     BASE: "/events",
-    CREATE: "/create-events",
     GET_BY_ID: "/events/:eventId",
-    UPDATE: "/events/:id",
-    DELETE: "/events/:id",
-    MY_EVENTS: "/events/my-events",
-    ANALYTICS: "/events/:id/analytics",
-    LIKE: "/events/:eventId/like",
-    PUBLISH: "/events/:id/publish",
+
+    CREATE: "/api/events/create",
+    UPDATE: "/api/events/:eventId",
+    DELETE: "/api/events/:eventId",
+    MY_EVENTS: "/api/events/my-events",
+    ANALYTICS: "/api/events/:eventId/analytics",
+    LIKE: "/api/events/:eventId/like",
+    PUBLISH: "/api/events/:eventId/publish",
   },
 
   VENDORS: {
