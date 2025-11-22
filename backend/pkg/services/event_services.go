@@ -89,14 +89,30 @@ func (s *EventService) FindAll(ctx context.Context) ([]models.Event, error) {
     return events, nil
 }
 
-// FindByID finds a single event by ID and organizer ID
+// backend/pkg/services/event_service.go
+
+// FindByID finds a single event by ID and organizer ID (PROTECTED)
 func (s *EventService) FindByID(ctx context.Context, eventID, organizerID primitive.ObjectID) (*models.Event, error) {
     filter := bson.M{
         "_id":          eventID,
         "organizer_id": organizerID,
         "is_deleted":   false,
     }
+    var event models.Event
+    err := s.EventCollection.FindOne(ctx, filter).Decode(&event)
+    if err != nil {
+        return nil, err
+    }
+    
+    return &event, nil
+}
 
+// FindByIDPublic finds a single event by ID without authentication (PUBLIC)
+func (s *EventService) FindByIDPublic(ctx context.Context, eventID primitive.ObjectID) (*models.Event, error) {
+    filter := bson.M{
+        "_id":        eventID,
+        "is_deleted": false,
+    }
     var event models.Event
     err := s.EventCollection.FindOne(ctx, filter).Decode(&event)
     if err != nil {

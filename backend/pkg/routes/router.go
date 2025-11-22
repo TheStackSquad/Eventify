@@ -18,14 +18,15 @@ import (
 
 // ConfigureRouter sets up all application routes and middleware.
 func ConfigureRouter(
-	authHandler *handlers.AuthHandler,
-	eventHandler *handlers.EventHandler,
-	vendorHandler *handlers.VendorHandler,
-	reviewHandler *handlers.ReviewHandler,
-	inquiryHandler *handlers.InquiryHandler,
-	feedbackHandler *handlers.FeedbackHandler,
-	orderHandler *handlers.OrderHandler, // payment processing
-	authRepo repository.AuthRepository,
+    authHandler *handlers.AuthHandler,
+    eventHandler *handlers.EventHandler,
+    vendorHandler *handlers.VendorHandler,
+    reviewHandler *handlers.ReviewHandler,
+    inquiryHandler *handlers.InquiryHandler,
+    feedbackHandler *handlers.FeedbackHandler,
+    orderHandler *handlers.OrderHandler,
+    authRepo repository.AuthRepository,
+    analyticsHandler *handlers.AnalyticsHandler,
 ) *gin.Engine {
 	router := gin.New()
 	router.RedirectTrailingSlash = false
@@ -104,20 +105,26 @@ func ConfigureRouter(
 publicEvents := router.Group("/events")
 {
 	publicEvents.GET("", eventHandler.GetAllEventsHandler)      // Browse all events
-	publicEvents.GET("/:eventId", eventHandler.GetEventByID)    // View event details
+	publicEvents.GET("/:eventId", eventHandler.GetPublicEventByID)    // View event details
 }
 
 // -------------------------------------------------------------------
 // PROTECTED EVENT ROUTES (Auth Required)
 // -------------------------------------------------------------------
-protectedEvents := router.Group("/events")
+//protectedEvents := router.Group("/events")
+protectedEvents := router.Group("/api/events")
 protectedEvents.Use(middleware.AuthMiddleware())
 {
 	protectedEvents.GET("/my-events", eventHandler.GetUserEventsHandler)
+	protectedEvents.GET("/:eventId", eventHandler.GetEventByID)
 	protectedEvents.PUT("/:eventId", eventHandler.UpdateEvent)
 	protectedEvents.DELETE("/:eventId", eventHandler.DeleteEvent)
 	protectedEvents.POST("/:eventId/like", eventHandler.ToggleLikeHandler)
-	protectedEvents.GET("/:eventId/analytics", eventHandler.FetchEventAnalytics)
+	//protectedEvents.GET("/:eventId/analytics", eventHandler.FetchEventAnalytics)
+	// Main analytics endpoint
+		// GET /api/events/:eventId/analytics
+		// GET /api/events/:eventId/analytics?includeTimeline=true
+		protectedEvents.GET("/:eventId/analytics", analyticsHandler.FetchEventAnalytics)
 }
 
 	// -------------------------------------------------------------------
