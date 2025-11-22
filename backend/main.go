@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"eventify/backend/pkg/analytics"      // ✅ ADD THIS IMPORT
 	"eventify/backend/pkg/db"
 	"eventify/backend/pkg/handlers"
 	"eventify/backend/pkg/repository"
@@ -43,8 +44,7 @@ func main() {
 	db.ConnectDB()
 	log.Info().Msg("Database connection established successfully.")
 
-	// ...
-	//  GET BOTH: Database AND Client
+	// Get both: Database AND Client
 	dbClient := db.GetDB()
 	mongoClient := db.Client
 
@@ -68,15 +68,22 @@ func main() {
 	inquiryRepo := repository.NewMongoInquiryRepository(inquiriesCollection)
 	feedbackRepo := repository.NewFeedbackRepository(feedbackCollection)
 	
-	// ✅ FIXED: Order repository with mongo client
+	// Order repository with mongo client for transactions
 	orderRepo := repository.NewMongoOrderRepository(
-		mongoClient,         // ✅ Pass mongo client for transactions
+		mongoClient,
 		ordersCollection,
 		ticketsCollection,
 	)
 	
-	// ✅ Event repository for stock management
+	// Event repository for stock management
 	eventRepo := repository.NewMongoEventRepository(eventsCollection, ticketsCollection)
+
+	// ✅ Analytics Repository (NEW)
+	analyticsRepo := analytics.NewAnalyticsRepository(
+		eventsCollection,   // ✅ FIXED: Use eventsCollection (not eventCollection)
+		ordersCollection,   // ✅ FIXED: Use ordersCollection (not orderCollection)
+		ticketsCollection,  // ✅ FIXED: Use ticketsCollection (not ticketCollection)
+	)
 
 	// ------------------------------------------------------------
 	// 4️⃣ Services
@@ -88,19 +95,22 @@ func main() {
 	inquiryService := services.NewInquiryService(inquiryRepo, vendorRepo)
 	feedbackService := services.NewFeedbackService(feedbackRepo)
 	
-	// ✅ Paystack client configuration
+	// ✅ Analytics Service (NEW)
+	analyticsService := services.NewAnalyticsService(analyticsRepo)
+	
+	// Paystack client configuration
 	paystackClient := &services.PaystackClient{
-		SecretKey:  os.Getenv("PAYSTACK_SECRET_KEY"), // Ensure this env var exists
+		SecretKey:  os.Getenv("PAYSTACK_SECRET_KEY"),
 		HTTPClient: &http.Client{Timeout: 30 * time.Second},
 	}
 	
-	// ✅ Pricing service for server-side calculations
+	// Pricing service for server-side calculations
 	pricingService := services.NewPricingService(eventRepo)
 	
-	// ✅ FIXED: Order service with all dependencies
+	// Order service with all dependencies
 	orderService := services.NewOrderService(
 		orderRepo,
-		eventRepo,   // ✅ Pass event repo for stock management
+		eventRepo,
 		pricingService,
 		paystackClient,
 	)
@@ -115,6 +125,9 @@ func main() {
 	inquiryHandler := handlers.NewInquiryHandler(inquiryService)
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackService)
 	orderHandler := handlers.NewOrderHandler(orderService)
+	
+	// ✅ Analytics Handler (NEW)
+	analyticsHandler := handlers.NewAnalyticsHandler(analyticsService)
 
 	// ------------------------------------------------------------
 	// 6️⃣ Router Setup
@@ -128,6 +141,7 @@ func main() {
 		feedbackHandler,
 		orderHandler,
 		authRepo,
+		analyticsHandler, // ✅ PASS ANALYTICS HANDLER
 	)
 
 	// ------------------------------------------------------------
