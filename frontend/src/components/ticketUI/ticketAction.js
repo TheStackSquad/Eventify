@@ -9,7 +9,7 @@ export default function TicketActions({
   onShare,
 }) {
   return (
-    <div className="grid md:grid-cols-3 gap-4 mb-8">
+    <div className="grid md:grid-cols-3 gap-4 mt-4 p-5 mb-8">
       {/* Download Button */}
       <button
         onClick={onDownload}
