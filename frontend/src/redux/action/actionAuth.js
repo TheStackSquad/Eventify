@@ -66,6 +66,17 @@ export const signinUser = createAsyncThunk(
         API_ENDPOINTS.AUTH.SIGNIN, // 👈 Use the constant
         formData
       );
+
+      // 🔑 LOG ADDED: Log the successful response details
+      // The token itself is in the secure HTTP-only cookie, not directly in response.data.
+      console.log("--- Signin Success Response ---");
+      console.log("Status:", response.status); // Should be 200
+      console.log("Message:", response.data.message);
+      console.log("User Data:", response.data.user);
+      // You can check for the Set-Cookie header in your browser's Network tab.
+      console.log("Response Headers (Check for Set-Cookie):", response.headers);
+      console.log("-----------------------------");
+
       return {
         user: response.data.user,
         message: response.data.message,
@@ -73,12 +84,15 @@ export const signinUser = createAsyncThunk(
     } catch (error) {
       // This logic ensures the test receives a payload for rejected actions
       if (error.response) {
+        // Log the error response as well
+        console.error("Signin Failed:", error.response.data?.message);
         return rejectWithValue({
           message: error.response.data?.message,
           code: error.response.status,
         });
       }
       // Fallback for network errors
+      console.error("Signin Network Error:", error.message);
       return rejectWithValue({
         message: "Network error during signin.",
         code: undefined,

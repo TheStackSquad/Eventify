@@ -1,10 +1,10 @@
-// frontend/src/middleware.js 
+// frontend/src/middleware.js
 import { NextResponse } from "next/server";
 
 // Routes that require authentication
 const protectedRoutes = [
   "/dashboard",
- // "/events/create-events",
+  // "/events/create-events",
   // Add more as needed
 ];
 
@@ -28,25 +28,25 @@ export async function middleware(request) {
   try {
     // Get cookies from the request
     const accessToken = request.cookies.get("access_token");
-    const refreshToken = request.cookies.get("refresh_token");
 
     if (!accessToken) {
       console.log("❌ [MIDDLEWARE] No access token found");
       return redirectToLogin(request);
     }
 
-    // Call your backend /me endpoint with the cookie
+    // Call your backend /me endpoint for verification
+    // FIX 1: Set the fallback to the correct Go backend port (8081)
     const backendUrl =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
+
     const response = await fetch(`${backendUrl}/auth/me`, {
       method: "GET",
       headers: {
-        Cookie: `access_token=${accessToken.value}${
-          refreshToken ? `; refresh_token=${refreshToken.value}` : ""
-        }`,
+        // FIX 2: Use the standard Authorization: Bearer header
+        Authorization: `Bearer ${accessToken.value}`,
         "Content-Type": "application/json",
       },
-      credentials: "include",
+      // Removed 'credentials: "include"' as it is not needed for server-to-server fetch
     });
 
     console.log("📡 [MIDDLEWARE] Backend response:", response.status);
@@ -88,7 +88,7 @@ function redirectToLogin(request) {
 export const config = {
   matcher: [
     "/dashboard/:path*", // Matches /dashboard and all sub-routes
- //   "/events/create-events/:path*", // Matches /events/create-events with any params
+    // "/events/create-events/:path*", // Matches /events/create-events with any params
     // Add more patterns as needed
   ],
 };

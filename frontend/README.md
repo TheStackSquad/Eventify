@@ -1181,3 +1181,73 @@ For questions about tests:
 **Last Updated**: November 2025  
 **Implemented By**: Development Team  
 **Test Framework**: Jest 29.x, RTL 14.x, axios-mock-adapter 2.x
+
+
+# NOTES FOR DEVELOPERS
+
+
+# IMPORTANT NOTES:
+
+1. ALL MONETARY VALUES ARE IN KOBO (smallest unit)
+   - Frontend must divide by 100 to display in Naira
+   - Example: 8675000 kobo = ₦86,750.00
+
+2. PERCENTAGES are float64 values from 0-100
+   - Example: 91.3 means 91.3%
+   - Frontend displays as-is or adds "%" symbol
+
+3. EVENT_ID FIELDS
+   - In orders and tickets collections, event_id is stored as STRING
+   - In events collection, _id is stored as ObjectID
+   - Repository layer handles conversion
+
+4. FIELD NAMING CONVENTION
+   - Go structs: PascalCase (TotalRevenue)
+   - JSON tags: camelCase (totalRevenue)
+   - MongoDB fields: snake_case (total_revenue)
+
+5. NULL/EMPTY HANDLING
+   - Arrays default to empty [] not null
+   - Omitempty used for optional fields (timeline)
+   - Zero values (0, 0.0) are valid and not omitted
+
+6. FRONTEND REDUX MAPPING
+   This structure exactly matches:
+   state.events.analytics = AnalyticsResponse
+
+   Example access patterns:
+   - state.events.analytics.overview.totalRevenue
+   - state.events.analytics.tickets.totalSold
+   - state.events.analytics.tiers[0].tierName
+   - state.events.analytics.orders.conversionRate
+
+7. BACKEND USAGE PATTERN
+   Step 1: Repository fetches raw data from MongoDB
+   Step 2: Service calculates metrics and builds response
+   Step 3: Handler returns AnalyticsResponse as JSON
+
+   Example:
+   repo.GetTicketsSold() → int64
+   service.calculateMetrics() → builds TicketsData
+   handler returns → JSON to frontend
+
+8. DATA SOURCES
+   - overview: Calculated from events, orders, tickets
+   - tickets: From events.ticket_tiers + tickets collection count
+   - revenue: From orders.final_total, subtotal, fees, vat
+   - tiers: From events.ticket_tiers + tickets grouped by tier_name
+   - orders: From orders.status field
+   - customers: From orders.customer.email and orders.customer.country
+   - payments: From orders.payment_channel and orders.status
+
+9. PERFORMANCE CONSIDERATIONS
+   - Most queries are aggregations (efficient)
+   - Consider caching for popular events (5min TTL)
+   - Add indexes on: orders.items.event_id, tickets.event_id
+   - Timeline data is optional to reduce payload size
+
+10. TESTING
+    - Use provided MongoDB test queries to verify data
+    - Test with events that have 0 orders (should return zeros)
+    - Test with deleted events (should return 404)
+    - Test with unauthorized access (should return 403)

@@ -1,4 +1,5 @@
 // frontend/src/components/dashboard/myEvents/eventCard.js
+// ✅ FIXED: Dispatch call + Aggressive simplification for cleaner cards
 
 import React from "react";
 import Image from "next/image";
@@ -12,7 +13,7 @@ import {
   Calendar,
   MapPin,
   Users,
-  DollarSign,
+  Ticket,
 } from "lucide-react";
 
 // Import utilities
@@ -22,9 +23,14 @@ import {
 } from "@/components/dashboard/myEvents/eventUtils";
 import { fetchEventAnalytics } from "@/redux/action/eventAction";
 
-export default function EventCard({ event, openDeleteModal, openAnalyticsModal }) { 
+export default function EventCard({
+  event,
+  openDeleteModal,
+  openAnalyticsModal,
+}) {
   const router = useRouter();
   const dispatch = useDispatch();
+
   const {
     id,
     eventTitle,
@@ -63,19 +69,23 @@ export default function EventCard({ event, openDeleteModal, openAnalyticsModal }
   const isOnline = eventType === "virtual";
   const isPast = new Date(endDate) < new Date();
 
-  // Handler stubs for organizer actions
-  // 1. EDIT: Redirect to a pre-filled form
+  // ============================================================================
+  // HANDLERS
+  // ============================================================================
+
+  // 1. EDIT: Redirect to pre-filled form
   const handleEdit = () => {
     router.push(`/events/create-events?id=${id}`);
   };
 
-  // 2. SALES: Fetch data, then open modal (Modal is opened by parent component watching Redux state)
+  // 2. SALES: Fetch analytics then open modal
+  // ✅ FIX: Wrapped id in object { eventId: id }
   const handleViewSales = () => {
-    dispatch(fetchEventAnalytics(id));
+    dispatch(fetchEventAnalytics({ eventId: id }));
     openAnalyticsModal(id);
   };
 
-  // 3. DELETE: Open a confirmation modal
+  // 3. DELETE: Open confirmation modal
   const handleDelete = () => {
     openDeleteModal(id, eventTitle);
   };
@@ -87,7 +97,9 @@ export default function EventCard({ event, openDeleteModal, openAnalyticsModal }
       transition={{ duration: 0.3 }}
       className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-[1.02]"
     >
-      {/* Event Image with Status Badge */}
+      {/* ========================================
+          EVENT IMAGE WITH STATUS BADGES
+      ======================================== */}
       <div className="relative h-48 group">
         <Image
           src={eventImage || "/img/placeholder.jpg"}
@@ -121,42 +133,41 @@ export default function EventCard({ event, openDeleteModal, openAnalyticsModal }
         )}
       </div>
 
+      {/* ========================================
+          CARD CONTENT
+      ======================================== */}
       <div className="p-5">
         {/* Title */}
         <h3 className="text-lg font-bold text-gray-900 line-clamp-2 mb-3 min-h-[3.5rem]">
           {eventTitle}
         </h3>
 
-        {/* Quick Stats Grid */}
-        <div className="grid grid-cols-2 gap-3 mb-4 pb-4 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-indigo-500" />
-            <div>
-              <p className="text-xs text-gray-500">Tickets</p>
-              <p className="text-sm font-bold text-gray-900">{totalTickets}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <DollarSign className="h-4 w-4 text-green-500" />
-            <div>
-              <p className="text-xs text-gray-500">Tiers</p>
-              <p className="text-sm font-bold text-gray-900">{ticketTiers}</p>
-            </div>
-          </div>
+        {/* ✅ ENHANCED: Compact Badge-Style Stats */}
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium">
+            <Users className="h-3 w-3" />
+            {totalTickets} tickets
+          </span>
+          <span className="inline-flex items-center gap-1 text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-medium">
+            <Ticket className="h-3 w-3" />
+            {ticketTiers} {ticketTiers === 1 ? "tier" : "tiers"}
+          </span>
         </div>
 
-        {/* Event Details */}
-        <div className="space-y-2 mb-4 text-sm text-gray-600">
-          <div className="flex items-start gap-2">
-            <Calendar className="h-4 w-4 text-indigo-500 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="font-medium text-gray-900">{formattedDate}</p>
-              <p className="text-xs text-gray-500">{formattedTime}</p>
-            </div>
+        {/* ✅ ENHANCED: Compact Event Details */}
+        <div className="space-y-1.5 mb-3 text-xs text-gray-600">
+          {/* Date & Time */}
+          <div className="flex items-center gap-1.5">
+            <Calendar className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
+            <span className="font-medium text-gray-900">{formattedDate}</span>
+            <span className="text-gray-400">•</span>
+            <span className="text-gray-500">{formattedTime}</span>
           </div>
-          <div className="flex items-start gap-2">
-            <MapPin className="h-4 w-4 text-indigo-500 mt-0.5 flex-shrink-0" />
-            <p className="line-clamp-1">
+
+          {/* Location */}
+          <div className="flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 text-indigo-500 flex-shrink-0" />
+            <p className="line-clamp-1 text-gray-600">
               {isOnline
                 ? "Virtual Event"
                 : `${venueName || "Venue TBD"}, ${city}`}
@@ -164,21 +175,19 @@ export default function EventCard({ event, openDeleteModal, openAnalyticsModal }
           </div>
         </div>
 
-        {/* Price Range */}
-        <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-3 mb-4">
-          <p className="text-xs text-gray-600 mb-1">Price Range</p>
-          {lowestPrice === highestPrice ? (
-            <p className="text-lg font-bold text-green-700">
-              ₦{lowestPrice.toLocaleString()}
-            </p>
-          ) : (
-            <p className="text-lg font-bold text-green-700">
-              ₦{lowestPrice.toLocaleString()} - ₦{highestPrice.toLocaleString()}
-            </p>
-          )}
+        {/* ✅ ENHANCED: Inline Price Display */}
+        <div className="flex items-center justify-between py-2 px-3 mb-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg">
+          <span className="text-xs font-medium text-gray-600">Price:</span>
+          <span className="text-sm font-bold text-green-700">
+            {lowestPrice === highestPrice
+              ? `₦${lowestPrice.toLocaleString()}`
+              : `₦${lowestPrice.toLocaleString()} - ₦${highestPrice.toLocaleString()}`}
+          </span>
         </div>
 
-        {/* Action Buttons */}
+        {/* ========================================
+            ACTION BUTTONS
+        ======================================== */}
         <div className="grid grid-cols-3 gap-2">
           <button
             onClick={handleEdit}
@@ -188,6 +197,7 @@ export default function EventCard({ event, openDeleteModal, openAnalyticsModal }
             <Edit className="h-4 w-4 mb-1 group-hover:scale-110 transition-transform" />
             <span>Edit</span>
           </button>
+
           <button
             onClick={handleViewSales}
             className="flex flex-col items-center justify-center py-2.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors group"
@@ -196,6 +206,7 @@ export default function EventCard({ event, openDeleteModal, openAnalyticsModal }
             <BarChart3 className="h-4 w-4 mb-1 group-hover:scale-110 transition-transform" />
             <span>Sales</span>
           </button>
+
           <button
             onClick={handleDelete}
             className="flex flex-col items-center justify-center py-2.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors group"

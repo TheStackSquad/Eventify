@@ -1,123 +1,256 @@
 // frontend/src/components/modal/analytics.js
 
-import React from "react";
-import { motion } from "framer-motion";
-import { X, BarChart3, Ticket, DollarSign } from "lucide-react";
+"use client";
 
-// Placeholder for analytics data structure
-const DUMMY_ANALYTICS = {
-  totalTicketsSold: 150,
-  totalRevenue: 7500000,
-  ticketsAvailable: 50,
-  conversionRate: 15.5, // percent
-};
+import React, { useEffect, useState, useCallback } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import { motion, AnimatePresence } from "framer-motion";
+import { X } from "lucide-react";
+
+// Components
+import AnalyticsHeader from "./analytics/analyticsHeader";
+import AnalyticsKeyMetrics from "./analytics/analyticsKeyMetrics";
+import AnalyticsSkeleton from "./analytics/analyticsSkeleton";
+import ExportButton from "./analytics/shared/exportButton";
+
+// Sections (lazy loaded)
+import RevenueSection from "./analytics/sections/revenueSection";
+import TicketTiersSection from "./analytics/sections/ticketTiersSection";
+import OrdersSection from "./analytics/sections/ordersSection";
+import CustomersSection from "./analytics/sections/customersSection";
+import PaymentsSection from "./analytics/sections/paymentsSection";
+import TimelineSection from "./analytics/sections/timelineSection";
+
+// Utils
+import {
+  getSectionStates,
+  saveSectionState,
+} from "./analytics/utils/analyticsStorage";
+
+// Redux
+import { fetchEventAnalytics } from "@/redux/action/eventAction";
+import { STATUS } from "@/utils/constants/globalConstants";
 
 export default function AnalyticsModal({
   isOpen,
   onClose,
-  analyticsData, // The actual data from Redux state
-  eventTitle = "Event Sales Analytics",
-  isLoading = false,
+  eventId,
+  eventTitle,
 }) {
+  const dispatch = useDispatch();
+
+  // Get analytics from Redux
+   const analyticsState = useSelector(
+     (state) => state.events?.eventAnalytics?.[eventId] || {}
+   );
+
+  const {
+    data: analytics = {},
+    status = STATUS.IDLE,
+    error = null,
+  } = analyticsState;
+  const isLoading = status === STATUS.LOADING;
+  const isError = status === STATUS.FAILED;
+
+  // Section collapse states (persisted in localStorage)
+  const [expandedSections, setExpandedSections] = useState(() =>
+    getSectionStates(eventId)
+  );
+
+  // Toggle section expansion
+  const toggleSection = useCallback(
+    (sectionKey) => {
+      setExpandedSections((prev) => {
+        const newState = {
+          ...prev,
+          [sectionKey]: !prev[sectionKey],
+        };
+        saveSectionState(eventId, newState);
+        return newState;
+      });
+    },
+    [eventId]
+  );
+
+  // Handle ESC key
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === "Escape" && isOpen) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = "hidden"; // Prevent background scroll
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "unset";
+    };
+  }, [isOpen, onClose]);
+
+  // Fetch analytics if not available
+  useEffect(() => {
+    if (isOpen && eventId && (!analytics || status === STATUS.FAILED)) {
+      dispatch(fetchEventAnalytics({ eventId }));
+    }
+  }, [isOpen, eventId, analytics, status, dispatch]);
+
   if (!isOpen) return null;
 
-  // Use dummy data if real data is not available (for demonstration)
-  const data = analyticsData || DUMMY_ANALYTICS;
+  // Animation variants
+  const backdropVariants = {
+    visible: { opacity: 1 },
+    hidden: { opacity: 0 },
+  };
 
-  // Format currency
-  const formatCurrency = (amount) => `₦${amount.toLocaleString()}`;
-
-  // Simple modal backdrop and content animation
-  const backdropVariants = { visible: { opacity: 1 }, hidden: { opacity: 0 } };
   const modalVariants = {
-    visible: { y: 0, opacity: 1, scale: 1, transition: { duration: 0.3 } },
-    hidden: { y: "100vh", opacity: 0, scale: 0.8 },
+    visible: {
+      y: 0,
+      opacity: 1,
+      scale: 1,
+      transition: { type: "spring", damping: 25, stiffness: 300 },
+    },
+    hidden: {
+      y: 50,
+      opacity: 0,
+      scale: 0.96,
+    },
   };
 
   return (
-    <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm"
-      initial="hidden"
-      animate="visible"
-      exit="hidden"
-      variants={backdropVariants}
-      onClick={onClose}
-    >
+    <AnimatePresence>
       <motion.div
-        className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl mx-4"
-        variants={modalVariants}
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        initial="hidden"
+        animate="visible"
+        exit="hidden"
+        variants={backdropVariants}
+        onClick={onClose}
       >
-        <div className="flex justify-between items-center border-b pb-3 mb-6">
-          <div className="flex items-center">
-            <BarChart3 className="h-6 w-6 text-green-500 mr-3" />
-            <h3 className="text-xl font-bold text-gray-900">{eventTitle}</h3>
+        <motion.div
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col"
+          variants={modalVariants}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Sticky Header */}
+          <AnalyticsHeader
+            eventTitle={eventTitle}
+            status={analytics?.overview?.status}
+            onClose={onClose}
+          />
+
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-4 sm:p-6 space-y-6">
+              {/* Loading State */}
+              {isLoading && <AnalyticsSkeleton />}
+
+              {/* Error State */}
+              {isError && !isLoading && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-8 text-center">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-3xl">⚠️</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-red-900 mb-2">
+                    Failed to Load Analytics
+                  </h3>
+                  <p className="text-red-700 mb-4">{error}</p>
+                  <button
+                    onClick={() => dispatch(fetchEventAnalytics({ eventId }))}
+                    className="px-6 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              )}
+
+              {/* Success State - Show Analytics */}
+              {analytics && !isLoading && (
+                <>
+                  {/* Key Metrics - Always Visible */}
+                  <AnalyticsKeyMetrics analytics={analytics} />
+
+                  {/* Collapsible Sections */}
+                  <div className="space-y-4">
+                    <RevenueSection
+                      revenue={analytics.revenue}
+                      isExpanded={expandedSections.revenue}
+                      onToggle={() => toggleSection("revenue")}
+                    />
+
+                    <TicketTiersSection
+                      tiers={analytics.tiers}
+                      tickets={analytics.tickets}
+                      isExpanded={expandedSections.tiers}
+                      onToggle={() => toggleSection("tiers")}
+                    />
+
+                    <OrdersSection
+                      orders={analytics.orders}
+                      isExpanded={expandedSections.orders}
+                      onToggle={() => toggleSection("orders")}
+                    />
+
+                    <CustomersSection
+                      customers={analytics.customers}
+                      isExpanded={expandedSections.customers}
+                      onToggle={() => toggleSection("customers")}
+                    />
+
+                    <PaymentsSection
+                      payments={analytics.payments}
+                      isExpanded={expandedSections.payments}
+                      onToggle={() => toggleSection("payments")}
+                    />
+
+                    {analytics.timeline && analytics.timeline.length > 0 && (
+                      <TimelineSection
+                        timeline={analytics.timeline}
+                        isExpanded={expandedSections.timeline}
+                        onToggle={() => toggleSection("timeline")}
+                      />
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
 
-        {isLoading ? (
-          <div className="p-8 text-center text-gray-500">
-            <p>Loading analytics data...</p>
+          {/* Sticky Footer */}
+          <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="text-sm text-gray-600">
+              {analytics?.overview && (
+                <span>
+                  Last updated:{" "}
+                  {new Date(analyticsState.fetchedAt).toLocaleString()}
+                </span>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <ExportButton analytics={analytics} eventTitle={eventTitle} />
+
+              <button
+                onClick={() => dispatch(fetchEventAnalytics({ eventId }))}
+                className="flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                disabled={isLoading}
+              >
+                {isLoading ? "Refreshing..." : "Refresh"}
+              </button>
+
+              <button
+                onClick={onClose}
+                className="flex-1 sm:flex-none px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Stat Card: Total Tickets Sold */}
-            <div className="bg-indigo-50 p-4 rounded-lg shadow-sm">
-              <Ticket className="h-6 w-6 text-indigo-600 mb-2" />
-              <p className="text-sm font-medium text-gray-500">Tickets Sold</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {data.totalTicketsSold.toLocaleString()}
-              </p>
-            </div>
-
-            {/* Stat Card: Total Revenue */}
-            <div className="bg-green-50 p-4 rounded-lg shadow-sm">
-              <DollarSign className="h-6 w-6 text-green-600 mb-2" />
-              <p className="text-sm font-medium text-gray-500">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(data.totalRevenue)}
-              </p>
-            </div>
-
-            {/* Stat Card: Tickets Remaining */}
-            <div className="bg-yellow-50 p-4 rounded-lg shadow-sm">
-              <Ticket className="h-6 w-6 text-yellow-600 mb-2" />
-              <p className="text-sm font-medium text-gray-500">Tickets Left</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {data.ticketsAvailable.toLocaleString()}
-              </p>
-            </div>
-
-            {/* Stat Card: Conversion Rate */}
-            <div className="bg-blue-50 p-4 rounded-lg shadow-sm">
-              <BarChart3 className="h-6 w-6 text-blue-600 mb-2" />
-              <p className="text-sm font-medium text-gray-500">
-                Conversion Rate
-              </p>
-              <p className="text-2xl font-bold text-gray-900">
-                {data.conversionRate}%
-              </p>
-            </div>
-
-            {/* You would add more charts and detailed data tables here */}
-          </div>
-        )}
-
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-6 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            Close
-          </button>
-        </div>
+        </motion.div>
       </motion.div>
-    </motion.div>
+    </AnimatePresence>
   );
 }

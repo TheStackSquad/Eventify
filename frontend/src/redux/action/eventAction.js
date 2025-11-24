@@ -102,22 +102,64 @@ export const fetchAllEvents = createAsyncThunk(
 
 export const fetchEventAnalytics = createAsyncThunk(
   REDUX_ACTION_TYPES.FETCH_EVENT_ANALYTICS,
-  // Destructure eventId and signal from the payload
   async ({ eventId, signal }, { rejectWithValue }) => {
+    // 💡 LOG 1: Log the start of the thunk and the input payload
+    console.log("--- fetchEventAnalytics START ---");
+    console.log("Payload received:", {
+      eventId,
+      signal: signal ? "AbortSignal present" : "No AbortSignal",
+    });
+
     try {
-      const endpoint = API_ENDPOINTS.EVENTS.ANALYTICS.replace(":id", eventId);
+      // ✅ FIX 1: Use :eventId instead of :id
+      const endpoint = API_ENDPOINTS.EVENTS.ANALYTICS.replace(
+        ":eventId",
+        eventId
+      );
+
+      // 💡 LOG 2: Log the constructed endpoint before the API call
+      console.log("API Endpoint:", endpoint);
+
       const response = await axios.get(endpoint, { signal });
-      return response.data;
+
+      // 💡 LOG 3: Log the successful response status and part of the data
+      console.log("API Response Status:", response.status);
+      console.log(
+        "Data received (partial view):",
+        response.data.data
+          ? {
+              keys: Object.keys(response.data.data),
+              count: Array.isArray(response.data.data)
+                ? response.data.data.length
+                : "N/A",
+            }
+          : "No data.data field"
+      );
+
+      // 💡 LOG 4: Log the successful return
+      console.log("--- fetchEventAnalytics SUCCESS END ---");
+
+      return response.data.data;
     } catch (error) {
-      // 1. Check for Abort and return immediately if found
+      // 💡 LOG 5: Log any error caught in the try/catch block
+      console.error("fetchEventAnalytics ERROR caught:", error);
+
+      // Check for Abort and return immediately if found
       const abortResult = handleAbortError(error, rejectWithValue);
       if (abortResult) {
+        // 💡 LOG 6: Log if the request was aborted
+        console.log("Request aborted successfully.");
         return abortResult;
       }
 
-      // 2. Handle API/network error
+      // Handle API/network error
       const message =
         error.response?.data?.message || ERROR_MESSAGES.FETCH_ANALYTICS_FAILED;
+
+      // 💡 LOG 7: Log the error message being rejected
+      console.log("--- fetchEventAnalytics FAILURE END (Rejecting) ---");
+      console.error("Rejection Message:", message);
+
       return rejectWithValue({ message });
     }
   }

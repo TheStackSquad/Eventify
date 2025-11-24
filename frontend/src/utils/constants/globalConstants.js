@@ -195,19 +195,38 @@ export const EVENT_DEFAULTS = {
     userEvents: [],
     selectedEvent: null,
     currentEvent: null,
-    analytics: {
+
+    // 🆕 NEW: Per-event analytics storage
+    // Structure: { [eventId]: { data, status, error, fetchedAt } }
+    eventAnalytics: {},
+
+    // 🆕 NEW: Aggregated analytics for dashboard
+    aggregatedAnalytics: {
+      // Calculated from ticket data (immediate)
+      totalCapacity: 0,
+      potentialRevenue: 0,
+      averageTicketPrice: 0,
+
+      // Real analytics from API (when available)
       totalRevenue: 0,
       ticketsSold: 0,
       ticketsRemaining: 0,
-      viewCount: 0,
+      sellThroughRate: 0,
     },
+
+    // 🔄 MODIFIED: Keep for backward compatibility during migration
+    analytics: null, // Deprecated, use eventAnalytics instead
+
     status: STATUS.IDLE,
-    analyticsStatus: STATUS.IDLE,
+    analyticsStatus: STATUS.IDLE, // Deprecated
     allEventsStatus: STATUS.IDLE,
     allEvents: [],
     error: null,
   },
 };
+
+// Analytics cache duration (5 minutes)
+export const ANALYTICS_CACHE_DURATION_MS = 5 * 60 * 1000;
 
 // ========== ERROR MESSAGES ==========
 export const ERROR_MESSAGES = {
