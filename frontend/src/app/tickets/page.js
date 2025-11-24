@@ -64,8 +64,6 @@ export default function TicketPage() {
     }
   }, [reference, setOrderData, setLoading, setNotification]);
 
-  // --- Effects ---
-  // Linting fixed by including fetchTicketData as a dependency.
   useEffect(() => {
     if (!reference) {
       setLoading(false);
@@ -73,185 +71,189 @@ export default function TicketPage() {
     }
     fetchTicketData();
     checkLocalStorage(reference);
-  }, [reference, fetchTicketData]); // <- fetchTicketData is now included here
+  }, [reference, fetchTicketData]);
 
   // --- HANDLERS using imported utility functions ---
 
-const handleSave = () => {
-  // 🪵 LOG: Function execution started
-  console.log("handleSave: Attempting to save ticket locally...");
+  const handleSave = () => {
+    // 🪵 LOG: Function execution started
+    console.log("handleSave: Attempting to save ticket locally...");
 
-  if (!orderData) {
-    // 🪵 LOG: Guard clause triggered
-    console.warn("handleSave: Aborting save. orderData is null or undefined.");
-    return;
-  }
+    if (!orderData) {
+      // 🪵 LOG: Guard clause triggered
+      console.warn(
+        "handleSave: Aborting save. orderData is null or undefined."
+      );
+      return;
+    }
 
-  // 🪵 LOG: Parameters for external call
-  console.log(
-    "handleSave: Calling saveTicketDataLocally with reference:",
-    reference,
-    "and orderData:",
-    orderData
-  );
-  const success = saveTicketDataLocally(reference, orderData);
-
-  // 🪵 LOG: Result of external call
-  console.log(
-    "handleSave: saveTicketDataLocally returned success status:",
-    success
-  );
-
-  if (success) {
-    setSavedLocally(true);
-    setNotification({
-      message: "✅ Ticket saved to your device for offline use!",
-      type: "success",
-    });
-    // 🪵 LOG: Success branch
+    // 🪵 LOG: Parameters for external call
     console.log(
-      "handleSave: Successfully saved ticket and setting success notification."
+      "handleSave: Calling saveTicketDataLocally with reference:",
+      reference,
+      "and orderData:",
+      orderData
     );
-  } else {
-    setNotification({
-      message: "❌ Failed to save ticket locally.",
-      type: "error",
-    });
-    // 🪵 LOG: Error branch
-    console.error(
-      "handleSave: Failed to save ticket locally and setting error notification."
-    );
-  }
+    const success = saveTicketDataLocally(reference, orderData);
 
-  // 🪵 LOG: Scheduling notification clear
-  console.log("handleSave: Scheduling notification to clear in 4000ms.");
-  setTimeout(() => setNotification({ message: "", type: "" }), 4000); // Clear notification
-};
-
-const handleDownload = () => {
-  // 🪵 LOG: Function execution started
-  console.log("handleDownload: Attempting to download ticket...");
-
-  if (!orderData) {
-    // 🪵 LOG: Guard clause triggered
-    console.warn(
-      "handleDownload: Aborting download. orderData is null or undefined."
-    );
-    return;
-  }
-
-  // 🪵 LOG: Parameters for external call
-  console.log(
-    "handleDownload: Calling downloadTicket with orderData:",
-    orderData
-  );
-  const success = downloadTicket(orderData);
-
-  // 🪵 LOG: Result of external call
-  console.log(
-    "handleDownload: downloadTicket returned success status:",
-    success
-  );
-
-  if (success) {
-    setNotification({
-      message: "📥 Ticket download started!",
-      type: "success",
-    });
-    // 🪵 LOG: Success branch
+    // 🪵 LOG: Result of external call
     console.log(
-      "handleDownload: Download function indicated success. Setting success notification."
+      "handleSave: saveTicketDataLocally returned success status:",
+      success
     );
-  } else {
-    setNotification({ message: "❌ Download failed.", type: "error" });
-    // 🪵 LOG: Error branch
-    console.error(
-      "handleDownload: Download function indicated failure. Setting error notification."
+
+    if (success) {
+      setSavedLocally(true);
+      setNotification({
+        message: "✅ Ticket saved to your device for offline use!",
+        type: "success",
+      });
+      // 🪵 LOG: Success branch
+      console.log(
+        "handleSave: Successfully saved ticket and setting success notification."
+      );
+    } else {
+      setNotification({
+        message: "❌ Failed to save ticket locally.",
+        type: "error",
+      });
+      // 🪵 LOG: Error branch
+      console.error(
+        "handleSave: Failed to save ticket locally and setting error notification."
+      );
+    }
+
+    // 🪵 LOG: Scheduling notification clear
+    console.log("handleSave: Scheduling notification to clear in 4000ms.");
+    setTimeout(() => setNotification({ message: "", type: "" }), 4000); // Clear notification
+  };
+
+  const handleDownload = () => {
+    // 🪵 LOG: Function execution started
+    console.log("handleDownload: Attempting to download ticket...");
+
+    if (!orderData) {
+      // 🪵 LOG: Guard clause triggered
+      console.warn(
+        "handleDownload: Aborting download. orderData is null or undefined."
+      );
+      return;
+    }
+
+    // 🪵 LOG: Parameters for external call
+    console.log(
+      "handleDownload: Calling downloadTicket with orderData:",
+      orderData
     );
-  }
+    const success = downloadTicket(orderData);
 
-  // 🪵 LOG: Scheduling notification clear
-  console.log("handleDownload: Scheduling notification to clear in 4000ms.");
-  setTimeout(() => setNotification({ message: "", type: "" }), 4000); // Clear notification
-};
-
-const handleShare = async () => {
-  // 🪵 LOG: Function execution started
-  console.log("handleShare: Attempting to share ticket...");
-
-  if (!orderData) {
-    // 🪵 LOG: Guard clause triggered
-    console.warn(
-      "handleShare: Aborting share. orderData is null or undefined."
+    // 🪵 LOG: Result of external call
+    console.log(
+      "handleDownload: downloadTicket returned success status:",
+      success
     );
-    return;
-  }
 
-  // 🪵 LOG: Parameters for external call
-  console.log(
-    "handleShare: Calling async shareTicket with orderData:",
-    orderData
+    if (success) {
+      setNotification({
+        message: "📥 Ticket download started!",
+        type: "success",
+      });
+      // 🪵 LOG: Success branch
+      console.log(
+        "handleDownload: Download function indicated success. Setting success notification."
+      );
+    } else {
+      setNotification({ message: "❌ Download failed.", type: "error" });
+      // 🪵 LOG: Error branch
+      console.error(
+        "handleDownload: Download function indicated failure. Setting error notification."
+      );
+    }
+
+    // 🪵 LOG: Scheduling notification clear
+    console.log("handleDownload: Scheduling notification to clear in 4000ms.");
+    setTimeout(() => setNotification({ message: "", type: "" }), 4000); // Clear notification
+  };
+
+  const handleShare = async () => {
+    // 🪵 LOG: Function execution started
+    console.log("handleShare: Attempting to share ticket...");
+
+    if (!orderData) {
+      // 🪵 LOG: Guard clause triggered
+      console.warn(
+        "handleShare: Aborting share. orderData is null or undefined."
+      );
+      return;
+    }
+
+    // 🪵 LOG: Parameters for external call
+    console.log(
+      "handleShare: Calling async shareTicket with orderData:",
+      orderData
+    );
+    const result = await shareTicket(orderData);
+
+    // 🪵 LOG: Result of external call
+    console.log("handleShare: shareTicket returned result:", result);
+
+    if (result === "copied") {
+      setNotification({
+        message: "🔗 Link copied to clipboard!",
+        type: "success",
+      });
+      // 🪵 LOG: Success branch (Copied to clipboard)
+      console.log(
+        "handleShare: Share result is 'copied'. Setting success notification."
+      );
+    } else if (result === true) {
+      // Native share successful (no notification needed as OS handles it)
+      // 🪵 LOG: Success branch (Native share)
+      console.log(
+        "handleShare: Share result is 'true' (Native Share API successful). No notification needed."
+      );
+    } else {
+      setNotification({
+        message: "❌ Share failed. Try copying the URL manually.",
+        type: "error",
+      });
+      // 🪵 LOG: Error branch
+      console.error(
+        "handleShare: Share failed (result was:",
+        result,
+        "). Setting error notification."
+      );
+    }
+
+    // 🪵 LOG: Scheduling notification clear
+    console.log("handleShare: Scheduling notification to clear in 4000ms.");
+    setTimeout(() => setNotification({ message: "", type: "" }), 4000); // Clear notification
+  };
+
+  const NotificationToast = () => (
+    <div
+      className={`fixed top-4 right-4 z-50 p-4 rounded-xl shadow-xl transition-transform duration-500 ease-out transform ${
+        notification.message
+          ? "translate-y-0 opacity-100"
+          : "translate-y-full opacity-0"
+      } ${
+        notification.type === "success"
+          ? "bg-green-600 text-white"
+          : "bg-red-600 text-white"
+      }`}
+    >
+      {notification.message}
+    </div>
   );
-  const result = await shareTicket(orderData);
-
-  // 🪵 LOG: Result of external call
-  console.log("handleShare: shareTicket returned result:", result);
-
-  if (result === "copied") {
-    setNotification({
-      message: "🔗 Link copied to clipboard!",
-      type: "success",
-    });
-    // 🪵 LOG: Success branch (Copied to clipboard)
-    console.log(
-      "handleShare: Share result is 'copied'. Setting success notification."
-    );
-  } else if (result === true) {
-    // Native share successful (no notification needed as OS handles it)
-    // 🪵 LOG: Success branch (Native share)
-    console.log(
-      "handleShare: Share result is 'true' (Native Share API successful). No notification needed."
-    );
-  } else {
-    setNotification({
-      message: "❌ Share failed. Try copying the URL manually.",
-      type: "error",
-    });
-    // 🪵 LOG: Error branch
-    console.error(
-      "handleShare: Share failed (result was:",
-      result,
-      "). Setting error notification."
-    );
-  }
-
-  // 🪵 LOG: Scheduling notification clear
-  console.log("handleShare: Scheduling notification to clear in 4000ms.");
-  setTimeout(() => setNotification({ message: "", type: "" }), 4000); // Clear notification
-};
-
-const NotificationToast = () => (
-  <div
-    className={`fixed top-4 right-4 z-50 p-4 rounded-xl shadow-xl transition-transform duration-500 ease-out transform ${
-      notification.message
-        ? "translate-y-0 opacity-100"
-        : "translate-y-full opacity-0"
-    } ${
-      notification.type === "success"
-        ? "bg-green-600 text-white"
-        : "bg-red-600 text-white"
-    }`}
-  >
-    {notification.message}
-  </div>
-);
 
   // --- Conditional Renders ---
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center p-4">
+      // 🎨 STYLED: Updated loading background to match new theme colors
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-slate-50 flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-red-600 mx-auto mb-4"></div>
+          {/* Updated spinner color */}
+          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-indigo-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading your ticket...</p>
         </div>
       </div>
@@ -260,19 +262,21 @@ const NotificationToast = () => (
 
   if (!reference || !orderData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center p-4">
+      // 🎨 STYLED: Updated error background and button color
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-slate-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
           <Ticket className="mx-auto h-16 w-16 text-gray-400 mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">
             No Ticket Found
           </h2>
           <p className="text-gray-600 mb-6">
-            We couldn&apos;t find the ticket you&apos;re looking for. Please check the
-            reference.
+            We couldn&apos;t find the ticket you&apos;re looking for. Please
+            check the reference.
           </p>
           <Link
             href="/events"
-            className="inline-block bg-red-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-700 transition-colors"
+            // Button color changed to indigo-600
+            className="inline-block bg-indigo-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors"
           >
             Browse Events
           </Link>
@@ -284,7 +288,8 @@ const NotificationToast = () => (
   // --- Main Render ---
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 py-12 px-4">
+    // 🎨 STYLED: Updated main background to match new theme colors
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-slate-50 py-12 px-4">
       <NotificationToast />
 
       <div className="max-w-4xl mx-auto">

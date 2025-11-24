@@ -23,10 +23,10 @@ export default function TicketCard({ orderData, formatCurrency }) {
 
   return (
     <>
-      {/* Main Ticket Card */}
-      <div className="bg-white rounded-3xl shadow-2xl overflow-hidden mb-6">
-        {/* Ticket Header - Event Info */}
-        <div className="bg-gradient-to-r from-red-600 to-orange-600 text-white p-8">
+      {/* Main Ticket Card - Added border and minor shadow lift */}
+      <div className="bg-white rounded-3xl shadow-2xl overflow-hidden mb-6 border border-slate-200">
+        {/* Ticket Header - Event Info (Deep Evening Theme) */}
+        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-8">
           <div className="flex items-start justify-between mb-6">
             <div className="flex-1">
               <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full text-sm mb-3 transition-opacity duration-500">
@@ -42,9 +42,10 @@ export default function TicketCard({ orderData, formatCurrency }) {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-white/80 text-sm mb-1">Amount Paid</div>
+              <div className="text-indigo-200/80 text-sm mb-1">Amount Paid</div>
               <div className="text-2xl font-bold">
-                {formatCurrency(orderData.amount_kobo / 100)}
+                {/* 🚨 FIX: Using final_total and passing kobo amount directly */}
+                {formatCurrency(orderData.final_total)}
               </div>
             </div>
           </div>
@@ -64,13 +65,13 @@ export default function TicketCard({ orderData, formatCurrency }) {
           </div>
         </div>
 
-        {/* Perforated Line Effect */}
+        {/* Perforated Line Effect (Softened colors) */}
         <div className="relative h-8 bg-white overflow-hidden">
           <div className="absolute inset-x-0 top-0 flex justify-between px-4">
             {[...Array(20)].map((_, i) => (
               <div
                 key={i}
-                className="w-4 h-4 rounded-full bg-gradient-to-br from-red-50 to-orange-50 -mt-2 transition-transform duration-1000"
+                className="w-4 h-4 rounded-full bg-gradient-to-br from-indigo-100 to-slate-100 -mt-2 transition-transform duration-1000"
                 style={{
                   transform: "translateY(0)",
                   transitionDelay: `${i * 50}ms`,
@@ -85,7 +86,7 @@ export default function TicketCard({ orderData, formatCurrency }) {
           {/* Attendee Info */}
           <div>
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <User size={20} className="text-red-600" />
+              <User size={20} className="text-indigo-600" /> {/* 🎨 STYLED */}
               Ticket Holder
             </h3>
             <div className="grid md:grid-cols-2 gap-4">
@@ -132,7 +133,7 @@ export default function TicketCard({ orderData, formatCurrency }) {
           {/* Order Info */}
           <div>
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <Clock size={20} className="text-red-600" />
+              <Clock size={20} className="text-indigo-600" /> {/* 🎨 STYLED */}
               Order Information
             </h3>
             <div className="space-y-2 text-sm">
@@ -170,29 +171,29 @@ export default function TicketCard({ orderData, formatCurrency }) {
         </div>
       </div>
 
-      {/* Important Notes */}
-      <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-6 mb-8 transition-shadow duration-300 hover:shadow-md">
-        <h3 className="font-bold text-amber-900 mb-3 flex items-center gap-2">
-          <span className="text-xl">⚠️</span>
+      {/* Important Notes (Adjusted border/text to harmonize) */}
+      <div className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-6 mb-8 transition-shadow duration-300 hover:shadow-md">
+        <h3 className="font-bold text-indigo-900 mb-3 flex items-center gap-2">
+          <span className="text-xl">💡</span> {/* Changed from ⚠️ to 💡 */}
           Important Information
         </h3>
-        <ul className="space-y-2 text-sm text-amber-800">
+        <ul className="space-y-2 text-sm text-indigo-800">
           <li className="flex items-start gap-2">
-            <span className="text-amber-600 mt-1">•</span>
+            <span className="text-indigo-600 mt-1">•</span> {/* 🎨 STYLED */}
             <span>
               Present this ticket (digital or printed) at the venue entrance
             </span>
           </li>
           <li className="flex items-start gap-2">
-            <span className="text-amber-600 mt-1">•</span>
+            <span className="text-indigo-600 mt-1">•</span> {/* 🎨 STYLED */}
             <span>Ticket is non-transferable and cannot be resold</span>
           </li>
           <li className="flex items-start gap-2">
-            <span className="text-amber-600 mt-1">•</span>
+            <span className="text-indigo-600 mt-1">•</span> {/* 🎨 STYLED */}
             <span>Keep your reference number safe for support inquiries</span>
           </li>
           <li className="flex items-start gap-2">
-            <span className="text-amber-600 mt-1">•</span>
+            <span className="text-indigo-600 mt-1">•</span> {/* 🎨 STYLED */}
             <span>
               Contact us at{" "}
               <span className="font-medium">support@eventify.com</span> if you
@@ -202,8 +203,8 @@ export default function TicketCard({ orderData, formatCurrency }) {
         </ul>
       </div>
 
-      {/* CTA Section */}
-      <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl p-8 text-white text-center shadow-2xl transition-transform duration-500 hover:scale-[1.01]">
+      {/* CTA Section (Deep Evening Theme) */}
+      <div className="bg-gradient-to-r from-indigo-700 to-purple-800 rounded-2xl p-8 mb-5 text-white text-center shadow-2xl transition-transform duration-500 hover:scale-[1.01]">
         <h3 className="text-2xl font-bold mb-2">Ready for More Events?</h3>
         <p className="text-white/90 mb-6">
           Discover exciting events happening near you
@@ -211,7 +212,7 @@ export default function TicketCard({ orderData, formatCurrency }) {
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link
             href="/"
-            className="inline-flex items-center justify-center gap-2 bg-white text-red-600 px-8 py-3 rounded-xl font-medium hover:bg-red-50 transition-all duration-300 hover:scale-[1.03] shadow-lg"
+            className="inline-flex items-center justify-center gap-2 bg-white text-indigo-700 px-8 py-3 rounded-xl font-medium hover:bg-indigo-50 transition-all duration-300 hover:scale-[1.03] shadow-lg"
           >
             Browse Events
             <ChevronRight size={20} />
