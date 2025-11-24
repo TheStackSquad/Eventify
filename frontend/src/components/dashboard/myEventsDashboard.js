@@ -1,9 +1,7 @@
 // frontend/src/components/dashboard/MyEventsDashboard.js
 "use client";
 
-import { useMemo, useState } from "react";
-// FIX: Corrected the import path from alias "@/components/dashboard/dashboardUI"
-// to the relative path of the sibling component.
+import { useMemo } from "react";
 import DashboardUI from "./dashboardUI";
 import {
   Plus,
@@ -12,103 +10,175 @@ import {
   Activity,
   Settings,
   BarChart3,
+  TrendingUp,
+  Ticket,
 } from "lucide-react";
 
 export default function MyEventsDashboard({
-  events, // The raw list of events from the parent data layer
+  events, // Raw list of events from parent
   isLoading,
-  onCreateEvent, // This prop holds the redirect logic from the main page/data component
+  onCreateEvent,
   openDeleteModal,
   openAnalyticsModal,
   purchasedTickets,
   userName,
   onLogout,
 }) {
-  const [activeView, setActiveView] = useState("events"); // Local state for view toggle
-
-  // --- 1. DATA CALCULATION ---
-
-  // Memoize event filtering
+  // --- 1. EVENT FILTERING ---
   const filteredEvents = useMemo(() => {
-    // NOTE: Replace this mock/simple filtering with real logic if needed
     const now = new Date();
+    const eventList = events || [];
 
-    const liveEvents = (events || []).filter(
-      (e) => new Date(e.startDate) <= now && new Date(e.endDate) >= now
-    );
-    const upcomingEvents = (events || []).filter(
-      (e) => new Date(e.startDate) > now
-    );
-    const pastEvents = (events || []).filter((e) => new Date(e.endDate) < now);
+    const liveEvents = eventList.filter((e) => {
+      const start = new Date(e.startDate);
+      const end = new Date(e.endDate);
+      return start <= now && end >= now;
+    });
+
+    const upcomingEvents = eventList.filter((e) => {
+      const start = new Date(e.startDate);
+      return start > now;
+    });
+
+    const pastEvents = eventList.filter((e) => {
+      const end = new Date(e.endDate);
+      return end < now;
+    });
 
     return { liveEvents, upcomingEvents, pastEvents };
   }, [events]);
 
-  // Memoize dashboard stats calculation
+  // --- 2. REAL DATA CALCULATIONS ---
+  const calculations = useMemo(() => {
+    const eventList = events || [];
+
+    // Total ticket capacity across all events
+    const totalTicketCapacity = eventList.reduce((sum, event) => {
+      const eventCapacity = event.tickets.reduce(
+        (ticketSum, ticket) => ticketSum + ticket.quantity,
+        0
+      );
+      return sum + eventCapacity;
+    }, 0);
+
+    // Potential revenue (if all tickets sold)
+    const potentialRevenue = eventList.reduce((sum, event) => {
+      const eventRevenue = event.tickets.reduce(
+        (ticketSum, ticket) => ticketSum + ticket.price * ticket.quantity,
+        0
+      );
+      return sum + eventRevenue;
+    }, 0);
+
+    // Average ticket price
+    const totalTicketValue = eventList.reduce((sum, event) => {
+      return (
+        sum +
+        event.tickets.reduce(
+          (ticketSum, ticket) => ticketSum + ticket.price * ticket.quantity,
+          0
+        )
+      );
+    }, 0);
+    const avgTicketPrice =
+      totalTicketCapacity > 0
+        ? Math.round(totalTicketValue / totalTicketCapacity)
+        : 0;
+
+    // Category distribution (for insights)
+    const categories = eventList.reduce((acc, event) => {
+      acc[event.category] = (acc[event.category] || 0) + 1;
+      return acc;
+    }, {});
+
+    // Most common category
+    const topCategory =
+      Object.keys(categories).length > 0
+        ? Object.entries(categories).sort((a, b) => b[1] - a[1])[0][0]
+        : "N/A";
+
+    return {
+      totalTicketCapacity,
+      potentialRevenue,
+      avgTicketPrice,
+      topCategory,
+      categoryCount: Object.keys(categories).length,
+    };
+  }, [events]);
+
+  // --- 3. DASHBOARD STATS (REAL DATA) ---
   const stats = useMemo(() => {
-    const totalEvents = (events || []).length;
-    // Mock values for a complete rendering
-    const mockRevenue = totalEvents * 1500;
-    const mockAttendees = totalEvents * 250;
+    const eventList = events || [];
+    const totalEvents = eventList.length;
+    const { liveEvents, upcomingEvents } = filteredEvents;
 
     return [
       {
         label: "Total Events",
         value: totalEvents,
+        subtext: `${liveEvents.length} live, ${upcomingEvents.length} upcoming`,
         icon: Activity,
         color: "bg-indigo-50 text-indigo-600",
+        trend: upcomingEvents.length > 0 ? "up" : null,
       },
       {
-        label: "Total Revenue (Mock)",
-        value: `₦${mockRevenue.toLocaleString()}`,
+        label: "Potential Revenue",
+        value: `₦${calculations.potentialRevenue.toLocaleString()}`,
+        subtext: "If all tickets sell",
         icon: Wallet,
         color: "bg-green-50 text-green-600",
+        trend: "up",
       },
       {
-        label: "Total Attendees (Mock)",
-        value: mockAttendees.toLocaleString(),
-        icon: Users,
+        label: "Total Capacity",
+        value: calculations.totalTicketCapacity.toLocaleString(),
+        subtext: `Avg. ₦${calculations.avgTicketPrice.toLocaleString()}/ticket`,
+        icon: Ticket,
         color: "bg-orange-50 text-orange-600",
+        trend: null,
       },
       {
-        label: "Avg. Engagement",
-        value: "85%",
+        label: "Top Category",
+        value: calculations.topCategory,
+        subtext: `${calculations.categoryCount} ${
+          calculations.categoryCount === 1 ? "category" : "categories"
+        } total`,
         icon: BarChart3,
         color: "bg-purple-50 text-purple-600",
+        trend: null,
       },
     ];
-  }, [events]);
+  }, [events, filteredEvents, calculations]);
 
-  // --- 2. QUICK ACTIONS DEFINITION (FIXES BUTTON VISIBILITY) ---
-
-  // This array defines the button data, including the onClick handler
+  // --- 4. QUICK ACTIONS ---
   const quickActions = useMemo(
     () => [
       {
         label: "New Event",
-        description: "Launch a new campaign or event page.",
+        description: "Create and publish a new event",
         icon: Plus,
-        // The prop passed from the main data component is wired up here
         onClick: onCreateEvent,
+        color: "bg-indigo-600 hover:bg-indigo-700 text-white",
       },
       {
-        label: "View Reports",
-        description: "Access detailed analytics and export data.",
+        label: "View Analytics",
+        description: "Detailed insights and reports",
         icon: BarChart3,
-        onClick: () => console.log("Simulating navigation to Reports page."),
+        onClick: () => console.log("Navigate to analytics page"),
+        color: "bg-blue-600 hover:bg-blue-700 text-white",
       },
       {
-        label: "Account Settings",
-        description: "Manage billing, profile, and team access.",
+        label: "Settings",
+        description: "Manage account and preferences",
         icon: Settings,
-        onClick: () => console.log("Simulating navigation to Settings page."),
+        onClick: () => console.log("Navigate to settings page"),
+        color: "bg-gray-600 hover:bg-gray-700 text-white",
       },
     ],
     [onCreateEvent]
   );
 
-  // --- 3. RENDER THE PRESENTATION LAYER (DashboardUI) ---
-
+  // --- 5. RENDER ---
   return (
     <DashboardUI
       userName={userName}
@@ -117,13 +187,9 @@ export default function MyEventsDashboard({
       onCreateEvent={onCreateEvent}
       openDeleteModal={openDeleteModal}
       openAnalyticsModal={openAnalyticsModal}
-      // Pass the calculated and defined props to the presentation component
       stats={stats}
       quickActions={quickActions}
       filteredEvents={filteredEvents}
-      // View Toggle props
-      activeView={activeView}
-      onViewChange={setActiveView}
     />
   );
 }

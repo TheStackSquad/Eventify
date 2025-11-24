@@ -1,7 +1,8 @@
 // frontend/src/app/dashboard/page.js
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import React from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useRouter } from "next/navigation";
 
@@ -16,35 +17,117 @@ import AnalyticsModal from "@/components/modal/analytics";
 
 // Redux Actions
 import { logoutUser } from "@/redux/action/actionAuth";
-import { fetchUserEvents } from "@/redux/action/eventAction";
+import {
+  fetchUserEvents,
+  fetchEventAnalytics,
+} from "@/redux/action/eventAction";
+
+// Constants
+import {
+  STATUS,
+  ANALYTICS_CACHE_DURATION_MS,
+} from "@/utils/constants/globalConstants";
 
 export default function DashboardPage() {
   const dispatch = useDispatch();
   const router = useRouter();
 
-  // ✅ OPTIMIZED: Single useSelector call with memoized selectors
+  // ============================================================================
+  // REDUX STATE
+  // ============================================================================
+
   const { user, sessionChecked } = useSelector((state) => state.auth);
-  console.log('user state:', user);
-  const { analyticsData, analyticsStatus } = useSelector(
-    (state) => state.events
-  );
 
-  // View state
-  const [activeView, setActiveView] = useState("events");
+  // 🆕 Get events and analytics from Redux (no local state needed)
+  const {
+    userEvents,
+    eventAnalytics,
+    aggregatedAnalytics,
+    status: eventsStatus,
+    error,
+  } = useSelector((state) => state.events);
 
-  // Events data (only for MyEventsDashboard)
-  const [events, setEvents] = useState([]);
-  const [purchasedTickets, setPurchasedTickets] = useState([]);
-  const [isEventsLoading, setIsEventsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  // ============================================================================
+  // LOCAL STATE (UI ONLY)
+  // ============================================================================
+
+  const [activeView, setActiveView] = React.useState("events");
 
   // Modal states
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState({ id: null, title: "" });
-  const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false);
-  const [analyticsTargetId, setAnalyticsTargetId] = useState(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = React.useState(false);
+  const [deleteTarget, setDeleteTarget] = React.useState({
+    id: null,
+    title: "",
+  });
+  const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = React.useState(false);
+  const [analyticsTargetId, setAnalyticsTargetId] = React.useState(null);
 
-  // ✅ OPTIMIZED: Memoized modal handlers
+  // ============================================================================
+  // COMPUTED VALUES
+  // ============================================================================
+
+  const isLoading = !sessionChecked || eventsStatus === STATUS.LOADING;
+  const isEventsLoading = eventsStatus === STATUS.LOADING;
+
+  // Get current event for analytics modal
+  const currentEvent = useMemo(
+    () => userEvents.find((e) => e.id === analyticsTargetId),
+    [userEvents, analyticsTargetId]
+  );
+
+  // ============================================================================
+  // ANALYTICS HELPERS
+  // ============================================================================
+
+  /**
+   * Check if analytics data is stale and needs refresh
+   */
+  const isAnalyticsStale = useCallback(
+    (eventId) => {
+      const analytics = eventAnalytics[eventId];
+      if (!analytics?.fetchedAt) return true;
+
+      const now = new Date();
+      const fetched = new Date(analytics.fetchedAt);
+      const ageMs = now - fetched;
+
+      return ageMs > ANALYTICS_CACHE_DURATION_MS;
+    },
+    [eventAnalytics]
+  );
+
+  /**
+   * Fetch analytics for a specific event with caching
+   */
+  const fetchAnalyticsForEvent = useCallback(
+    (eventId) => {
+      const analytics = eventAnalytics[eventId];
+
+      // Don't fetch if already loading
+      if (analytics?.status === STATUS.LOADING) {
+        console.log(`⏳ Analytics already loading for event ${eventId}`);
+        return;
+      }
+
+      // Don't fetch if fresh data exists
+      if (
+        analytics?.status === STATUS.SUCCEEDED &&
+        !isAnalyticsStale(eventId)
+      ) {
+        console.log(`✅ Using cached analytics for event ${eventId}`);
+        return;
+      }
+
+      console.log(`📊 Fetching analytics for event ${eventId}`);
+      dispatch(fetchEventAnalytics({ eventId }));
+    },
+    [dispatch, eventAnalytics, isAnalyticsStale]
+  );
+
+  // ============================================================================
+  // EVENT HANDLERS
+  // ============================================================================
+
   const openDeleteModal = useCallback((id, title) => {
     setDeleteTarget({ id, title });
     setIsDeleteModalOpen(true);
@@ -55,108 +138,55 @@ export default function DashboardPage() {
     setDeleteTarget({ id: null, title: "" });
   }, []);
 
-  const openAnalyticsModal = useCallback((id) => {
-    setAnalyticsTargetId(id);
-    setIsAnalyticsModalOpen(true);
-  }, []);
+  const openAnalyticsModal = useCallback(
+    (eventId) => {
+      console.log(`📊 Opening analytics modal for event ${eventId}`);
+      setAnalyticsTargetId(eventId);
+      setIsAnalyticsModalOpen(true);
+
+      // Fetch analytics when modal opens (with caching)
+      fetchAnalyticsForEvent(eventId);
+    },
+    [fetchAnalyticsForEvent]
+  );
 
   const closeAnalyticsModal = useCallback(() => {
     setIsAnalyticsModalOpen(false);
     setAnalyticsTargetId(null);
   }, []);
 
-  // ✅ OPTIMIZED: Memoized analytics check with early returns
-  const analyticsTargetEvent = useMemo(() => {
-    if (!analyticsTargetId || !events.length) return null;
-    return events.find((e) => e.id === analyticsTargetId);
-  }, [analyticsTargetId, events]);
-
-  // Analytics data ready check
-  const shouldOpenAnalyticsModal = useMemo(
-    () =>
-      analyticsTargetId &&
-      analyticsStatus === "succeeded" &&
-      analyticsData &&
-      analyticsTargetEvent,
-    [analyticsTargetId, analyticsStatus, analyticsData, analyticsTargetEvent]
-  );
-
-  // ✅ OPTIMIZED: Single useEffect for analytics modal
-  useState(() => {
-    if (shouldOpenAnalyticsModal) {
-      setIsAnalyticsModalOpen(true);
-    }
-  }, [shouldOpenAnalyticsModal]);
-
-  // ✅ OPTIMIZED: Memoized events loader with error handling
-  const loadUserEvents = useCallback(async () => {
-    if (isEventsLoading) return; // Prevent duplicate calls
-
-    console.log("📊 Loading user events...");
-    setIsEventsLoading(true);
-    setError(null);
-
-    try {
-      const eventsResult = await dispatch(fetchUserEvents());
-
-      if (fetchUserEvents.fulfilled.match(eventsResult)) {
-        const userEvents = eventsResult.payload || [];
-        setEvents(userEvents);
-        console.log("✅ Events loaded:", userEvents.length);
-      } else {
-        const errorMsg =
-          eventsResult.payload?.message || "Failed to fetch events";
-        console.error("❌ Events fetch failed:", errorMsg);
-        setEvents([]);
-        setError(errorMsg);
-      }
-    } catch (error) {
-      console.error("❌ Unexpected error loading events:", error);
-      setError("An unexpected error occurred");
-      setEvents([]);
-    } finally {
-      setIsEventsLoading(false);
-    }
-  }, [dispatch, isEventsLoading]);
-
-  // ✅ REMOVED: All authentication redirect logic - now handled by middleware
-
-  // ✅ OPTIMIZED: Load events only when session is verified and user exists
-  useState(() => {
-    if (sessionChecked && user) {
-      loadUserEvents();
-    }
-  }, [sessionChecked, user, loadUserEvents]);
-
-  // ✅ OPTIMIZED: Memoized logout handler
   const handleLogout = useCallback(async () => {
     console.log("👋 Logging out...");
     try {
       await dispatch(logoutUser());
       console.log("✅ Logout successful");
-      // Middleware will handle redirect on next request
     } catch (error) {
       console.error("❌ Logout error:", error);
-      // Still redirect even if API call fails
     } finally {
       router.push("/account/auth/login");
     }
   }, [dispatch, router]);
 
-  // ✅ OPTIMIZED: Memoized navigation handler
   const handleCreateEvent = useCallback(() => {
     console.log("➕ Navigating to event creation...");
     router.push("/events/create-events");
   }, [router]);
 
-  // ✅ OPTIMIZED: Single loading check using sessionChecked
-  const isLoading = !sessionChecked || isEventsLoading;
+  // ============================================================================
+  // EFFECTS
+  // ============================================================================
 
-  // ✅ OPTIMIZED: Memoized current event for analytics modal
-  const currentEvent = useMemo(
-    () => events.find((e) => e.id === analyticsTargetId),
-    [events, analyticsTargetId]
-  );
+  // Load user events on mount
+  useEffect(() => {
+    if (sessionChecked && user && eventsStatus === STATUS.IDLE) {
+      console.log("📊 Loading user events...");
+      dispatch(fetchUserEvents());
+    }
+  }, [sessionChecked, user, eventsStatus, dispatch]);
+
+  // ============================================================================
+  // RENDER CONDITIONS
+  // ============================================================================
 
   // Loading state
   if (isLoading) {
@@ -176,10 +206,8 @@ export default function DashboardPage() {
     );
   }
 
-  // ✅ REMOVED: Manual auth validation checks - middleware guarantees user exists
-
-  // Error state (only for events view)
-  if (error && events.length === 0 && activeView === "events") {
+  // Error state
+  if (error && userEvents.length === 0 && activeView === "events") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
@@ -191,7 +219,7 @@ export default function DashboardPage() {
           </h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <button
-            onClick={loadUserEvents}
+            onClick={() => dispatch(fetchUserEvents())}
             className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-semibold"
           >
             Try Again
@@ -201,7 +229,10 @@ export default function DashboardPage() {
     );
   }
 
-  // ✅ OPTIMIZED: Main render with stable callback references
+  // ============================================================================
+  // MAIN RENDER
+  // ============================================================================
+
   return (
     <>
       <DashboardLayout
@@ -210,11 +241,10 @@ export default function DashboardPage() {
         onViewChange={setActiveView}
         onLogout={handleLogout}
       >
-        {/* Conditional rendering based on active view */}
+        {/* Events View */}
         {activeView === "events" && (
           <MyEventsDashboard
-            events={events}
-            purchasedTickets={purchasedTickets}
+            events={userEvents}
             isLoading={isEventsLoading}
             onCreateEvent={handleCreateEvent}
             openDeleteModal={openDeleteModal}
@@ -222,7 +252,7 @@ export default function DashboardPage() {
           />
         )}
 
-        {/* Vendor views */}
+        {/* Vendor Views */}
         {(activeView === "vendor" || activeView === "vendor-register") && (
           <VendorsDashboard activeView={activeView} />
         )}
@@ -237,15 +267,10 @@ export default function DashboardPage() {
       />
 
       <AnalyticsModal
-        isOpen={isAnalyticsModalOpen && !!currentEvent}
+        isOpen={isAnalyticsModalOpen}
         onClose={closeAnalyticsModal}
-        analyticsData={analyticsData}
-        eventTitle={
-          currentEvent
-            ? `${currentEvent.eventTitle} Sales Report`
-            : "Sales Report"
-        }
-        isLoading={analyticsStatus === "pending"}
+        eventId={analyticsTargetId} // 🆕 Pass eventId instead of data
+        eventTitle={currentEvent?.eventTitle}
       />
     </>
   );
