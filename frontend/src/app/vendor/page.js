@@ -1,4 +1,5 @@
 // frontend/src/app/vendor/page.js
+
 "use client";
 import React, { useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -36,6 +37,9 @@ const VendorListingPage = () => {
   const prevFiltersRef = useRef(null);
   const prevPageRef = useRef(null);
 
+  // 🔑 Ref to hold the AbortController for active vendor fetch requests
+  const vendorAbortControllerRef = useRef(null);
+
   // Selectors
   const vendors = useSelector(selectPaginatedVendors);
   const status = useSelector(selectFetchStatus);
@@ -45,11 +49,9 @@ const VendorListingPage = () => {
   const totalVendorsCount = useSelector(selectTotalVendorsCount);
   const hasMoreVendors = useSelector(selectHasMoreVendors);
 
-
   useEffect(() => {
     // Don't fetch if already loading
     if (status === STATUS.LOADING) {
-   //   console.log("⏸️ SKIP - Already loading");
       return;
     }
 
@@ -79,16 +81,28 @@ const VendorListingPage = () => {
     }
 
     if (shouldFetch) {
+      // 🔑 1. Abort any previous pending request
+      if (vendorAbortControllerRef.current) {
+        console.log("🛑 ABORTING previous vendor fetch.");
+        vendorAbortControllerRef.current.abort();
+      }
+
+      // 🔑 2. Create a new controller and store it
+      const controller = new AbortController();
+      vendorAbortControllerRef.current = controller;
+
       console.log(`🚀 FETCHING VENDORS - ${reason}`, {
         page: currentPage,
         filters,
       });
 
+      // 🔑 3. Dispatch the action with the signal
       dispatch(
         fetchVendors({
           ...filters,
           page: currentPage,
           limit: pagination.pageSize,
+          signal: controller.signal, // Pass the signal to the Thunk
         })
       );
 
@@ -104,6 +118,18 @@ const VendorListingPage = () => {
         pageChanged,
       });
     }
+
+    // 🔑 4. Cleanup on component unmount
+    return () => {
+      // We read the active controller from the persistent ref
+      const currentController = vendorAbortControllerRef.current;
+
+      if (currentController) {
+        console.log("🧹 [CLEANUP] Aborting vendor fetch on unmount/re-render.");
+        currentController.abort();
+        vendorAbortControllerRef.current = null;
+      }
+    };
   }, [
     dispatch,
     filters,
@@ -144,18 +170,12 @@ const VendorListingPage = () => {
     dispatch(clearFetchError());
     dispatch(clearVendorList());
 
-    // Reset refs to trigger fresh fetch
+    // 🔑 Refactored: Reset refs to trigger fresh fetch via the main useEffect
     hasFetchedRef.current = false;
     prevFiltersRef.current = null;
     prevPageRef.current = null;
 
-    dispatch(
-      fetchVendors({
-        ...filters,
-        page: pagination.currentPage,
-        limit: pagination.pageSize,
-      })
-    );
+    // By changing state/refs, the main useEffect is triggered, which handles the abort and dispatch.
   };
 
   const handleRegisterClick = () => {
@@ -242,25 +262,6 @@ const VendorListingPage = () => {
           totalCount: totalVendorsCount,
         }}
       />
-
-      {/* Dev debug panel */}
-      {/* {process.env.NODE_ENV === "development" && (
-        <div className="fixed bottom-4 right-4 bg-black text-white p-3 rounded-lg text-xs max-w-xs opacity-90 shadow-lg z-50">
-          <div className="font-bold mb-1 text-green-400">🟢 Debug Info</div>
-          <div>Vendors: {vendors?.length || 0}</div>
-          <div>Total: {totalVendorsCount}</div>
-          <div>Page: {pagination.currentPage}</div>
-          <div>Status: {status}</div>
-          <div>Loading: {isLoading ? "Yes" : "No"}</div>
-          <div>Has More: {hasMoreVendors ? "Yes" : "No"}</div>
-          <div>Fetched: {hasFetchedRef.current ? "Yes" : "No"}</div>
-          {error && (
-            <div className="text-red-400 mt-2">
-              ⚠️ {error.status}: {error.message}
-            </div>
-          )}
-        </div>
-      )} */}
     </div>
   );
 };

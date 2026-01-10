@@ -69,7 +69,7 @@ export const API_ENDPOINTS = {
     DELETE: "/api/events/:eventId",
     MY_EVENTS: "/api/events/my-events",
     ANALYTICS: "/api/events/:eventId/analytics",
-    LIKE: "/api/events/:eventId/like",
+    LIKE: "/events/:eventId/like",
     PUBLISH: "/api/events/:eventId/publish",
   },
 
@@ -142,7 +142,7 @@ export const API_ENDPOINTS = {
 export const ROUTES = {
  LOGIN: "/account/auth/login",
   MY_EVENTS: "/events/my-events",
-  CREATE_EVENT: "/events/create-events",
+  CREATE_EVENT: "/events/create-events", //possible endpoint mismatch here 
  // 🚨 Note: You have a duplicate 'LOGIN' key here. Using the first one.
 // LOGIN: "/login", 
 DASHBOARD: "/dashboard",

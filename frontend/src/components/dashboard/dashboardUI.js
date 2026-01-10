@@ -2,18 +2,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useSelector } from "react-redux";
-import {
-  Calendar,
-  LogOut,
-  Sparkles,
-  Barcode,
-  Eye,
-  PlusCircle,
-  UserCheck,
-} from "lucide-react";
+import { LogOut, Sparkles, Barcode, Eye, PlusCircle } from "lucide-react";
+import { useAuth } from "@/utils/hooks/useAuth";
 
-// FIX: Corrected import paths for subcomponents to resolve compilation errors
 import MyEvents from "@/components/dashboard/myEvents";
 import DashboardStats from "@/components/dashboard/dashboardStats";
 import DashboardQuickActions from "@/components/dashboard/dashboardQuickActions";
@@ -22,29 +13,33 @@ import VendorsDashboard from "@/components/dashboard/vendorDashboard";
 export default function DashboardUI({
   isLoading,
   onLogout,
-  onCreateEvent, // Passed down for quick action button
-  openDeleteModal, // Passed down to MyEvents
-  openAnalyticsModal, // Passed down to MyEvents
-
-  // NEW PRESENTATIONAL PROPS (Pre-calculated/Configured by Container)
+  onCreateEvent,
+  openDeleteModal,
+  openAnalyticsModal,
   stats,
   quickActions,
-  filteredEvents, // { liveEvents, upcomingEvents, pastEvents }
-
-  // View Toggle props
+  filteredEvents,
   activeView = "events",
   onViewChange,
 }) {
-  const userName = useSelector((state) => state.auth.user?.name);
+  // ✅ FIX: Get user data directly from useAuth hook
+  const { user } = useAuth();
 
-  const displayName = userName || "User";
+  // ✅ FIX: Use user data with proper fallbacks
+  const displayName = user?.name || user?.email?.split("@")[0] || "User";
+
+  console.log("🔍 [DashboardUI] User data:", {
+    user,
+    displayName,
+    userName: user?.name,
+    userEmail: user?.email,
+  });
+
   const welcomeMessage = isLoading
     ? "Loading your dashboard..."
-    : `Welcome back, ${displayName}!`;
-  //console.log("display name:", displayName);
+    : `Welcome, ${displayName}!`;
 
-  // --- MINIMAL UI-BASED LOGIC ---
-  // Only calculate the total event count if the filtered list exists (acceptable calculation for presentation)
+  // Calculate total events for display
   const totalEvents =
     (filteredEvents?.liveEvents?.length ?? 0) +
     (filteredEvents?.upcomingEvents?.length ?? 0) +
@@ -67,7 +62,7 @@ export default function DashboardUI({
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header Section with Toggle */}
+        {/* Header Section */}
         <motion.header
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -93,7 +88,6 @@ export default function DashboardUI({
 
             {/* View Toggle and Logout */}
             <div className="flex items-center gap-4">
-              {/* Logout Button */}
               {onLogout && !isLoading && (
                 <button
                   onClick={onLogout}
@@ -118,10 +112,10 @@ export default function DashboardUI({
             transition={{ delay: 0.2, duration: 0.5 }}
             className="space-y-8"
           >
-            {/* Stats Grid - Uses pre-calculated/configured 'stats' prop */}
+            {/* Stats Grid */}
             <DashboardStats stats={stats} />
 
-            {/* Quick Actions - Uses pre-configured 'quickActions' prop */}
+            {/* Quick Actions */}
             <DashboardQuickActions quickActions={quickActions} />
 
             {/* Dynamic Content Based on Active View */}
@@ -153,7 +147,6 @@ export default function DashboardUI({
                       </button>
                     )}
                   </div>
-                  {/* MyEvents now receives pre-filtered lists directly */}
                   <MyEvents
                     liveEvents={filteredEvents?.liveEvents || []}
                     upcomingEvents={filteredEvents?.upcomingEvents || []}
@@ -163,7 +156,7 @@ export default function DashboardUI({
                   />
                 </motion.div>
 
-                {/* Purchased Tickets Section (Kept static/mock for now) */}
+                {/* Purchased Tickets Section */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -204,9 +197,6 @@ export default function DashboardUI({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.7, duration: 0.5 }}
               >
-                {/* Note: VendorsDashboard still uses mock props here, 
-                    but in a complete refactor, a VendorsContainer would provide the data. 
-                    For now, we keep the original structure for this section. */}
                 <VendorsDashboard />
               </motion.div>
             )}

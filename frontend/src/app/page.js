@@ -1,28 +1,20 @@
 // src/app/page.js
 "use client";
 
-import { useEffect } from "react";
-import { useDispatch } from "react-redux";
 import Hero from "@/components/homepage/hero";
 import TicketCard from "@/components/homepage/ticketCard";
-import { fetchAllEvents } from "@/redux/action/eventAction";
+import { useAllEvents } from "@/utils/hooks/useEvents";
 
 export default function Home() {
-  const dispatch = useDispatch();
+  // 3. Call the hook to initiate fetching and manage state
+  const { data: events, isLoading, isError, error } = useAllEvents();
 
-  useEffect(() => {
-    // 1. Create the AbortController and its signal
-    const controller = new AbortController();
-    const signal = controller.signal;
+  // You can optionally check the state for rendering feedback:
+  if (isLoading) return <div>Loading events...</div>;
+   if (isError) return <div>Error loading events: {error.message}</div>;
 
-    // 2. Dispatch the fetch action, passing the signal
-    dispatch(fetchAllEvents(signal));
-
-    // 3. Cleanup function: Abort the request when the component unmounts
-    return () => {
-      controller.abort();
-    };
-  }, [dispatch]); // Dependency array is clean
+  // The 'events' data will be available here when successfully fetched.
+  // For this component's purpose (Hero/TicketCard), we just need to trigger the fetch.
 
   return (
     <main className="min-h-screen bg-black">

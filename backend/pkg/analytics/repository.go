@@ -1,16 +1,16 @@
-//backend/pkg/analytics/repository.go
- package analytics 
+// backend/pkg/analytics/repository.go
+package analytics
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
 	"eventify/backend/pkg/models"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 )
 
 // ============================================================================
@@ -20,48 +20,40 @@ import (
 // AnalyticsRepository defines methods for fetching analytics data
 type AnalyticsRepository interface {
 	// Event queries
-	GetEventInfo(ctx context.Context, eventID primitive.ObjectID) (*models.EventBasicInfo, error)
-	
+	GetEventInfo(ctx context.Context, eventID uuid.UUID) (*models.EventBasicInfo, error)
+
 	// Ticket queries
-	GetTicketsSold(ctx context.Context, eventID string) (int64, error)
-	GetTicketsSoldByTier(ctx context.Context, eventID string) (map[string]int64, error)
-	
+	GetTicketsSold(ctx context.Context, eventID uuid.UUID) (int64, error)
+	GetTicketsSoldByTier(ctx context.Context, eventID uuid.UUID) (map[string]int64, error)
+
 	// Order queries
-	GetOrderMetrics(ctx context.Context, eventID string) (*models.OrderMetricsRaw, error)
-	GetRevenueMetrics(ctx context.Context, eventID string) (*models.RevenueMetricsRaw, error)
-	
+	GetOrderMetrics(ctx context.Context, eventID uuid.UUID) (*models.OrderMetricsRaw, error)
+	GetRevenueMetrics(ctx context.Context, eventID uuid.UUID) (*models.RevenueMetricsRaw, error)
+
 	// Customer queries
-	GetCustomerMetrics(ctx context.Context, eventID string) (*models.CustomerMetricsRaw, error)
-	GetTopCountries(ctx context.Context, eventID string, limit int) ([]models.CountryData, error)
-	
+	GetCustomerMetrics(ctx context.Context, eventID uuid.UUID) (*models.CustomerMetricsRaw, error)
+	GetTopCountries(ctx context.Context, eventID uuid.UUID, limit int) ([]models.CountryData, error)
+
 	// Payment queries
-	GetPaymentChannels(ctx context.Context, eventID string) ([]models.PaymentChannelRaw, error)
-	
-	// Timeline queries (optional)
-	GetSalesTimeline(ctx context.Context, eventID string, groupBy string) ([]models.TimelineData, error)
+	GetPaymentChannels(ctx context.Context, eventID uuid.UUID) ([]models.PaymentChannelRaw, error)
+
+	// Timeline queries
+	GetSalesTimeline(ctx context.Context, eventID uuid.UUID, groupBy string) ([]models.TimelineData, error)
 }
 
 // ============================================================================
 // IMPLEMENTATION
 // ============================================================================
 
-// MongoAnalyticsRepository implements AnalyticsRepository using MongoDB
-type MongoAnalyticsRepository struct {
-	EventCollection  *mongo.Collection
-	OrderCollection  *mongo.Collection
-	TicketCollection *mongo.Collection
+// PostgresAnalyticsRepository implements AnalyticsRepository using PostgreSQL
+type PostgresAnalyticsRepository struct {
+	DB *sqlx.DB
 }
 
 // NewAnalyticsRepository creates a new analytics repository instance
-func NewAnalyticsRepository(
-	eventColl *mongo.Collection,
-	orderColl *mongo.Collection,
-	ticketColl *mongo.Collection,
-) AnalyticsRepository {
-	return &MongoAnalyticsRepository{
-		EventCollection:  eventColl,
-		OrderCollection:  orderColl,
-		TicketCollection: ticketColl,
+func NewPostgresAnalyticsRepository(db *sqlx.DB) AnalyticsRepository {
+	return &PostgresAnalyticsRepository{
+		DB: db,
 	}
 }
 
@@ -70,53 +62,62 @@ func NewAnalyticsRepository(
 // ============================================================================
 
 // GetEventInfo fetches basic event information
-func (r *MongoAnalyticsRepository) GetEventInfo(
+func (r *PostgresAnalyticsRepository) GetEventInfo(
 	ctx context.Context,
-	eventID primitive.ObjectID,
+	eventID uuid.UUID,
 ) (*models.EventBasicInfo, error) {
-	
-	filter := bson.M{
-		"_id":        eventID,
-		"is_deleted": false,
-	}
+
+	query := `
+		SELECT 
+			e.id,
+			e.title,
+			e.organizer_id,
+			e.start_date,
+			e.end_date
+		FROM events e
+		WHERE e.id = $1 AND e.is_deleted = false
+	`
 
 	var result struct {
-		ID           primitive.ObjectID `bson:"_id"`
-		Title        string             `bson:"event_title"`
-		OrganizerID  primitive.ObjectID `bson:"organizer_id"`
-		StartDate    time.Time          `bson:"start_date"`
-		EndDate      time.Time          `bson:"end_date"`
-		TicketTiers  []struct {
-			TierName string  `bson:"tier_name"`
-			Price    float64 `bson:"price"`      // In Naira
-			Quantity int     `bson:"quantity"`
-		} `bson:"ticket_tiers"`
+		ID          uuid.UUID `db:"id"`
+		Title       string    `db:"title"`
+		OrganizerID uuid.UUID `db:"organizer_id"`
+		StartDate   time.Time `db:"start_date"`
+		EndDate     time.Time `db:"end_date"`
 	}
 
-	err := r.EventCollection.FindOne(ctx, filter).Decode(&result)
+	err := r.DB.GetContext(ctx, &result, query, eventID)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("event not found or deleted")
 		}
 		return nil, fmt.Errorf("failed to fetch event: %w", err)
 	}
 
-	// Convert to EventBasicInfo
-	info := &models.EventBasicInfo{
-		ID:          result.ID.Hex(),
-		Title:       result.Title,
-		OrganizerID: result.OrganizerID.Hex(),
-		StartDate:   result.StartDate,
-		EndDate:     result.EndDate,
-		TicketTiers: make([]models.TierInfo, len(result.TicketTiers)),
+	// Fetch ticket tiers
+	tierQuery := `
+		SELECT 
+			tier_name,
+			price,
+			quantity
+		FROM ticket_tiers
+		WHERE event_id = $1
+		ORDER BY price ASC
+	`
+
+	var tiers []models.TierInfo
+	err = r.DB.SelectContext(ctx, &tiers, tierQuery, eventID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch ticket tiers: %w", err)
 	}
 
-	for i, tier := range result.TicketTiers {
-		info.TicketTiers[i] = models.TierInfo{
-			TierName: tier.TierName,
-			Price:    tier.Price,
-			Quantity: tier.Quantity,
-		}
+	info := &models.EventBasicInfo{
+		ID:          result.ID.String(),
+		Title:       result.Title,
+		OrganizerID: result.OrganizerID.String(),
+		StartDate:   result.StartDate,
+		EndDate:     result.EndDate,
+		TicketTiers: tiers,
 	}
 
 	return info, nil
@@ -127,16 +128,19 @@ func (r *MongoAnalyticsRepository) GetEventInfo(
 // ============================================================================
 
 // GetTicketsSold counts total tickets sold for an event
-func (r *MongoAnalyticsRepository) GetTicketsSold(
+func (r *PostgresAnalyticsRepository) GetTicketsSold(
 	ctx context.Context,
-	eventID string, // STRING, not ObjectID
+	eventID uuid.UUID,
 ) (int64, error) {
-	
-	filter := bson.M{
-		"event_id": eventID, // Match STRING field
-	}
 
-	count, err := r.TicketCollection.CountDocuments(ctx, filter)
+	query := `
+		SELECT COUNT(*) 
+		FROM tickets 
+		WHERE event_id = $1
+	`
+
+	var count int64
+	err := r.DB.GetContext(ctx, &count, query, eventID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count tickets: %w", err)
 	}
@@ -145,43 +149,38 @@ func (r *MongoAnalyticsRepository) GetTicketsSold(
 }
 
 // GetTicketsSoldByTier returns tickets sold per tier
-func (r *MongoAnalyticsRepository) GetTicketsSoldByTier(
+func (r *PostgresAnalyticsRepository) GetTicketsSoldByTier(
 	ctx context.Context,
-	eventID string,
+	eventID uuid.UUID,
 ) (map[string]int64, error) {
-	
-	pipeline := mongo.Pipeline{
-		// Match tickets for this event
-		bson.D{{Key: "$match", Value: bson.M{
-			"event_id": eventID,
-		}}},
-		
-		// Group by tier and count
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id":   "$tier_name",
-			"count": bson.M{"$sum": 1},
-		}}},
+
+	query := `
+		SELECT 
+			tt.tier_name,
+			COUNT(t.id) as count
+		FROM ticket_tiers tt
+		LEFT JOIN tickets t ON t.ticket_tier_id = tt.id AND t.event_id = $1
+		WHERE tt.event_id = $1
+		GROUP BY tt.tier_name
+		ORDER BY tt.tier_name
+	`
+
+	var results []struct {
+		TierName string `db:"tier_name"`
+		Count    int64  `db:"count"`
 	}
 
-	cursor, err := r.TicketCollection.Aggregate(ctx, pipeline)
+	err := r.DB.SelectContext(ctx, &results, query, eventID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to aggregate tickets by tier: %w", err)
-	}
-	defer cursor.Close(ctx)
-
-	result := make(map[string]int64)
-	for cursor.Next(ctx) {
-		var doc struct {
-			TierName string `bson:"_id"`
-			Count    int64  `bson:"count"`
-		}
-		if err := cursor.Decode(&doc); err != nil {
-			continue
-		}
-		result[doc.TierName] = doc.Count
+		return nil, fmt.Errorf("failed to get tickets by tier: %w", err)
 	}
 
-	return result, nil
+	tierMap := make(map[string]int64)
+	for _, result := range results {
+		tierMap[result.TierName] = result.Count
+	}
+
+	return tierMap, nil
 }
 
 // ============================================================================
@@ -189,52 +188,45 @@ func (r *MongoAnalyticsRepository) GetTicketsSoldByTier(
 // ============================================================================
 
 // GetOrderMetrics fetches order status breakdown
-func (r *MongoAnalyticsRepository) GetOrderMetrics(
+func (r *PostgresAnalyticsRepository) GetOrderMetrics(
 	ctx context.Context,
-	eventID string,
+	eventID uuid.UUID,
 ) (*models.OrderMetricsRaw, error) {
-	
-	pipeline := mongo.Pipeline{
-		// Match orders containing this event
-		bson.D{{Key: "$match", Value: bson.M{
-			"items.event_id": eventID, // Match STRING in items array
-		}}},
-		
-		// Group by status
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id":   "$status",
-			"count": bson.M{"$sum": 1},
-		}}},
+
+	query := `
+		SELECT 
+			o.status,
+			COUNT(*) as count
+		FROM orders o
+		INNER JOIN order_items oi ON oi.order_id = o.id
+		WHERE oi.event_id = $1
+		GROUP BY o.status
+	`
+
+	var results []struct {
+		Status string `db:"status"`
+		Count  int    `db:"count"`
 	}
 
-	cursor, err := r.OrderCollection.Aggregate(ctx, pipeline)
+	err := r.DB.SelectContext(ctx, &results, query, eventID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get order metrics: %w", err)
 	}
-	defer cursor.Close(ctx)
 
 	metrics := &models.OrderMetricsRaw{}
-	
-	for cursor.Next(ctx) {
-		var doc struct {
-			Status string `bson:"_id"`
-			Count  int    `bson:"count"`
-		}
-		if err := cursor.Decode(&doc); err != nil {
-			continue
-		}
 
-		metrics.Total += doc.Count
-		
-		switch doc.Status {
+	for _, result := range results {
+		metrics.Total += result.Count
+
+		switch result.Status {
 		case "success":
-			metrics.Successful = doc.Count
+			metrics.Successful = result.Count
 		case "pending":
-			metrics.Pending = doc.Count
+			metrics.Pending = result.Count
 		case "failed":
-			metrics.Failed = doc.Count
+			metrics.Failed = result.Count
 		case "fraud":
-			metrics.Fraud = doc.Count
+			metrics.Fraud = result.Count
 		}
 	}
 
@@ -242,61 +234,48 @@ func (r *MongoAnalyticsRepository) GetOrderMetrics(
 }
 
 // GetRevenueMetrics fetches financial data from successful orders
-func (r *MongoAnalyticsRepository) GetRevenueMetrics(
+func (r *PostgresAnalyticsRepository) GetRevenueMetrics(
 	ctx context.Context,
-	eventID string,
+	eventID uuid.UUID,
 ) (*models.RevenueMetricsRaw, error) {
-	
-	pipeline := mongo.Pipeline{
-		// Match successful orders with this event
-		bson.D{{Key: "$match", Value: bson.M{
-			"items.event_id": eventID,
-			"status":         "success",
-		}}},
-		
-		// Group and sum financial fields
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id":           nil,
-			"totalRevenue":  bson.M{"$sum": "$final_total"},    // Total amount
-			"subtotal":      bson.M{"$sum": "$subtotal"},       // Before fees
-			"serviceFees":   bson.M{"$sum": "$service_fee"},
-			"vat":           bson.M{"$sum": "$vat_amount"},
-			"orderCount":    bson.M{"$sum": 1},
-			"avgOrderValue": bson.M{"$avg": "$final_total"},
-		}}},
+
+	query := `
+		SELECT 
+			SUM(o.final_total) as total_revenue,
+			SUM(o.subtotal) as subtotal_revenue,
+			SUM(o.service_fee) as service_fees,
+			SUM(o.vat_amount) as vat_amount,
+			COUNT(DISTINCT o.id) as order_count,
+			AVG(o.final_total) as avg_order_value
+		FROM orders o
+		INNER JOIN order_items oi ON oi.order_id = o.id
+		WHERE oi.event_id = $1 AND o.status = 'success'
+	`
+
+	var result struct {
+		TotalRevenue     sql.NullInt64   `db:"total_revenue"`
+		SubtotalRevenue  sql.NullInt64   `db:"subtotal_revenue"`
+		ServiceFees      sql.NullInt64   `db:"service_fees"`
+		VATAmount        sql.NullInt64   `db:"vat_amount"`
+		OrderCount       sql.NullInt64   `db:"order_count"`
+		AvgOrderValue    sql.NullFloat64 `db:"avg_order_value"`
 	}
 
-	cursor, err := r.OrderCollection.Aggregate(ctx, pipeline)
+	err := r.DB.GetContext(ctx, &result, query, eventID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get revenue metrics: %w", err)
 	}
-	defer cursor.Close(ctx)
 
-	var result models.RevenueMetricsRaw
-	
-	if cursor.Next(ctx) {
-		var doc struct {
-			TotalRevenue    int     `bson:"totalRevenue"`
-			Subtotal        int     `bson:"subtotal"`
-			ServiceFees     int     `bson:"serviceFees"`
-			VAT             int     `bson:"vat"`
-			OrderCount      int     `bson:"orderCount"`
-			AvgOrderValue   float64 `bson:"avgOrderValue"`
-		}
-		
-		if err := cursor.Decode(&doc); err != nil {
-			return nil, err
-		}
-		
-		result.TotalRevenue = doc.TotalRevenue
-		result.SubtotalRevenue = doc.Subtotal
-		result.ServiceFees = doc.ServiceFees
-		result.VATAmount = doc.VAT
-		result.OrderCount = doc.OrderCount
-		result.TotalOrderValue = doc.AvgOrderValue
+	metrics := &models.RevenueMetricsRaw{
+		TotalRevenue:     int(result.TotalRevenue.Int64),
+		SubtotalRevenue:  int(result.SubtotalRevenue.Int64),
+		ServiceFees:      int(result.ServiceFees.Int64),
+		VATAmount:        int(result.VATAmount.Int64),
+		OrderCount:       int(result.OrderCount.Int64),
+		TotalOrderValue:  result.AvgOrderValue.Float64,
 	}
 
-	return &result, nil
+	return metrics, nil
 }
 
 // ============================================================================
@@ -304,124 +283,88 @@ func (r *MongoAnalyticsRepository) GetRevenueMetrics(
 // ============================================================================
 
 // GetCustomerMetrics fetches unique customer count
-func (r *MongoAnalyticsRepository) GetCustomerMetrics(
+func (r *PostgresAnalyticsRepository) GetCustomerMetrics(
 	ctx context.Context,
-	eventID string,
+	eventID uuid.UUID,
 ) (*models.CustomerMetricsRaw, error) {
-	
-	pipeline := mongo.Pipeline{
-		// Match successful orders with this event
-		bson.D{{Key: "$match", Value: bson.M{
-			"items.event_id": eventID,
-			"status":         "success",
-		}}},
-		
-		// Group and collect unique emails
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id":          nil,
-			"uniqueEmails": bson.M{"$addToSet": "$customer.email"},
-			"totalOrders":  bson.M{"$sum": 1},
-		}}},
-		
-		// Project to count emails
-		bson.D{{Key: "$project", Value: bson.M{
-			"uniqueEmails": 1,
-			"totalOrders":  1,
-		}}},
+
+	query := `
+		SELECT 
+			ARRAY_AGG(DISTINCT o.customer_email) as unique_emails,
+			COUNT(DISTINCT o.id) as total_orders
+		FROM orders o
+		INNER JOIN order_items oi ON oi.order_id = o.id
+		WHERE oi.event_id = $1 AND o.status = 'success'
+	`
+
+	var result struct {
+		UniqueEmails []string `db:"unique_emails"`
+		TotalOrders  int      `db:"total_orders"`
 	}
 
-	cursor, err := r.OrderCollection.Aggregate(ctx, pipeline)
+	err := r.DB.GetContext(ctx, &result, query, eventID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get customer metrics: %w", err)
 	}
-	defer cursor.Close(ctx)
 
-	var result models.CustomerMetricsRaw
-	
-	if cursor.Next(ctx) {
-		var doc struct {
-			UniqueEmails []string `bson:"uniqueEmails"`
-			TotalOrders  int      `bson:"totalOrders"`
-		}
-		
-		if err := cursor.Decode(&doc); err != nil {
-			return nil, err
-		}
-		
-		result.UniqueEmails = doc.UniqueEmails
-		result.TotalOrders = doc.TotalOrders
+	metrics := &models.CustomerMetricsRaw{
+		UniqueEmails: result.UniqueEmails,
+		TotalOrders:  result.TotalOrders,
 	}
 
-	return &result, nil
+	return metrics, nil
 }
 
-// GetTopCountries fetches top countries by revenue
-func (r *MongoAnalyticsRepository) GetTopCountries(
+// GetTopCountries fetches top countries by revenue (requires country field)
+func (r *PostgresAnalyticsRepository) GetTopCountries(
 	ctx context.Context,
-	eventID string,
+	eventID uuid.UUID,
 	limit int,
 ) ([]models.CountryData, error) {
-	
-	pipeline := mongo.Pipeline{
-		// Match successful orders with this event
-		bson.D{{Key: "$match", Value: bson.M{
-			"items.event_id": eventID,
-			"status":         "success",
-		}}},
-		
-		// Unwind items to get quantities
-		bson.D{{Key: "$unwind", Value: "$items"}},
-		
-		// Filter to only items for this event
-		bson.D{{Key: "$match", Value: bson.M{
-			"items.event_id": eventID,
-		}}},
-		
-		// Group by country
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id":         "$customer.country",
-			"orderCount":  bson.M{"$sum": 1},
-			"revenue":     bson.M{"$sum": "$final_total"},
-			"ticketsSold": bson.M{"$sum": "$items.quantity"},
-		}}},
-		
-		// Sort by revenue (descending)
-		bson.D{{Key: "$sort", Value: bson.M{"revenue": -1}}},
-		
-		// Limit results
-		bson.D{{Key: "$limit", Value: limit}},
+
+	// Note: This assumes you have a 'country' field in orders table
+	// If not, you may need to add it or modify this query
+	query := `
+		SELECT 
+			o.country,
+			COUNT(DISTINCT o.id) as order_count,
+			SUM(o.final_total) as revenue,
+			SUM(oi.quantity) as tickets_sold
+		FROM orders o
+		INNER JOIN order_items oi ON oi.order_id = o.id
+		WHERE oi.event_id = $1 AND o.status = 'success' AND o.country IS NOT NULL
+		GROUP BY o.country
+		ORDER BY revenue DESC
+		LIMIT $2
+	`
+
+	var results []struct {
+		Country     string `db:"country"`
+		OrderCount  int    `db:"order_count"`
+		Revenue     int    `db:"revenue"`
+		TicketsSold int    `db:"tickets_sold"`
 	}
 
-	cursor, err := r.OrderCollection.Aggregate(ctx, pipeline)
+	err := r.DB.SelectContext(ctx, &results, query, eventID, limit)
 	if err != nil {
+		// If country column doesn't exist, return empty slice
+		if err == sql.ErrNoRows {
+			return []models.CountryData{}, nil
+		}
 		return nil, fmt.Errorf("failed to get top countries: %w", err)
 	}
-	defer cursor.Close(ctx)
 
-	var results []models.CountryData
-	
-	for cursor.Next(ctx) {
-		var doc struct {
-			Country     string `bson:"_id"`
-			OrderCount  int    `bson:"orderCount"`
-			Revenue     int    `bson:"revenue"`
-			TicketsSold int    `bson:"ticketsSold"`
+	countryData := make([]models.CountryData, len(results))
+	for i, result := range results {
+		countryData[i] = models.CountryData{
+			Country:     result.Country,
+			OrderCount:  result.OrderCount,
+			TicketsSold: result.TicketsSold,
+			Revenue:     result.Revenue,
 		}
-		
-		if err := cursor.Decode(&doc); err != nil {
-			continue
-		}
-		
-		results = append(results, models.CountryData{
-			Country:     doc.Country,
-			OrderCount:  doc.OrderCount,
-			TicketsSold: doc.TicketsSold,
-			Revenue:     doc.Revenue,
-			// PercentOfTotal will be calculated in service layer
-		})
 	}
 
-	return results, nil
+	return countryData, nil
 }
 
 // ============================================================================
@@ -429,160 +372,119 @@ func (r *MongoAnalyticsRepository) GetTopCountries(
 // ============================================================================
 
 // GetPaymentChannels fetches payment method breakdown
-func (r *MongoAnalyticsRepository) GetPaymentChannels(
+func (r *PostgresAnalyticsRepository) GetPaymentChannels(
 	ctx context.Context,
-	eventID string,
+	eventID uuid.UUID,
 ) ([]models.PaymentChannelRaw, error) {
-	
-	pipeline := mongo.Pipeline{
-		// Match orders with this event that have payment channel
-		bson.D{{Key: "$match", Value: bson.M{
-			"items.event_id":    eventID,
-			"payment_channel":   bson.M{"$exists": true, "$ne": ""},
-		}}},
-		
-		// Group by payment channel
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id":      "$payment_channel",
-			"orderCount": bson.M{"$sum": 1},
-			"revenue": bson.M{"$sum": bson.M{
-				"$cond": bson.A{
-					bson.M{"$eq": bson.A{"$status", "success"}},
-					"$final_total",
-					0,
-				},
-			}},
-			"successCount": bson.M{"$sum": bson.M{
-				"$cond": bson.A{
-					bson.M{"$eq": bson.A{"$status", "success"}},
-					1,
-					0,
-				},
-			}},
-			"failCount": bson.M{"$sum": bson.M{
-				"$cond": bson.A{
-					bson.M{"$eq": bson.A{"$status", "failed"}},
-					1,
-					0,
-				},
-			}},
-		}}},
-		
-		// Sort by revenue
-		bson.D{{Key: "$sort", Value: bson.M{"revenue": -1}}},
+
+	query := `
+		SELECT 
+			o.payment_channel as channel,
+			COUNT(DISTINCT o.id) as order_count,
+			SUM(CASE WHEN o.status = 'success' THEN o.final_total ELSE 0 END) as revenue,
+			SUM(CASE WHEN o.status = 'success' THEN 1 ELSE 0 END) as success_count,
+			SUM(CASE WHEN o.status = 'failed' THEN 1 ELSE 0 END) as fail_count
+		FROM orders o
+		INNER JOIN order_items oi ON oi.order_id = o.id
+		WHERE oi.event_id = $1 
+			AND o.payment_channel IS NOT NULL 
+			AND o.payment_channel != ''
+		GROUP BY o.payment_channel
+		ORDER BY revenue DESC
+	`
+
+	var results []struct {
+		Channel      sql.NullString `db:"channel"`
+		OrderCount   int            `db:"order_count"`
+		Revenue      int            `db:"revenue"`
+		SuccessCount int            `db:"success_count"`
+		FailCount    int            `db:"fail_count"`
 	}
 
-	cursor, err := r.OrderCollection.Aggregate(ctx, pipeline)
+	err := r.DB.SelectContext(ctx, &results, query, eventID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get payment channels: %w", err)
 	}
-	defer cursor.Close(ctx)
 
-	var results []models.PaymentChannelRaw
-	
-	for cursor.Next(ctx) {
-		var doc struct {
-			Channel      string `bson:"_id"`
-			OrderCount   int    `bson:"orderCount"`
-			Revenue      int    `bson:"revenue"`
-			SuccessCount int    `bson:"successCount"`
-			FailCount    int    `bson:"failCount"`
+	channels := make([]models.PaymentChannelRaw, len(results))
+	for i, result := range results {
+		channel := "unknown"
+		if result.Channel.Valid {
+			channel = result.Channel.String
 		}
-		
-		if err := cursor.Decode(&doc); err != nil {
-			continue
+
+		channels[i] = models.PaymentChannelRaw{
+			Channel:      channel,
+			OrderCount:   result.OrderCount,
+			Revenue:      result.Revenue,
+			SuccessCount: result.SuccessCount,
+			FailCount:    result.FailCount,
 		}
-		
-		results = append(results, models.PaymentChannelRaw{
-			Channel:      doc.Channel,
-			OrderCount:   doc.OrderCount,
-			Revenue:      doc.Revenue,
-			SuccessCount: doc.SuccessCount,
-			FailCount:    doc.FailCount,
-		})
 	}
 
-	return results, nil
+	return channels, nil
 }
 
 // ============================================================================
-// TIMELINE QUERIES (Optional)
+// TIMELINE QUERIES
 // ============================================================================
 
 // GetSalesTimeline fetches sales data grouped by time period
-func (r *MongoAnalyticsRepository) GetSalesTimeline(
+func (r *PostgresAnalyticsRepository) GetSalesTimeline(
 	ctx context.Context,
-	eventID string,
-	groupBy string, // "day", "week", "month"
+	eventID uuid.UUID,
+	groupBy string,
 ) ([]models.TimelineData, error) {
-	
-	// Determine date format based on grouping
-	dateFormat := "%Y-%m-%d" // daily
-	if groupBy == "week" {
-		dateFormat = "%Y-W%V"
-	} else if groupBy == "month" {
-		dateFormat = "%Y-%m"
+
+	// Determine date truncation based on grouping
+	var dateFormat string
+	switch groupBy {
+	case "day":
+		dateFormat = "DATE(o.paid_at)"
+	case "week":
+		dateFormat = "DATE_TRUNC('week', o.paid_at)"
+	case "month":
+		dateFormat = "DATE_TRUNC('month', o.paid_at)"
+	default:
+		dateFormat = "DATE(o.paid_at)"
 	}
 
-	pipeline := mongo.Pipeline{
-		// Match successful orders with this event
-		bson.D{{Key: "$match", Value: bson.M{
-			"items.event_id": eventID,
-			"status":         "success",
-			"paid_at":        bson.M{"$exists": true},
-		}}},
-		
-		// Unwind items
-		bson.D{{Key: "$unwind", Value: "$items"}},
-		
-		// Filter to this event's items
-		bson.D{{Key: "$match", Value: bson.M{
-			"items.event_id": eventID,
-		}}},
-		
-		// Group by date
-		bson.D{{Key: "$group", Value: bson.M{
-			"_id": bson.M{"$dateToString": bson.M{
-				"format": dateFormat,
-				"date":   "$paid_at",
-			}},
-			"ticketsSold": bson.M{"$sum": "$items.quantity"},
-			"revenue":     bson.M{"$sum": "$items.subtotal"},
-			"orderCount":  bson.M{"$sum": 1},
-		}}},
-		
-		// Sort by date
-		bson.D{{Key: "$sort", Value: bson.M{"_id": 1}}},
+	query := fmt.Sprintf(`
+		SELECT 
+			TO_CHAR(%s, 'YYYY-MM-DD') as date,
+			SUM(oi.quantity) as tickets_sold,
+			SUM(oi.subtotal) as revenue,
+			COUNT(DISTINCT o.id) as order_count
+		FROM orders o
+		INNER JOIN order_items oi ON oi.order_id = o.id
+		WHERE oi.event_id = $1 
+			AND o.status = 'success' 
+			AND o.paid_at IS NOT NULL
+		GROUP BY %s
+		ORDER BY date ASC
+	`, dateFormat, dateFormat)
+
+	var results []struct {
+		Date        string `db:"date"`
+		TicketsSold int    `db:"tickets_sold"`
+		Revenue     int    `db:"revenue"`
+		OrderCount  int    `db:"order_count"`
 	}
 
-	cursor, err := r.OrderCollection.Aggregate(ctx, pipeline)
+	err := r.DB.SelectContext(ctx, &results, query, eventID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sales timeline: %w", err)
 	}
-	defer cursor.Close(ctx)
 
-	var results []models.TimelineData
-	
-	for cursor.Next(ctx) {
-		var doc struct {
-			Date        string `bson:"_id"`
-			TicketsSold int    `bson:"ticketsSold"`
-			Revenue     int    `bson:"revenue"`
-			OrderCount  int    `bson:"orderCount"`
+	timeline := make([]models.TimelineData, len(results))
+	for i, result := range results {
+		timeline[i] = models.TimelineData{
+			Date:        result.Date,
+			TicketsSold: result.TicketsSold,
+			Revenue:     result.Revenue,
+			OrderCount:  result.OrderCount,
 		}
-		
-		if err := cursor.Decode(&doc); err != nil {
-			continue
-		}
-		
-		results = append(results, models.TimelineData{
-			Date:        doc.Date,
-			TicketsSold: doc.TicketsSold,
-			Revenue:     doc.Revenue,
-			OrderCount:  doc.OrderCount,
-			// CumulativeSold will be calculated in service layer
-		})
 	}
 
-	return results, nil
+	return timeline, nil
 }

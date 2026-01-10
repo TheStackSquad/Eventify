@@ -7,11 +7,10 @@ import {
   REDUX_ACTION_TYPES,
   API_ENDPOINTS,
   ERROR_MESSAGES,
-  // Assuming SUCCESS_MESSAGES is defined in globalConstants for updateVendor success
   SUCCESS_MESSAGES,
 } from "@/utils/constants/globalConstants";
 
-// ✅ NEW: Utility to normalize MongoDB vendor data
+// ✅ Utility to normalize MongoDB vendor data
 const normalizeVendor = (vendor) => {
   if (!vendor) return null;
 
@@ -26,6 +25,7 @@ const normalizeVendor = (vendor) => {
 
 export const fetchVendors = createAsyncThunk(
   REDUX_ACTION_TYPES.FETCH_VENDORS,
+  // 🔑 Destructure 'signal' from the thunkAPI argument
   async (filters = {}, { rejectWithValue, signal }) => {
     // console.log("⚙️ THUNK START: Initial filters received:", filters);
 
@@ -51,15 +51,11 @@ export const fetchVendors = createAsyncThunk(
     // console.log(`📡 API CALL: ${endpoint}`);
 
     try {
-      // console.log("⏳ AXIOS REQUEST: Sending GET request...");
-
+      // 🔑 Pass the received signal to the axios request
       const response = await axios.get(endpoint, {
         signal,
         timeout: 10000,
       });
-
-      // console.log("✅ AXIOS RESPONSE: Status", response.status);
-      // console.log("🔍 RAW API RESPONSE:", response.data);
 
       // ✅ SIMPLIFIED: Parse response
       let vendors = [];
@@ -67,7 +63,6 @@ export const fetchVendors = createAsyncThunk(
 
       if (Array.isArray(response.data)) {
         // Backend returns simple array
-        // console.log("💡 PARSER: Simple array format detected");
         vendors = response.data;
         pagination = {
           currentPage: allParams.page,
@@ -76,7 +71,6 @@ export const fetchVendors = createAsyncThunk(
         };
       } else if (response.data && Array.isArray(response.data.vendors)) {
         // Backend returns { vendors: [], pagination: {} }
-        // console.log("💡 PARSER: Object format with vendors array");
         vendors = response.data.vendors;
         pagination = response.data.pagination || {
           currentPage: allParams.page,
@@ -85,7 +79,6 @@ export const fetchVendors = createAsyncThunk(
         };
       } else {
         // Fallback
-        // console.log("💡 PARSER: Fallback format");
         vendors = response.data || [];
         pagination = {
           currentPage: allParams.page,
@@ -97,19 +90,6 @@ export const fetchVendors = createAsyncThunk(
       // ✅ NEW: Transform MongoDB IDs to normalized format
       const normalizedVendors = vendors.map(normalizeVendor).filter(Boolean);
 
-      // console.log("🔄 ID TRANSFORMATION:", {
-      //     before: vendors[0]?._id,
-      //     after: normalizedVendors[0]?.id,
-      // });
-
-      // console.log(
-      //     "📦 THUNK RETURN:",
-      //     normalizedVendors.length,
-      //     "vendors |",
-      //     "Page:",
-      //     pagination.currentPage
-      // );
-
       return {
         vendors: normalizedVendors,
         pagination,
@@ -120,29 +100,30 @@ export const fetchVendors = createAsyncThunk(
       let errorMessage = ERROR_MESSAGES.FETCH_VENDORS_FAILED;
       let errorStatus = "UNKNOWN_ERROR";
 
+      // 🔑 CRITICAL: Check for cancellation *first* and handle silently
+      if (axios.isCancel(error) || error.name === "AbortError") {
+        console.warn("🛑 ERROR: Request was intentionally cancelled (Abort).");
+        // Reject with a special value that the reducer can ignore, or just let the promise chain stop.
+        // We use rejectWithValue for consistency, but the component handles the silence.
+        return rejectWithValue({
+          message: "Request was cancelled by user action",
+          status: "CLIENT_CANCELLED",
+        });
+      }
+
       // ✅ KEEP: Excellent error categorization
-      if (axios.isCancel(error)) {
-        errorMessage = "Request was cancelled";
-        errorStatus = "CANCELLED";
-        // console.warn("🛑 ERROR: Request cancelled");
-      } else if (error.code === "ECONNABORTED") {
+      if (error.code === "ECONNABORTED") {
         errorMessage = "Request timeout - please try again";
         errorStatus = "TIMEOUT";
-        // console.error("⏰ ERROR: Request timeout");
       } else if (error.response) {
         errorMessage =
           error.response?.data?.message ||
           error.response?.data?.error ||
           `Server error: ${error.response.status}`;
         errorStatus = `HTTP_${error.response.status}`;
-        // console.error(
-        //     `💥 ERROR: Server status ${error.response.status}`,
-        //     error.response.data
-        // );
       } else if (error.request) {
         errorMessage = "Network error - please check your connection";
         errorStatus = "NETWORK_ERROR";
-        // console.error("🌐 ERROR: No response received");
       }
 
       // console.log("🚫 FINAL ERROR:", errorMessage, "|", errorStatus);
@@ -162,6 +143,7 @@ export const fetchVendors = createAsyncThunk(
 // Enhanced getVendorProfile with cache-first approach
 export const getVendorProfile = createAsyncThunk(
   REDUX_ACTION_TYPES.GET_VENDOR_PROFILE,
+  // 🔑 Destructure 'signal' here too, for consistency and future use
   async (vendorId, { rejectWithValue, signal, getState }) => {
     // Check if we have fresh data in the store
     const state = getState();
@@ -185,7 +167,7 @@ export const getVendorProfile = createAsyncThunk(
 
     try {
       const response = await axios.get(endpoint, {
-        signal,
+        signal, // Pass signal
         timeout: 8000,
       });
 
@@ -193,6 +175,15 @@ export const getVendorProfile = createAsyncThunk(
     } catch (error) {
       let errorMessage = ERROR_MESSAGES.FETCH_PROFILE_FAILED;
       let errorStatus = "UNKNOWN_ERROR";
+
+      // 🔑 Handle Abort for profile fetch as well
+      if (axios.isCancel(error) || error.name === "AbortError") {
+        console.warn("🛑 ERROR: Profile request was intentionally cancelled.");
+        return rejectWithValue({
+          message: "Request was cancelled by user action",
+          status: "CLIENT_CANCELLED",
+        });
+      }
 
       if (error.response?.status === 404) {
         errorMessage = "Vendor not found";
@@ -225,8 +216,8 @@ export const registerVendor = createAsyncThunk(
   REDUX_ACTION_TYPES.REGISTER_VENDOR,
   async (vendorData, { rejectWithValue }) => {
     // debugLog("VENDOR_REGISTER_START", "Registering new vendor", {
-    //   vendorName: vendorData.name,
-    //   category: vendorData.category,
+    //   vendorName: vendorData.name,
+    //   category: vendorData.category,
     // });
 
     try {
@@ -239,8 +230,8 @@ export const registerVendor = createAsyncThunk(
       );
 
       // debugLog("VENDOR_REGISTER_SUCCESS", "Vendor registered successfully", {
-      //   vendorId: response.data?.id,
-      //   vendorName: response.data?.name,
+      //   vendorId: response.data?.id,
+      //   vendorName: response.data?.name,
       // });
 
       return response.data;
@@ -255,9 +246,9 @@ export const registerVendor = createAsyncThunk(
       }
 
       // debugLog("VENDOR_REGISTER_ERROR", "Failed to register vendor", {
-      //   error: error.message,
-      //   httpStatus: error.response?.status,
-      //   validationErrors: error.response?.data?.errors,
+      //   error: error.message,
+      //   httpStatus: error.response?.status,
+      //   validationErrors: error.response?.data?.errors,
       // });
 
       toastAlert.error(errorMessage);
@@ -289,8 +280,8 @@ export const updateVendor = createAsyncThunk(
       return response.data;
     } catch (error) {
       // debugLog("VENDOR_UPDATE_ERROR", "Failed to update vendor", {
-      //     vendorId,
-      //     httpStatus: error.response?.status
+      //     vendorId,
+      //     httpStatus: error.response?.status
       // });
 
       const message =

@@ -1,91 +1,61 @@
 // backend/pkg/models/events.go
+
 package models
 
 import (
 	"time"
+	"database/sql"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/google/uuid"
 )
 
-// TicketTier defines the structure for one type of ticket.
-type TicketTier struct {
-	TierName    string  `bson:"tier_name" json:"tierName" binding:"required"`
-	Price       float64 `bson:"price" json:"price" binding:"required,gte=0"`
-	Quantity    int     `bson:"quantity" json:"quantity" binding:"required,gt=0"`
-	Description string  `bson:"description,omitempty" json:"description,omitempty"`
-}
+type EventType string
 
-// Event represents an event document in MongoDB.
+const (
+	TypePhysical EventType = "physical"
+	TypeVirtual  EventType = "virtual"
+)
+
 type Event struct {
-	ID                      primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	OrganizerID             primitive.ObjectID `bson:"organizer_id" json:"organizerId"`
-	EventTitle              string             `bson:"event_title" json:"eventTitle" binding:"required"`
-	EventDescription        string             `bson:"event_description" json:"eventDescription" binding:"required"`
-	Category                string             `bson:"category" json:"category" binding:"required"`
-	EventType               string             `bson:"event_type" json:"eventType" binding:"required,oneof=physical virtual"`
-	EventImageURL           string             `bson:"event_image_url" json:"eventImage" binding:"required,url"`
-
-	// Location/Venue Details (Physical Events)
-	VenueName      string `bson:"venue_name,omitempty" json:"venueName,omitempty"`
-	VenueAddress   string `bson:"venue_address,omitempty" json:"venueAddress,omitempty"`
-	City           string `bson:"city,omitempty" json:"city,omitempty"`
-	State          string `bson:"state,omitempty" json:"state,omitempty"`
-	Country        string `bson:"country,omitempty" json:"country,omitempty"`
-
-	// Virtual Event Details
-	VirtualPlatform string `bson:"virtual_platform,omitempty" json:"virtualPlatform,omitempty"`
-	MeetingLink     string `bson:"meeting_link,omitempty" json:"meetingLink,omitempty"`
-
-	// Date and Time
-	StartDate time.Time `bson:"start_date" json:"startDate" binding:"required"`
-	EndDate   time.Time `bson:"end_date" json:"endDate" binding:"required"`
-
-	// Ticket/Pricing
-	TicketTiers              []TicketTier `bson:"ticket_tiers" json:"tickets" binding:"required,dive"`
-	PaystackSubaccountCode string       `bson:"paystack_subaccount_code,omitempty" json:"paystackSubaccountCode,omitempty"`
-
-	// Additional Options
-	Tags           []string `bson:"tags,omitempty" json:"tags,omitempty"`
-	MaxAttendees   *int     `bson:"max_attendees,omitempty" json:"maxAttendees,omitempty"`
-
-	// --- Soft Delete Fields ---
-	IsDeleted bool       `bson:"is_deleted" json:"isDeleted"`                       // Flag for soft deletion
-	DeletedAt *time.Time `bson:"deleted_at,omitempty" json:"deletedAt,omitempty"` // Timestamp of deletion
-
-	// Metadata
-	CreatedAt time.Time `bson:"created_at" json:"createdAt"`
-	UpdatedAt time.Time `bson:"updated_at" json:"updatedAt"`
+	ID                     uuid.UUID  `json:"id" db:"id"`
+	OrganizerID            uuid.UUID  `json:"organizerId" db:"organizer_id" binding:"required"`
+	EventTitle             string     `json:"eventTitle" db:"event_title" binding:"required"`
+	EventDescription       string     `json:"eventDescription" db:"event_description" binding:"required"`
+	EventSlug           sql.NullString  `db:"event_slug" json:"eventSlug"`
+	Category               string     `json:"category" db:"category" binding:"required"`
+	EventType              EventType  `json:"eventType" db:"event_type" binding:"required,oneof=physical virtual"`
+	EventImageURL          string     `json:"eventImage" db:"event_image_url" binding:"required"`
+	VenueName              *string    `json:"venueName" db:"venue_name"`
+	VenueAddress           *string    `json:"venueAddress" db:"venue_address"`
+	City                   *string    `json:"city" db:"city"`
+	State                  *string    `json:"state" db:"state"`
+	Country                *string    `json:"country" db:"country"`
+	VirtualPlatform        *string    `json:"virtualPlatform" db:"virtual_platform"`
+	MeetingLink            *string    `json:"meetingLink" db:"meeting_link"`
+	StartDate              time.Time  `json:"startDate" db:"start_date" binding:"required"`
+	EndDate                time.Time  `json:"endDate" db:"end_date" binding:"required"`
+	MaxAttendees           *int32     `json:"maxAttendees" db:"max_attendees"`
+	PaystackSubaccountCode *string    `json:"paystackSubaccountCode" db:"paystack_subaccount_code"`
+	Tags                   []string   `json:"tags" db:"tags"`
+	IsDeleted              bool       `json:"isDeleted" db:"is_deleted"`
+	DeletedAt              *time.Time `json:"deletedAt" db:"deleted_at"`
+	CreatedAt              time.Time  `json:"createdAt" db:"created_at"`
+	UpdatedAt              time.Time  `json:"updatedAt" db:"updated_at"`
+	LikesCount             int        `json:"likesCount" db:"-"`
+	IsLiked                bool       `json:"isLiked" db:"-"`
+	TicketTiers            []TicketTier `json:"tickets" db:"-"`
 }
 
-
-// EventUpdate represents partial updates for an event
-type EventUpdate struct {
-	EventTitle       *string       `bson:"event_title,omitempty" json:"eventTitle,omitempty"`
-	EventDescription *string       `bson:"event_description,omitempty" json:"eventDescription,omitempty"`
-	Category         *string       `bson:"category,omitempty" json:"category,omitempty"`
-	EventType        *string       `bson:"event_type,omitempty" json:"eventType,omitempty"`
-	EventImageURL    *string       `bson:"event_image_url,omitempty" json:"eventImage,omitempty"`
-	
-	// Location fields
-	VenueName        *string       `bson:"venue_name,omitempty" json:"venueName,omitempty"`
-	VenueAddress     *string       `bson:"venue_address,omitempty" json:"venueAddress,omitempty"`
-	City             *string       `bson:"city,omitempty" json:"city,omitempty"`
-	State            *string       `bson:"state,omitempty" json:"state,omitempty"`
-	Country          *string       `bson:"country,omitempty" json:"country,omitempty"`
-	
-	// Virtual event fields
-	VirtualPlatform  *string       `bson:"virtual_platform,omitempty" json:"virtualPlatform,omitempty"`
-	MeetingLink      *string       `bson:"meeting_link,omitempty" json:"meetingLink,omitempty"`
-	
-	// Date fields
-	StartDate        *time.Time    `bson:"start_date,omitempty" json:"startDate,omitempty"`
-	EndDate          *time.Time    `bson:"end_date,omitempty" json:"endDate,omitempty"`
-	
-	// Ticket tiers
-	TicketTiers      *[]TicketTier `bson:"ticket_tiers,omitempty" json:"tickets,omitempty"`
-	
-	// Additional options
-	Tags             *[]string     `bson:"tags,omitempty" json:"tags,omitempty"`
-	MaxAttendees     *int          `bson:"max_attendees,omitempty" json:"maxAttendees,omitempty"`
+// ✅ FIXED: Match your actual database schema
+type TicketTier struct {
+	ID          uuid.UUID `json:"id" db:"id"`
+	EventID     uuid.UUID `json:"-" db:"event_id"`
+	Name        string    `json:"tierName" db:"name"`
+	Description *string   `json:"description" db:"description"`
+	PriceKobo   int32     `json:"price" db:"price_kobo"`
+	Capacity    int32     `json:"quantity" db:"capacity"`
+	Sold        int32     `json:"sold" db:"sold"`
+	Available   int32     `json:"available" db:"available"`
+	CreatedAt   time.Time `json:"createdAt" db:"created_at"`
+	UpdatedAt   time.Time `json:"updatedAt" db:"updated_at"`
 }
-

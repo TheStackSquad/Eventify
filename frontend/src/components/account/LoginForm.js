@@ -1,59 +1,54 @@
 // src/components/account/loginForm.js
+"use client";
 
-"use client"; // CRITICAL: Marks this file as a Client Component
-
-import React, { useState, useCallback } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, Lock, Facebook, Apple } from "lucide-react";
+import { Mail, Lock } from "lucide-react";
 import Link from "next/link";
-import { useDispatch } from "react-redux";
 import { LoginInputField } from "@/components/common/loginInputFields";
-import { signinUser } from "@/redux/action/actionAuth";
+import { useLogin } from "@/utils/hooks/useAuth";
 
 export default function LoginForm() {
   const router = useRouter();
-  const dispatch = useDispatch();
+  const { mutate: login, isPending } = useLogin();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
   const togglePasswordVisibility = () => {
     setShowPassword((prev) => !prev);
   };
 
-  const handleSubmit = useCallback(
-    async (e) => {
-      e.preventDefault();
-      setError("");
-      setIsLoading(true);
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setError("");
 
-      try {
-        // Dispatch the Redux Thunk action to handle login and state updates
-        const resultAction = await dispatch(
-          signinUser({ email, password })
-        ).unwrap();
+    // Client-side validation
+    if (!email || !password) {
+      setError("Please fill in all fields");
+      return;
+    }
 
-        // On successful unwrap (no error thrown by rejectWithValue)
-        router.push("/dashboard");
-      } catch (rejectedValue) {
-        // Error handling from the Redux Thunk (e.g., "Invalid credentials")
-        const message =
-          rejectedValue.message ||
-          "Login failed due to a network or server error.";
-        setError(message);
-      } finally {
-        setIsLoading(false);
+    // Execute login mutation
+    login(
+      { email, password },
+      {
+        onSuccess: () => {
+          console.log("✅ Login successful, redirecting to dashboard...");
+          router.push("/dashboard");
+        },
+        onError: (error) => {
+          const message =
+            error.response?.data?.message ||
+            "Login failed due to a network or server error.";
+          setError(message);
+        },
       }
-    },
-    [email, password, dispatch, router]
-  );
-
-  // NOTE: The 'InputField' component definition has been removed and replaced
-  // with the import of 'LoginInputField' above to fix the re-rendering issue.
+    );
+  };
 
   return (
     <div className="w-full max-w-sm p-8 bg-white rounded-3xl shadow-2xl">
@@ -119,14 +114,14 @@ export default function LoginForm() {
         {/* Login Button */}
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isPending}
           className={`w-full py-3 mt-6 text-lg font-semibold text-white rounded-full transition duration-300 shadow-lg ${
-            isLoading
+            isPending
               ? "bg-green-400 cursor-not-allowed"
               : "bg-green-600 hover:bg-green-700"
           } flex items-center justify-center font-body`}
         >
-          {isLoading ? (
+          {isPending ? (
             <svg
               className="animate-spin h-5 w-5 text-white"
               xmlns="http://www.w3.org/2000/svg"

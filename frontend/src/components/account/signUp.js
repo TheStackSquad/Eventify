@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch } from "react-redux";
 import { signupUser } from "@/redux/action/actionAuth";
@@ -57,51 +57,77 @@ export default function SignUpForm() {
     [errors] // errors is in dependency array to correctly check for and clear errors
   );
 
+  // Create a ref for the AbortController
+  const abortControllerRef = useRef(null);
+
   // step 5: Define the main form submission function using useCallback
- const handleSubmit = useCallback(
-   async (e) => {
-     e.preventDefault();
-     console.log("LOG 1: handleSubmit called.");
-     console.log("LOG 2: Initial formData state:", formData); // Trace the data being submitted
-     setIsLoading(true);
+  const handleSubmit = useCallback(
+    async (e) => {
+      e.preventDefault();
+      console.log("LOG 1: handleSubmit called.");
+      setIsLoading(true);
 
-     // 5.1. Validate form
-     const validationErrors = validateSignup(formData);
+      // 5.1. Validate form (unchanged)
+      const validationErrors = validateSignup(formData);
 
-     if (Object.keys(validationErrors).length > 0) {
-       console.log("LOG 3: Form validation FAILED. Errors:", validationErrors);
-       setErrors(validationErrors);
-       setIsLoading(false);
-       return;
-     }
+      if (Object.keys(validationErrors).length > 0) {
+        // ... validation failure logic
+        setIsLoading(false);
+        return;
+      }
 
-     console.log("LOG 3: Form validation PASSED.");
-     setErrors({}); // Clear previous server errors
+      // Abort any previous signup request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
 
-     try {
-       // 5.2. Dispatch the Thunk and await the result
-       console.log("LOG 4: Dispatching signupUser thunk with formData.");
+      // Create a new AbortController for this request
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-       // Note: formData should be checked in the 'signupUser' thunk for the actual API payload
-       await dispatch(signupUser(formData)).unwrap();
+      console.log("LOG 3: Form validation PASSED.");
+      setErrors({});
 
-       // 5.3. Success Handling
-       console.log("LOG 5: Thunk successful. User signed up."); // Data flow ends here for success
-      // toastAlert.success("Signup successful! Redirecting to login.");
-       router.push("/account/auth/login?signup=success");
-     } catch (error) {
-       // 5.4. Error Handling
-       console.error("LOG 5: Thunk FAILED. Error details:", error); // Data flow ends here for error
-       const errorMessage = error.message || "An unexpected error occurred.";
-       setErrors({ submit: errorMessage });
-       toastAlert.error(errorMessage);
-     } finally {
-       console.log("LOG 6: Finalizing submission. Setting isLoading to false.");
-       setIsLoading(false); // Stop loading regardless of outcome
-     }
-   },
-   [formData, router, dispatch]
- );
+      try {
+        // Dispatch the action with the signal
+        console.log("LOG 4: Dispatching signupUser thunk with formData.");
+
+        await dispatch(
+          signupUser({
+            formData, // The original payload
+            signal: controller.signal, // Pass signal in the payload object
+          })
+        ).unwrap();
+
+        // 5.3. Success Handling (if not aborted)
+        console.log("LOG 5: Thunk successful. User signed up.");
+        router.push("/account/auth/login?signup=success");
+      } catch (rejectedValue) {
+        // Check if the error was due to an intentional abort
+        if (rejectedValue?.isAborted) {
+          console.log("Signup attempt aborted. Not showing an error.");
+          return;
+        }
+
+        // 5.4. Handle non-abort error
+        console.error("LOG 5: Thunk FAILED. Error details:", rejectedValue);
+        const errorMessage =
+          rejectedValue.message || "An unexpected error occurred.";
+        setErrors({ submit: errorMessage });
+        toastAlert.error(errorMessage);
+      } finally {
+        // Only set isLoading to false if the request completed (not aborted)
+        if (abortControllerRef.current === controller) {
+          console.log(
+            "LOG 6: Finalizing submission. Setting isLoading to false."
+          );
+          setIsLoading(false);
+          abortControllerRef.current = null;
+        }
+      }
+    },
+    [formData, router, dispatch]
+  );
 
   // step 6: Render the Sign Up Form with imported InputField components
   return (

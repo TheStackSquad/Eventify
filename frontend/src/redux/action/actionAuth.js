@@ -2,52 +2,76 @@
 
 import { createAsyncThunk, createAction } from "@reduxjs/toolkit";
 import axios from "@/axiosConfig/axios";
-//import toastAlert from "@/components/common/toast/toastAlert";
+import { resetEventsState } from "@/redux/reducer/eventReducer";
 import {
   REDUX_ACTION_TYPES,
   API_ENDPOINTS,
 } from "@/utils/constants/globalConstants";
 
+// ====================================================================
+// ABORT HELPER
+// ====================================================================
+
+/**
+ * Checks for and handles AbortError (native or Axios cancellation).
+ * Returns a specific rejected value to be ignored by consuming logic.
+ */
+const handleAbortError = (error, rejectWithValue) => {
+  if (axios.isCancel(error) || error.name === "AbortError") {
+    console.log("🛑 Request aborted by AbortController.");
+    // Return a specific object so the component/reducer can ignore it
+    return rejectWithValue({ message: "Request aborted", isAborted: true });
+  }
+  return null;
+};
+
+// ====================================================================
+// THUNKS
+// ====================================================================
+
+// signupUser with error handling
 export const signupUser = createAsyncThunk(
-  // Use the constant for the action type
   REDUX_ACTION_TYPES.SIGNUP,
-  async (formData, { rejectWithValue }) => {
-    // LOG A: Trace the data received from the component
+  // 💡 Accept 'signal' from the payload
+  async ({ formData, signal }, { rejectWithValue, dispatch }) => {
     console.log("LOG A: signupUser Thunk received formData:", formData);
 
     const { confirmPassword, ...apiPayload } = formData;
 
     try {
-      // LOG B: Trace the API endpoint and method and the *cleaned* data
+      // CRITICAL: Clear any stale events data BEFORE signup completes
+      console.log("🔄 [AUTH] Clearing stale events data before signup");
+      dispatch(resetEventsState());
+
       console.log(
         "LOG B: Attempting POST request to",
-        API_ENDPOINTS.AUTH.SIGNUP, // 👈 Use the constant
-        "with CLEANED data:",
-        apiPayload
+        API_ENDPOINTS.AUTH.SIGNUP
       );
 
-      // API call to the Go backend, handles CORS/cookies via axiosConfig
       const response = await axios.post(
-        API_ENDPOINTS.AUTH.SIGNUP, // 👈 Use the constant
-        apiPayload
+        API_ENDPOINTS.AUTH.SIGNUP,
+        apiPayload,
+        { signal } // 🔑 Pass the signal to Axios
       );
-
-      // ... (Rest of signupUser thunk remains the same)
 
       return response.data;
     } catch (error) {
-      // 🎯 FIX: Correctly extract and return the server error message
-      // 1. Check for API Response (400, 409, etc.)
+      // 1. Check for Abort and return immediately if found
+      const abortResult = handleAbortError(error, rejectWithValue);
+      if (abortResult) {
+        return abortResult;
+      }
+
+      // 2. Handle API Response (400, 409, etc.)
       if (error.response) {
         return rejectWithValue(error.response.data);
       }
       if (error.request) {
         return rejectWithValue({
-          // The exact message the test expects
           message: "Network error. Please check your connection.",
         });
       }
-      // Handle network errors (when no response object exists
+      // 3. Handle unexpected errors
       return rejectWithValue({
         message: "An unexpected error occurred.",
       });
@@ -55,43 +79,44 @@ export const signupUser = createAsyncThunk(
   }
 );
 
-
 // signinUser with error handling
 export const signinUser = createAsyncThunk(
-  // Use the constant for the action type
   REDUX_ACTION_TYPES.SIGNIN,
-  async (formData, { rejectWithValue }) => {
+  // 💡 Accept 'signal' from the payload
+  async ({ formData, signal }, { rejectWithValue, dispatch }) => {
     try {
+      // CRITICAL: Clear any stale events data BEFORE login completes
+      console.log("🔄 [AUTH] Clearing stale events data before signin");
+      dispatch(resetEventsState());
+
       const response = await axios.post(
-        API_ENDPOINTS.AUTH.SIGNIN, // 👈 Use the constant
-        formData
+        API_ENDPOINTS.AUTH.SIGNIN,
+        formData,
+        { signal } // 🔑 Pass the signal to Axios
       );
 
-      // 🔑 LOG ADDED: Log the successful response details
-      // The token itself is in the secure HTTP-only cookie, not directly in response.data.
       console.log("--- Signin Success Response ---");
-      console.log("Status:", response.status); // Should be 200
-      console.log("Message:", response.data.message);
-      console.log("User Data:", response.data.user);
-      // You can check for the Set-Cookie header in your browser's Network tab.
-      console.log("Response Headers (Check for Set-Cookie):", response.headers);
-      console.log("-----------------------------");
+      console.log("Status:", response.status);
 
       return {
         user: response.data.user,
         message: response.data.message,
       };
     } catch (error) {
-      // This logic ensures the test receives a payload for rejected actions
+      // 1. Check for Abort and return immediately if found
+      const abortResult = handleAbortError(error, rejectWithValue);
+      if (abortResult) {
+        return abortResult;
+      }
+
+      // 2. Handle non-abort errors
       if (error.response) {
-        // Log the error response as well
         console.error("Signin Failed:", error.response.data?.message);
         return rejectWithValue({
           message: error.response.data?.message,
           code: error.response.status,
         });
       }
-      // Fallback for network errors
       console.error("Signin Network Error:", error.message);
       return rejectWithValue({
         message: "Network error during signin.",
@@ -103,12 +128,15 @@ export const signinUser = createAsyncThunk(
 
 export const verifySession = createAsyncThunk(
   REDUX_ACTION_TYPES.VERIFY_SESSION,
-  async (_, { rejectWithValue, dispatch }) => {
+  // 💡 Accept 'signal' directly (if no other payload is needed)
+  async (signal, { rejectWithValue, dispatch }) => {
     console.log("🟣 [VERIFY SESSION] Starting...");
 
     try {
       console.log("🟣 [VERIFY SESSION] Calling:", API_ENDPOINTS.AUTH.ME);
-      const response = await axios.get(API_ENDPOINTS.AUTH.ME);
+      const response = await axios.get(API_ENDPOINTS.AUTH.ME, {
+        signal, // 🔑 Pass the signal to Axios
+      });
 
       const user = response.data.user;
       const isAuthenticated = !!user;
@@ -116,27 +144,33 @@ export const verifySession = createAsyncThunk(
       console.log("✅ [VERIFY SESSION] Success:", {
         status: response.status,
         userId: response.data.user?.id,
-        userEmail: response.data.user?.email,
       });
 
-     return {
-       user: {
-         id: user?.id,
-         name: user?.name,
-         email: user?.email,
-         is_admin: user?.is_admin,
-       },
-       sessionChecked: true,
-       isAuthenticated: isAuthenticated,
-     };
+      return {
+        user: {
+          id: user?.id,
+          name: user?.name,
+          email: user?.email,
+          is_admin: user?.is_admin,
+        },
+        sessionChecked: true,
+        isAuthenticated: isAuthenticated,
+      };
     } catch (error) {
+      // 1. Check for Abort and return immediately if found
+      const abortResult = handleAbortError(error, rejectWithValue);
+      if (abortResult) {
+        // Do NOT proceed with dispatch/reject for aborts
+        return abortResult;
+      }
+
+      // 2. Handle non-abort errors
       console.error("❌ [VERIFY SESSION] Failed:", {
         status: error.response?.status,
         message: error.message,
-        hasResponse: !!error.response,
-        hasRequest: !!error.request,
       });
 
+      // Clear state only for actual session failure, not for aborts
       dispatch(clearStaleAuthData());
 
       return rejectWithValue({
@@ -151,20 +185,32 @@ export const verifySession = createAsyncThunk(
 
 // logoutUser with state cleanup
 export const logoutUser = createAsyncThunk(
-  // Use the constant for the action type
   REDUX_ACTION_TYPES.LOGOUT,
-  async (_, { rejectWithValue }) => {
+  // 💡 Accept 'signal' directly
+  async (signal, { rejectWithValue, dispatch }) => {
     try {
-      await axios.post(
-        API_ENDPOINTS.AUTH.LOGOUT // 👈 Use the constant
-      );
-      // ... (Rest of logoutUser thunk remains the same)
+      // 🔑 Pass the signal to Axios. Note: POST bodies are usually null for logout.
+      await axios.post(API_ENDPOINTS.AUTH.LOGOUT, null, { signal });
+
+      // CRITICAL: Clear events data on logout
+      console.log("🔄 [AUTH] Clearing events data on logout");
+      dispatch(resetEventsState());
+
       return {
         success: true,
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
-      // ... (Error handling remains the same)
+      // 1. Check for Abort and return immediately if found
+      const abortResult = handleAbortError(error, rejectWithValue);
+      if (abortResult) {
+        return abortResult;
+      }
+
+      // 2. Handle non-abort errors: Even if logout fails, clear data for safety
+      console.log("🔄 [AUTH] Clearing events data despite logout error");
+      dispatch(resetEventsState());
+
       return rejectWithValue({
         message: error.response?.data?.message || "Logout failed.",
         clearState: true,
@@ -173,6 +219,5 @@ export const logoutUser = createAsyncThunk(
   }
 );
 
-
 // Helper action to clear sensitive data
-export const clearStaleAuthData = createAction('CLEAR_STALE_AUTH_DATA');
+export const clearStaleAuthData = createAction("CLEAR_STALE_AUTH_DATA");

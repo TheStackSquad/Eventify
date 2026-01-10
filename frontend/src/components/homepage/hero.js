@@ -45,7 +45,7 @@ export default function Hero() {
             {/* ✅ OPTIMIZED: Link instead of <a>, lucide icons */}
             <div className="flex justify-start">
               <Link
-                 href=""
+                href=""
                 className="group inline-flex items-center gap-2.5 px-6 py-3 md:px-7 md:py-3.5 text-sm md:text-base font-bold text-red-600 bg-gradient-to-r from-red-50 to-red-100 rounded-full shadow-lg shadow-red-200/50 transition-all duration-300 hover:shadow-xl hover:shadow-red-300/60 hover:from-red-100 hover:to-red-200 active:scale-95 border border-red-200/80"
                 prefetch={false}
               >
@@ -63,7 +63,9 @@ export default function Hero() {
                     d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14c-5.14 0-8 2.45-8 6h16c0-3.55-2.86-6-8-6z"
                   />
                 </svg>
-                <span className="tracking-wide">My Tickets / Sign In</span>
+                <Link href="/dashboard" className="your-link-class-if-needed">
+                  <span className="tracking-wide">For you / Sign In</span>
+                </Link>
                 <svg
                   className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1"
                   fill="none"

@@ -1,94 +1,172 @@
 // frontend/src/middleware.js
+
 import { NextResponse } from "next/server";
 
-// Routes that require authentication
-const protectedRoutes = [
+// ================================================================
+// ROUTE DEFINITIONS
+// ================================================================
+
+// UI Routes that require authentication
+const PROTECTED_UI_ROUTES = [
   "/dashboard",
-  // "/events/create-events",
-  // Add more as needed
+  "/profile",
+  "/events/create-events",
+  "/events/my-events",
 ];
 
-export async function middleware(request) {
-  const { pathname } = request.nextUrl;
+// Auth pages (login/signup) - redirect away if already logged in
+const AUTH_ROUTES = ["/account/auth/login", "/account/auth/signup"];
 
-  console.log("🔵 [MIDDLEWARE] Checking route:", pathname);
+// Explicitly public UI routes (no auth required, no redirect if logged in)
+const PUBLIC_UI_ROUTES = [
+  "/",
+  "/about",
+  "/contact",
+  "/events",
+  "/forgot-password",
+  "/reset-password",
+  "/confirmation", // e.g., for payment or email confirmation
+  "/events/[slug]", // Assuming dynamic event detail page is public
+  "/vendors/[id]", // Assuming vendor profile is public
+];
 
-  // Check if the current route is protected
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    pathname.startsWith(route)
-  );
+// API Endpoints that must be accessible even when unauthenticated
+// This prevents redirects during session verification, login, or public API calls.
+const PUBLIC_API_ROUTES = [
+  // Auth & Session
+  "/auth/signup",
+  "/auth/login",
+  "/auth/logout",
+  "/auth/refresh",
+  "/auth/me", // Critical for session check in SessionProvider
+  "/auth/forgot-password",
+  "/auth/verify-reset-token",
+  "/auth/reset-password",
 
-  if (!isProtectedRoute) {
-    console.log("✅ [MIDDLEWARE] Public route, allowing access");
-    return NextResponse.next();
-  }
+  // Vendor/Inquiry/Review/Feedback APIs (Backend is responsible for internal guards)
+  "/api/v1/vendors",
+  "/api/v1/vendors/register",
+  "/api/v1/inquiries/vendor",
+  "/api/vendors",
+  "/api/v1/feedback",
 
-  console.log("🔒 [MIDDLEWARE] Protected route - verifying auth...");
+  // Payment/Order (Initial/Webhook)
+  "/api/orders/initialize",
+  "/api/payments/verify",
+  "/api/webhooks/paystack",
+];
 
-  try {
-    // Get cookies from the request
-    const accessToken = request.cookies.get("access_token");
+// ================================================================
+// UTILITIES
+// ================================================================
 
-    if (!accessToken) {
-      console.log("❌ [MIDDLEWARE] No access token found");
-      return redirectToLogin(request);
+// Simple check for access token
+function isAuthenticated(request) {
+  const accessToken = request.cookies.get("access_token");
+  return !!accessToken?.value;
+}
+
+// Enhanced route matching, handling dynamic slugs with square brackets or wildcards
+function matchesRoute(pathname, routes) {
+  return routes.some((route) => {
+    // 1. Exact match or starts with (for /route and /route/sub-route)
+    if (pathname === route || pathname.startsWith(route + "/")) {
+      return true;
     }
 
-    // Call your backend /me endpoint for verification
-    // FIX 1: Set the fallback to the correct Go backend port (8081)
-    const backendUrl =
-      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
+    // 2. Dynamic route matching (e.g., /events/[id] or /api/events/:id)
+    if (route.includes("[") || route.includes(":")) {
+      // Replace dynamic parts with a regex that matches anything
+      const pattern = new RegExp(
+        "^" + route.replace(/(\[[^\]]+\]|:[^\/]+)/g, "[^/]+") + "$"
+      );
+      return pattern.test(pathname);
+    }
 
-    const response = await fetch(`${backendUrl}/auth/me`, {
-      method: "GET",
-      headers: {
-        // FIX 2: Use the standard Authorization: Bearer header
-        Authorization: `Bearer ${accessToken.value}`,
-        "Content-Type": "application/json",
-      },
-      // Removed 'credentials: "include"' as it is not needed for server-to-server fetch
-    });
+    // 3. Simple wildcard match (only needed if using * explicitly)
+    if (route.endsWith("*")) {
+      const baseRoute = route.slice(0, -1);
+      return pathname.startsWith(baseRoute);
+    }
+    return false; // Fallback for unmatched patterns
+  });
+}
 
-    console.log("📡 [MIDDLEWARE] Backend response:", response.status);
+// ================================================================
+// MIDDLEWARE CORE
+// ================================================================
 
-    if (response.ok) {
-      console.log("✅ [MIDDLEWARE] Auth verified, allowing access");
+export function middleware(request) {
+  const { pathname } = request.nextUrl;
+  const hasAccessToken = isAuthenticated(request);
+  console.log("🔒 [MIDDLEWARE] Request", {
+    path: pathname,
+    hasAccessToken,
+    timestamp: new Date().toISOString(),
+  }); // ---------------------------------------------------------------- // 1. AUTH ROUTES (Login/Signup) - Redirect if logged in // ----------------------------------------------------------------
+
+  if (matchesRoute(pathname, AUTH_ROUTES)) {
+    if (hasAccessToken) {
+      console.log(
+        "🔄 [MIDDLEWARE] Already authenticated - Redirecting to dashboard"
+      );
+      const redirectUrl =
+        request.nextUrl.searchParams.get("callbackUrl") || "/dashboard";
+      return NextResponse.redirect(new URL(redirectUrl, request.url));
+    }
+    console.log("✅ [MIDDLEWARE] Auth route - Allowing access (not logged in)");
+    return NextResponse.next();
+  } // ---------------------------------------------------------------- // 2. PUBLIC API ROUTES - Allow all API calls critical for public pages/session checks // ----------------------------------------------------------------
+
+  if (pathname.startsWith("/api") || pathname.startsWith("/auth")) {
+    if (matchesRoute(pathname, PUBLIC_API_ROUTES)) {
+      console.log("🌐 [MIDDLEWARE] Public API route - Allowing access");
       return NextResponse.next();
     }
+  } // ---------------------------------------------------------------- // 3. PROTECTED UI ROUTES - Require authentication (Strict Check) // ----------------------------------------------------------------
 
-    // If 401, redirect to login
-    if (response.status === 401) {
-      console.log("🚫 [MIDDLEWARE] Unauthorized, redirecting to login");
-      return redirectToLogin(request);
+  if (matchesRoute(pathname, PROTECTED_UI_ROUTES)) {
+    if (!hasAccessToken) {
+      console.log("❌ [MIDDLEWARE] Protected UI route - Redirecting to login");
+      const loginUrl = new URL("/account/auth/login", request.url);
+      loginUrl.searchParams.set("callbackUrl", pathname);
+      return NextResponse.redirect(loginUrl);
     }
+    console.log("✅ [MIDDLEWARE] Protected UI route - Authorized");
+    return NextResponse.next();
+  } // ---------------------------------------------------------------- // 4. PUBLIC UI ROUTES - Allow all explicitly defined public pages // ----------------------------------------------------------------
 
-    // For other errors, allow passage (page will handle it)
-    console.warn(
-      "⚠️ [MIDDLEWARE] Backend error, allowing access:",
-      response.status
-    );
+  if (matchesRoute(pathname, PUBLIC_UI_ROUTES)) {
+    console.log("🌐 [MIDDLEWARE] Public UI route - Allowing access");
     return NextResponse.next();
-  } catch (error) {
-    console.error("❌ [MIDDLEWARE] Error during auth check:", error.message);
-    // On network errors, allow passage (page will handle it)
+  } // ---------------------------------------------------------------- // 5. DEFAULT CATCH-ALL (Strict Fallthrough) // ---------------------------------------------------------------- // If the route is an API route, but not explicitly whitelisted, it's protected by default.
+
+  if (pathname.startsWith("/api")) {
+    // This catches protected API routes like /api/events/create or Admin APIs.
+    if (!hasAccessToken) {
+      console.log(
+        "❌ [MIDDLEWARE] Protected API route hit - Denying access (401)"
+      );
+      return new NextResponse(
+        JSON.stringify({
+          success: false,
+          message: "Authentication required for this API.",
+        }),
+        { status: 401, headers: { "content-type": "application/json" } }
+      );
+    }
+    // If it has a token, it's a protected API we just didn't list in the UI.
+    console.log("✅ [MIDDLEWARE] Matched protected API - Authorized");
     return NextResponse.next();
-  }
+  } // For all other miscellaneous paths (e.g., static assets, utility paths)
+
+  console.log("🌐 [MIDDLEWARE] Unmatched path - Allowing access by default");
+  return NextResponse.next();
 }
 
-// Helper function to redirect to login
-function redirectToLogin(request) {
-  const loginUrl = new URL("/account/auth/login", request.url);
-  loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
-
-  console.log("🔀 [MIDDLEWARE] Redirecting to:", loginUrl.toString());
-  return NextResponse.redirect(loginUrl);
-}
-
-// CRITICAL: Fix the matcher config
 export const config = {
   matcher: [
-    "/dashboard/:path*", // Matches /dashboard and all sub-routes
-    // "/events/create-events/:path*", // Matches /events/create-events with any params
-    // Add more patterns as needed
+    /* Match all request paths except static assets */
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

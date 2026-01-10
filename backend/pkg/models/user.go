@@ -1,63 +1,74 @@
-//backend/pkg/models/user.go
+// backend/pkg/models/user.go
 
 package models
 
 import (
+	"database/sql"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/google/uuid"
 )
 
-// User represents the full internal user account data, including credentials and administrative flags.
+type Role string
+
+const (
+	RoleCustomer Role = "customer"
+	RoleVendor   Role = "vendor"
+	RoleAdmin    Role = "admin"
+)
+
 type User struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	Name      string             `bson:"name" json:"name" binding:"required"`
-	Email     string             `bson:"email" json:"email" binding:"required,email"`
-	Password string 			 `json:"password" bson:"password" binding:"required,min=6"`
-
-	ResetToken       string    `bson:"reset_token,omitempty" json:"-"`
-	ResetTokenExpiry time.Time `bson:"reset_token_expiry,omitempty" json:"-"`
-	
-	IsAdmin   bool               `bson:"is_admin" json:"is_admin"`
-	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
-	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
+	ID               uuid.UUID    `json:"id" db:"id"`
+	Name             string       `json:"name" db:"name" binding:"required"`
+	Email            string       `json:"email" db:"email" binding:"required,email"`
+	Password         string       `json:"password,omitempty" binding:"required,min=6"` // Only for input
+	PasswordHash     string       `json:"-" db:"password_hash"`
+	Role             Role         `json:"role" db:"role"`
+	ResetToken       sql.NullString `json:"-" db:"reset_token"`
+	ResetTokenExpiry sql.NullTime `json:"-" db:"reset_token_expiry"`
+	LastLogin        sql.NullTime `json:"-" db:"last_login"`
+	CreatedAt        time.Time    `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time    `json:"updated_at" db:"updated_at"`
 }
 
-// UserProfile is a cleaner structure for non-sensitive public or current-user responses (a DTO).
 type UserProfile struct {
-	ID      primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	Name    string             `bson:"name" json:"name"`
-	Email   string             `bson:"email" json:"email"`
-	IsAdmin bool               `bson:"is_admin" json:"is_admin"` // Useful for frontend routing
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Email     string    `json:"email"`
+	Role      Role      `json:"role"`
+	IsVendor  bool      `json:"isVendor"`
+	HasEvents bool      `json:"hasEvents"`
 }
 
-// ToUserProfile converts the secure User struct to the public UserProfile DTO.
-func (u *User) ToUserProfile() *UserProfile {
+func (u *User) ToUserProfile(isVendor bool, hasEvents bool) *UserProfile {
 	if u == nil {
 		return nil
 	}
+
+	isVendorFlag := isVendor || u.Role == RoleAdmin
+	hasEventsFlag := hasEvents || u.Role == RoleAdmin
+
 	return &UserProfile{
-		ID:      u.ID,
-		Name:    u.Name,
-		Email:   u.Email,
-		IsAdmin: u.IsAdmin,
+		ID:        u.ID,
+		Name:      u.Name,
+		Email:     u.Email,
+		Role:      u.Role,
+		IsVendor:  isVendorFlag,
+		HasEvents: hasEventsFlag,
 	}
 }
 
-// LoginRequest defines the structure for incoming login credentials.
 type LoginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
 }
 
-// AuthResponse defines the structure for authentication API responses.
 type AuthResponse struct {
 	Message string       `json:"message"`
-	User    *UserProfile `json:"user,omitempty"` // Use the profile struct here
+	User    *UserProfile `json:"user,omitempty"`
 	Token   string       `json:"token,omitempty"`
 }
 
-// 🆕 PASSWORD RESET REQUEST MODELS
 type ForgotPasswordRequest struct {
 	Email string `json:"email" binding:"required,email"`
 }
@@ -69,5 +80,5 @@ type ResetPasswordRequest struct {
 
 type PasswordResetResponse struct {
 	Message string `json:"message"`
-	Valid   bool   `json:"valid,omitempty"` // For token verification
+	Valid   bool   `json:"valid,omitempty"`
 }

@@ -1,26 +1,65 @@
 // frontend/src/components/modal/delete.js
+"use client";
 
-import React from "react";
-import { useDispatch } from "react-redux";
+import React, { useCallback } from "react";
 import { motion } from "framer-motion";
-import { X, AlertTriangle } from "lucide-react";
+import { X, AlertTriangle, Loader2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query"; // 🆕 TanStack Query imports
+import { useAuth } from "@/utils/hooks/useAuth"; // 🆕 Import useAuth to get user ID for invalidation
+import axiosInstance from "@/axiosConfig/axios"; // Assuming axiosInstance is available
 
-// Import Redux Action
-import { deleteEvent } from "@/redux/action/eventAction"; // Assuming path is correct
+// ❌ Removed: useDispatch, deleteEvent Redux action
+
+/**
+ * Placeholder API call function for event deletion.
+ * In a real scenario, this would be imported from a centralized API file.
+ * @param {string} eventId - The ID of the event to delete.
+ * @returns {Promise<void>}
+ */
+const deleteEventApi = async (eventId) => {
+  // Assuming the API endpoint for soft deletion (cancel) is DELETE /api/events/{eventId}
+  const response = await axiosInstance.delete(`/api/events/${eventId}`);
+  // We don't necessarily care about the response data, just the success status (200/204)
+  if (response.status !== 200 && response.status !== 204) {
+    throw new Error("Failed to delete event.");
+  }
+};
 
 export default function DeleteModal({ isOpen, onClose, eventId, eventTitle }) {
-  const dispatch = useDispatch();
+  const queryClient = useQueryClient();
+  const { user } = useAuth(); // Get the current user for the query key
+
+  // ============================================================================
+  // MUTATION HOOK
+  // ============================================================================
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteEventApi,
+    // When the mutation succeeds, invalidate the list of user events
+    // to force the DashboardPage to refetch the updated list.
+    onSuccess: () => {
+      // The key structure matches how useUserEvents is defined: ["events", "user", userId]
+      queryClient.invalidateQueries({ queryKey: ["events", "user", user?.id] });
+      // Close the modal after successful deletion
+      onClose();
+    },
+    onError: (error) => {
+      console.error("❌ Event deletion failed:", error);
+      // Optional: Handle error display (e.g., using a toast notification)
+    },
+  });
+
+  const { isPending, isError, error } = deleteMutation;
+
+  const handleDeleteConfirm = useCallback(() => {
+    if (eventId && !isPending) {
+      // 🆕 Call the mutation's mutate function with the eventId as the variable
+      deleteMutation.mutate(eventId);
+      // Note: We no longer call onClose() here. It's called in onSuccess.
+    }
+  }, [eventId, isPending, deleteMutation]);
 
   if (!isOpen) return null;
-
-  const handleDeleteConfirm = () => {
-    if (eventId) {
-      // Dispatch the deleteEvent thunk with the event ID
-      dispatch(deleteEvent(eventId));
-      // Close the modal immediately after dispatching
-      onClose();
-    }
-  };
 
   // Simple modal backdrop and content animation
   const backdropVariants = {
@@ -57,10 +96,18 @@ export default function DeleteModal({ isOpen, onClose, eventId, eventTitle }) {
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
+            disabled={isPending}
           >
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {/* Display Error Message if mutation failed */}
+        {isError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm">
+            Deletion failed: {error?.message || "Please try again."}
+          </div>
+        )}
 
         <div className="text-gray-700 mb-6">
           <p className="mb-4">
@@ -79,14 +126,23 @@ export default function DeleteModal({ isOpen, onClose, eventId, eventTitle }) {
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            disabled={isPending}
           >
             Cancel
           </button>
           <button
             onClick={handleDeleteConfirm}
-            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-md"
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors shadow-md disabled:bg-red-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            disabled={isPending}
           >
-            Yes, Soft Delete Event
+            {isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              "Yes, Soft Delete Event"
+            )}
           </button>
         </div>
       </motion.div>

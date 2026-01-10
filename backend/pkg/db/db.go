@@ -1,92 +1,68 @@
-/*//backend/pkg/db/db.go*/
+//backend/pkg/db/db.go
 
 package db
 
 import (
-    "context"
-    "fmt"
-    "log"
-    "os"
-    "time"
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"time"
 
-    "go.mongodb.org/mongo-driver/mongo"
-    "go.mongodb.org/mongo-driver/mongo/options"
-    "github.com/joho/godotenv"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
+	"github.com/joho/godotenv"
 )
 
-// Client is the global MongoDB client instance accessible to all packages.
-var Client *mongo.Client 
-const DatabaseName = "bandhit" 
+var PostgresClient *sqlx.DB
 
-// Initialize loads environment variables from the .env file in the root
-// of the backend directory.
 func Initialize() {
-    // Attempt to load .env file. Ignore error if file doesn't exist (e.g., in production)
-    // but log a warning if running locally and it fails.
-    if err := godotenv.Load(".env"); err != nil {
-        log.Println("Warning: Could not load .env file. Assuming environment variables are set externally.")
-    }
+	if err := godotenv.Load(".env"); err != nil {
+		log.Println("Warning: Could not load .env file. Assuming environment variables are set externally.")
+	}
 }
 
-// ConnectDB establishes the connection to MongoDB and sets the global Client.
 func ConnectDB() {
-    // 1. Ensure environment is initialized (to load MONGO_URI)
-    Initialize() 
-    
-    // 2. Retrieve the URI
-    mongoURI := os.Getenv("MONGO_URI")
-    if mongoURI == "" {
-        log.Fatal("FATAL: MONGO_URI environment variable is not set. Check your backend/.env file.")
-    }
+	Initialize()
 
-    // 3. Set up connection options and context
-    clientOptions := options.Client().ApplyURI(mongoURI)
+	pgURI := os.Getenv("POSTGRES_URI")
+	if pgURI == "" {
+		log.Fatal("FATAL: POSTGRES_URI environment variable is not set. Check your backend/.env file.")
+	}
 
-    // Set a context with a timeout for the connection attempt
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
+	var err error
+	PostgresClient, err = sqlx.Connect("pgx", pgURI)
+	if err != nil {
+		log.Fatalf("FATAL: Failed to connect to PostgreSQL using sqlx: %v", err)
+	}
 
-    // 4. Connect to MongoDB
-    client, err := mongo.Connect(ctx, clientOptions)
-    if err != nil {
-        log.Fatalf("FATAL: Failed to connect to MongoDB: %v", err)
-    }
+	PostgresClient.SetMaxOpenConns(25)
+	PostgresClient.SetMaxIdleConns(10)
+	PostgresClient.SetConnMaxLifetime(5 * time.Minute)
 
-    // 5. Verify the connection (Ping)
-    if err = client.Ping(ctx, nil); err != nil {
-        log.Fatalf("FATAL: Failed to ping MongoDB. Ensure the database service is running: %v", err)
-    }
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-    log.Printf("SUCCESS: Connected to MongoDB at %s.", mongoURI)
-    Client = client
+	if err = PostgresClient.PingContext(ctx); err != nil {
+		log.Fatalf("FATAL: Failed to ping PostgreSQL. Ensure the service is running and URI is correct: %v", err)
+	}
+
+	log.Printf("SUCCESS: Connected to PostgreSQL using sqlx.")
 }
 
-// GetDB returns the MongoDB database instance for direct access
-func GetDB() *mongo.Database {
-    if Client == nil {
-        log.Fatal("FATAL: MongoDB Client is not initialized. Call ConnectDB first.")
-    }
-    return Client.Database(DatabaseName)
-}
-// GetCollection returns a handle to the specified collection within the "eventify" database.
-func GetCollection(collectionName string) *mongo.Collection {
-    if Client == nil {
-        // This should not happen if ConnectDB is called on startup, but is a safety check.
-        log.Panic("FATAL: MongoDB Client is not initialized. Call ConnectDB first.")
-        return nil
-    }
-    return Client.Database(DatabaseName).Collection(collectionName)
+func GetDB() *sqlx.DB {
+	if PostgresClient == nil {
+		log.Fatal("FATAL: PostgreSQL Client is not initialized. Call ConnectDB first.")
+	}
+	return PostgresClient
 }
 
-// CloseDB disconnects the client. Should be called when the application shuts down.
 func CloseDB() {
-    if Client != nil {
-        ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-        defer cancel()
-        if err := Client.Disconnect(ctx); err != nil {
-            log.Printf("Warning: Error closing MongoDB connection: %v", err)
-        } else {
-            fmt.Println("INFO: Disconnected from MongoDB.")
-        }
-    }
+	if PostgresClient != nil {
+		if err := PostgresClient.Close(); err != nil {
+			log.Printf("Warning: Error closing PostgreSQL connection: %v", err)
+		} else {
+			fmt.Println("INFO: Disconnected from PostgreSQL.")
+		}
+	}
 }

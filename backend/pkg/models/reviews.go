@@ -1,20 +1,29 @@
 // backend/pkg/models/review.go
+
 package models
 
 import (
+	"database/sql"
 	"time"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+
+	"github.com/google/uuid"
 )
 
 type Review struct {
-	ID          primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	VendorID    primitive.ObjectID `bson:"vendor_id" json:"vendor_id"`
-	UserID      primitive.ObjectID `bson:"user_id,omitempty" json:"user_id,omitempty"`
-	UserName    string             `bson:"user_name,omitempty" json:"user_name,omitempty"`
-	IPAddress   string             `bson:"ip_address,omitempty" json:"ip_address,omitempty"`
-	Rating      int                `bson:"rating" json:"rating" binding:"required,min=1,max=5"`
-	Comment     string             `bson:"comment" json:"comment"`
-	IsApproved  bool               `bson:"is_approved" json:"is_approved"`
-	CreatedAt   time.Time          `bson:"created_at" json:"created_at"`
-	UpdatedAt   time.Time          `bson:"updated_at" json:"updated_at"`
+	ID          uuid.UUID           `json:"id" db:"id"`
+	VendorID    uuid.UUID   		`json:"vendor_id" db:"vendor_id" binding:"required"`
+	//VendorID    uuid.UUID    `json:"vendor_id" db:"vendor_id"`
+	UserID 	  *uuid.UUID 		  `json:"userId,omitempty" db:"user_id"`
+	UserName    string              `json:"user_name" db:"user_name"`
+	Email       string              `json:"email" db:"email"`
+	Rating      int32               `json:"rating" db:"rating" binding:"required,min=1,max=5"`
+	Comment     string              `json:"comment" db:"comment" binding:"required"`
+	
+	// --- Trust Refactor Fields ---
+	IPAddress    sql.NullString `json:"-" db:"ip_address"`
+	IsVerified   bool           `json:"isVerified" db:"is_verified"`
+	TrustWeight  float64        `json:"trustWeight" db:"trust_weight"`
+	// ----------------------------
+	CreatedAt  time.Time `json:"createdAt" db:"created_at"`
+	UpdatedAt  time.Time `json:"updatedAt" db:"updated_at"`
 }

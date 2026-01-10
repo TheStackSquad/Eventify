@@ -19,7 +19,9 @@ var (
 	ErrInternal              = errors.New("internal error")
 	ErrNotFound              = errors.New("resource not found")
 	ErrUnauthorized          = errors.New("unauthorized access")
+	ErrInsufficientStock 	 = errors.New("insufficient stock for requested items")
 )
+
 
 // Error categories
 const (
@@ -106,4 +108,8 @@ func IsAuthError(err error) bool {
 		return appErr.Category == ErrCategoryAuth
 	}
 	return false
+}
+
+func NewConflictError(message string, err error) *AppError {
+	return NewError(ErrConflict, message, err)
 }

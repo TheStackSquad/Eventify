@@ -5,8 +5,12 @@ import Header from "@/components/common/Header";
 import { CartProvider } from "@/context/cartContext";
 import ToastProvider from "@/components/common/toast/toastProvider";
 import ReduxProvider from "@/provider/reduxProvider";
+import ReactQueryProvider from "@/provider/reactQueryProvider";
 import SessionProvider from "@/provider/sessionProvider";
+import GuestIdInitializer from "@/utils/hooks/guestIdInitializer";
 import "./globals.css";
+
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 const headerFont = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -25,7 +29,6 @@ export const metadata = {
   description:
     "Eventify is the premier platform for event discovery, secure ticket purchasing, and seamless show promotion. List your event, sell tickets, and reach a global audience.",
 };
-
 
 const structuredData = {
   "@context": "https://schema.org",
@@ -57,16 +60,27 @@ export default function RootLayout({ children }) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
 
+        {/* 
+          PROVIDER HIERARCHY (Bottom-Up):
+          1. ReduxProvider - Will be removed after full migration
+          2. ReactQueryProvider - NEW: React Query for server state
+          3. SessionProvider - Auth Context (uses React Query hooks)
+          4. CartProvider - Cart state
+        */}
         <ReduxProvider>
-          <SessionProvider>
-            <CartProvider>
-              <Header />
-              <main id="main-content" className="min-h-screen">
-                {children}
-              </main>
-              <ToastProvider />
-            </CartProvider>
-          </SessionProvider>
+          <ReactQueryProvider>
+            <ReactQueryDevtools initialIsOpen={false} />;
+            <GuestIdInitializer />
+            <SessionProvider>
+              <CartProvider>
+                <Header />
+                <main id="main-content" className="min-h-screen">
+                  {children}
+                </main>
+                <ToastProvider />
+              </CartProvider>
+            </SessionProvider>
+          </ReactQueryProvider>
         </ReduxProvider>
       </body>
     </html>

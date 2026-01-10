@@ -1,4 +1,4 @@
-// frontend/src/components/vendorUI/VendorCard.jsx
+// frontend/src/components/vendorUI/VendorCard.js
 "use client";
 
 import React, { useState } from "react";
@@ -12,7 +12,6 @@ import {
   Building2,
 } from "lucide-react";
 import { generateVendorSlug } from "@/utils/helper/vendorSlugHelper";
-import vendorStorage from "@/utils/helper/vendorStorage";
 
 const VendorCard = ({ vendor, formatPrice, getRatingPercentage, onVendorClick }) => {
   const router = useRouter();
@@ -21,8 +20,6 @@ const VendorCard = ({ vendor, formatPrice, getRatingPercentage, onVendorClick })
 
  const handleCardClick = () => {
    console.log("🎯 Vendor card clicked:", vendor.name, vendor.id);
-
-   vendorStorage.saveVendor(vendor);
 
    // Generate slug for URL
    const slug = generateVendorSlug(vendor);

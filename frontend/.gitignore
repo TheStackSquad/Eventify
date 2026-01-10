@@ -64,3 +64,18 @@ rsa_public.pem
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# Dependency and Build directories
+/node_modules
+/.next
+/out
+/dist
+
+# Compiled/Runtime files
+/coverage
+.swc/
+
+# Environment files
+.env.local
+.env.production

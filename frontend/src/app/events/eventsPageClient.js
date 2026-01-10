@@ -46,26 +46,26 @@ const normalizeEvents = (rawEvents) => {
       tag = "Trending";
     }
 
-    const isLikedByUser = event.isLikedByUser || false;
-    const likeCount = event.likeCount || 0;
+const isLikedByUser = event.isLiked || false;
+const likeCount = event.likesCount || 0;
 
-    return {
-      id: event.id,
-      title: event.eventTitle,
-      category: event.category,
-      image: event.eventImage,
-      price: startingPrice,
-      isFree: startingPrice === 0,
-      tag: tag,
-      isLikedByUser: isLikedByUser,
-      likeCount: likeCount,
-      date: formatDate(event.startDate),
-      time: formatTime(event.startDate),
-      location: `${event.venueName || "Venue N/A"}, ${event.city || "N/A"}`,
-      filterTitle: event.eventTitle.toLowerCase(),
-      filterCity: event.city?.trim() || "N/A",
-      startDate: event.startDate, // Keep for sorting
-    };
+return {
+  id: event.id,
+  title: event.eventTitle,
+  category: event.category,
+  image: event.eventImage,
+  price: startingPrice,
+  isFree: startingPrice === 0,
+  tag: tag,
+  isLikedByUser: isLikedByUser,
+  likeCount: likeCount,
+  date: formatDate(event.startDate),
+  time: formatTime(event.startDate),
+  location: `${event.venueName || "Venue N/A"}, ${event.city || "N/A"}`,
+  filterTitle: event.eventTitle.toLowerCase(),
+  filterCity: event.city?.trim() || "N/A",
+  startDate: event.startDate, // Keep for sorting
+};
   });
 };
 

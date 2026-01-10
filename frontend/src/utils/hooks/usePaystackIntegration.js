@@ -1,28 +1,23 @@
 //frontend/src/utils/hooks/usePaystackIntegration.js
+
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useCart } from "@/context/cartContext";
 import { useRouter } from "next/navigation";
 import toastAlert from "@/components/common/toast/toastAlert";
 import axios, { ENDPOINTS } from "@/axiosConfig/axios";
-
 
 const buildInitializationPayload = (email, items, metadata) => {
   const customerInfo = metadata?.customer_info || {};
 
   return {
     email,
-
-    // ✅ Send ONLY identification data (event_id, tier_name, quantity)
-    // Server will look up prices from database
     items: items.map((item) => ({
       event_id: item.eventId,
       tier_name: item.tierName,
       quantity: item.quantity,
-      // ❌ REMOVED: event_title, unit_price - server has these
     })),
-
     // Customer information
     customer: {
       first_name: customerInfo.firstName || "",
@@ -36,12 +31,14 @@ const buildInitializationPayload = (email, items, metadata) => {
   };
 };
 
-
 export function usePaystackIntegration({ email, metadata }) {
   const router = useRouter();
   const { clearCart, items } = useCart();
   const [isScriptLoaded, setIsScriptLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Ref to store the AbortController for the initialization request
+  const initRequestControllerRef = useRef(null);
 
   // --- Constants ---
   const PAYSTACK_PUBLIC_KEY = useMemo(
@@ -80,12 +77,21 @@ export function usePaystackIntegration({ email, metadata }) {
     };
   }, []);
 
-  // --- Payment Handlers ---
+  // --- Cleanup Effect on Unmount ---
+  useEffect(() => {
+    return () => {
+      if (initRequestControllerRef.current) {
+        console.log("🧹 [CLEANUP] Aborting Paystack initialization.");
+        initRequestControllerRef.current.abort();
+        initRequestControllerRef.current = null;
+      }
+    };
+  }, []);
 
+  // --- Payment Handlers ---
   const handleSuccess = useCallback(
     (response) => {
       console.log("✅ Paystack Transaction Successful:", response);
-     // clearCart();
       router.push(
         `/checkout/confirmation?trxref=${response.reference}&status=success`
       );
@@ -98,30 +104,33 @@ export function usePaystackIntegration({ email, metadata }) {
     toastAlert.warn("Payment cancelled. You can try again anytime.");
   }, []);
 
-
   const handlePayment = useCallback(async () => {
     // --- Pre-flight Validation ---
     if (!isScriptLoaded || !window.PaystackPop) {
       toastAlert.error("Payment gateway not ready. Please wait.");
       return;
     }
-
     if (!PAYSTACK_PUBLIC_KEY) {
       toastAlert.error("Payment configuration error: Public key missing.");
       return;
     }
-
     if (!email?.includes("@")) {
       toastAlert.error("Please provide a valid email address.");
       return;
     }
-
     if (!items || items.length === 0) {
       toastAlert.error("Your cart is empty.");
       return;
     }
 
     setIsLoading(true);
+
+    // 🔑 Abort previous request and set up new controller
+    if (initRequestControllerRef.current) {
+      initRequestControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    initRequestControllerRef.current = controller;
 
     try {
       // 1. Build MINIMAL payload (no prices, just identification)
@@ -140,7 +149,8 @@ export function usePaystackIntegration({ email, metadata }) {
       // 2. Initialize order - SERVER calculates the authoritative amount
       const response = await axios.post(
         ENDPOINTS.ORDERS.INITIALIZE,
-        orderInitializationData
+        orderInitializationData,
+        { signal: controller.signal } // Pass the abort signal
       );
 
       const result = response.data;
@@ -151,14 +161,14 @@ export function usePaystackIntegration({ email, metadata }) {
         );
       }
 
-      // ✅ CRITICAL: Extract server-calculated amount
+      // CRITICAL: Extract server-calculated amount
       const dbReference = result.data.reference;
-      const serverAmountKobo = result.data.amount_kobo; // 🔒 SERVER AUTHORITY!
+      const serverAmountKobo = result.data.amount_kobo; // SERVER AUTHORITY!
 
       console.log("✅ Order initialized successfully");
-      console.log(`   Reference: ${dbReference}`);
+      console.log(`Reference: ${dbReference}`);
       console.log(
-        `   Server-calculated amount: ₦${(serverAmountKobo / 100).toFixed(2)}`
+        `Server-calculated amount: ₦${(serverAmountKobo / 100).toFixed(2)}`
       );
 
       // 3. Open Paystack with SERVER-AUTHORITATIVE amount
@@ -195,6 +205,12 @@ export function usePaystackIntegration({ email, metadata }) {
 
       handler.openIframe();
     } catch (error) {
+      // 🔑 Check for Abort and handle silently
+      if (axios.isCancel(error) || error.name === "AbortError") {
+        console.log("Initialization aborted. A new request may have started.");
+        return; // Exit without showing error or stopping loading immediately
+      }
+
       const serverMessage = error.response?.data?.message || error.message;
       const serverDetails = error.response?.data?.details;
 
@@ -220,7 +236,12 @@ export function usePaystackIntegration({ email, metadata }) {
       }
 
       toastAlert.error(errorMessage);
-      setIsLoading(false);
+    } finally {
+      // 🔑 Cleanup: Only reset state if the request that finished is the current one
+      if (initRequestControllerRef.current === controller) {
+        setIsLoading(false);
+        initRequestControllerRef.current = null;
+      }
     }
   }, [
     isScriptLoaded,

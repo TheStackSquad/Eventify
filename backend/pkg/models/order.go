@@ -1,212 +1,121 @@
-//backend/pkg/models/order.go
+// backend/pkg/models/order.go
+
 package models
 
 import (
-	"errors"
-	"strings"
+	"database/sql"
+	"math"
 	"time"
 
-	"eventify/backend/pkg/shared"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/google/uuid"
 )
 
-// ============================================================================
-// ORDER ITEM MODELS
-// ============================================================================
+type NullUUID sql.Null[uuid.UUID]
 
-// OrderItem represents a single line item in an order.
-// This structure is used for the FINAL, SERVER-CALCULATED Order database record.
-// NOTE: All prices are in Kobo (int).
-type OrderItem struct {
-	EventID string `json:"event_id" bson:"event_id" validate:"required"`
-	EventTitle string `json:"event_title" bson:"event_title" validate:"required"`
-	TierName string `json:"tier_name" bson:"tier_name" validate:"required"`
-	Quantity int `json:"quantity" bson:"quantity" validate:"required,min=1,max=100"`
-	// Price MUST be populated by the server via a database lookup.
-	Price int `json:"unit_price" bson:"unit_price"` 
-	Subtotal int `json:"subtotal" bson:"subtotal"`
-}
+// --- Financial Constants ---
+const (
+	ServiceFeeRate float64 = 0.05
+	VATRate        float64 = 0.075
+)
 
-// Validate performs validation on OrderItem (used for the final DB record).
-func (i *OrderItem) Validate() error {
-	if i.EventID == "" {
-		return errors.New("event_id is required")
-	}
-	if i.EventTitle == "" {
-		return errors.New("event_title is required")
-	}
-	if i.Quantity < 1 || i.Quantity > 100 {
-		return errors.New("quantity must be between 1 and 100")
-	}
-	// Note: We don't check Price < 0 here as the server should guarantee this.
-	return nil
-}
+// --- Order Statuses ---
+type OrderStatus string
 
-// ============================================================================
-// CUSTOMER INFO MODELS
-// ============================================================================
+const (
+	OrderStatusPending    OrderStatus = "pending"
+	OrderStatusProcessing OrderStatus = "processing"
+	OrderStatusSuccess    OrderStatus = "success"
+	OrderStatusFailed     OrderStatus = "failed"
+	OrderStatusRefunded   OrderStatus = "refunded"
+	OrderStatusFraud      OrderStatus = "fraud"
+)
 
-// CustomerInfo represents the billing and contact details collected from the customer.
-type CustomerInfo struct {
-	FirstName string `json:"first_name" bson:"first_name" validate:"required"`
-	LastName string `json:"last_name" bson:"last_name" validate:"required"`
-	Email  string `json:"email" bson:"email" validate:"required,email"`
-	Phone  string `json:"phone" bson:"phone" validate:"required"`
-	City string `json:"city" bson:"city"`
-	State  string `json:"state" bson:"state"`
-	Country string `json:"country" bson:"country" validate:"required"`
-}
-
-// Validate performs validation on CustomerInfo
-func (c *CustomerInfo) Validate() error {
-	if strings.TrimSpace(c.FirstName) == "" {
-		return errors.New("first_name is required")
-	}
-	if strings.TrimSpace(c.LastName) == "" {
-		return errors.New("last_name is required")
-	}
-	if !strings.Contains(c.Email, "@") {
-		return errors.New("invalid email format")
-	}
-	if strings.TrimSpace(c.Phone) == "" {
-		return errors.New("phone is required")
-	}
-	if strings.TrimSpace(c.Country) == "" {
-		return errors.New("country is required")
-	}
-	return nil
-}
-
-// ============================================================================
-// ORDER INITIALIZATION REQUEST (INPUT MODEL)
-// ============================================================================
-
-// OrderItemRequest is the minimal structure received from the client for an item.
-// It contains identification, but NO price information.
-type OrderItemRequest struct {
-	EventID string `json:"event_id" validate:"required"`
-	TierName  string `json:"tier_name" validate:"required"`
-	Quantity  int `json:"quantity" validate:"required,min=1,max=100"`
-}
-
-// OrderInitializationRequest represents the minimal payload from frontend to create a pending order.
-// The client MUST NOT submit any price fields.
-type OrderInitializationRequest struct {
-	Email string `json:"email" validate:"required,email"`
-	// REMOVED: AmountKobo, Subtotal, ServiceFee, VATAmount
-	Items []OrderItemRequest `json:"items" validate:"required,min=1,dive"`
-	Customer  CustomerInfo  `json:"customer" validate:"required"`
-}
-
-// Validate performs basic format validation on the request.
-// NOTE: All financial validation is now done in the Service layer after price lookups.
-func (r *OrderInitializationRequest) Validate() error {
-	if r.Email == "" || !strings.Contains(r.Email, "@") {
-		return errors.New("invalid email address")
-	}
-
-	if len(r.Items) == 0 {
-		return errors.New("order must contain at least one item")
-	}
-
-	if err := r.Customer.Validate(); err != nil {
-		return err
-	}
-	
-	// Basic item checks (excluding price/subtotal checks which are now server-side)
-	for _, item := range r.Items {
-		if item.EventID == "" || item.TierName == "" || item.Quantity < 1 {
-			return errors.New("item validation failed: missing ID, tier, or quantity")
-		}
-	}
-
-	return nil
-}
-
-// ============================================================================
-// ORDER MODEL (Main Transaction Record)
-// ============================================================================
-
-// Order represents the complete transaction record stored in the database.
-// This structure remains unchanged as it stores the final, server-calculated state.
+// --- Order Struct ---
 type Order struct {
-	// Primary ID and User Links
-	ID  primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	UserID *primitive.ObjectID `json:"user_id,omitempty" bson:"user_id,omitempty"`
-
-	// Transaction Data
-	Reference string `json:"reference" bson:"reference"`
-	Status string `json:"status" bson:"status" validate:"oneof=pending success failed fraud"`
-	AmountKobo int `json:"amount_kobo" bson:"amount_kobo"`
-	FeeKobo int `json:"fee_kobo" bson:"fee_kobo"`
-
-	// Financial Totals (for analytics and reporting - all in Kobo)
-	Subtotal  int `json:"subtotal" bson:"subtotal"`
-	ServiceFee int `json:"service_fee" bson:"service_fee"`
-	VATAmount int `json:"vat_amount" bson:"vat_amount"`
-	FinalTotal int `json:"final_total" bson:"final_total"`
-
-	// Payment Channel Info
-	PaymentChannel string `json:"payment_channel,omitempty" bson:"payment_channel,omitempty"`
-	PaidAt  *time.Time `json:"paid_at,omitempty" bson:"paid_at,omitempty"`
-
-	// Nested Data
-	Customer CustomerInfo `json:"customer" bson:"customer"`
-	Items    []OrderItem `json:"items" bson:"items"`
-
-	// Timestamps
-	CreatedAt time.Time `json:"created_at" bson:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
-
-	// Audit Fields (for security and debugging)
-	IPAddress string `json:"ip_address,omitempty" bson:"ip_address,omitempty"`
-	UserAgent  string `json:"user_agent,omitempty" bson:"user_agent,omitempty"`
-	ProcessedBy  string `json:"processed_by,omitempty" bson:"processed_by,omitempty"` // "webhook" or "verification"
-	WebhookAttempts int `json:"webhook_attempts,omitempty" bson:"webhook_attempts,omitempty"`
+	ID                uuid.UUID           `json:"id" db:"id"`
+//	UserID            sql.Null[uuid.UUID] `json:"userId,omitempty" db:"user_id"`
+	// UserID			  NullUUID			  `json:"userId,omitempty" db:"user_id"`
+	UserID 	  *uuid.UUID 		  `json:"userId,omitempty" db:"user_id"`
+	GuestID           string              `db:"guest_id"`
+	Reference         string              `json:"reference" db:"reference"`
+	Status            OrderStatus         `json:"status" db:"status"`
+	IPAddress         sql.NullString      `json:"ipAddress,omitempty" db:"ip_address"`
+	UserAgent         sql.NullString      `json:"userAgent,omitempty" db:"user_agent"`
+	Subtotal          int64               `json:"subtotal" db:"subtotal"`
+	ServiceFee        int64               `json:"serviceFee" db:"service_fee"`
+	VATAmount         int64               `json:"vatAmount" db:"vat_amount"`
+	FinalTotal        int64               `json:"finalTotal" db:"final_total"`
+	AmountPaid        int64               `json:"amountPaid" db:"amount_paid"`
+	PaymentChannel    sql.NullString      `json:"paymentChannel,omitempty" db:"payment_channel"`
+	PaidAt            sql.NullTime        `json:"paidAt,omitempty" db:"paid_at"`
+	ProcessedBy       sql.NullString      `json:"processedBy,omitempty" db:"processed_by"`
+	WebhookAttempts   int                 `json:"webhookAttempts" db:"webhook_attempts"`
+	CustomerEmail     string              `json:"customerEmail" db:"customer_email"`
+	CustomerFirstName string              `json:"customerFirstName" db:"customer_first_name"`
+	CustomerLastName  string              `json:"customerLastName" db:"customer_last_name"`
+	CustomerPhone     sql.NullString      `json:"customerPhone,omitempty" db:"customer_phone"`
+	CreatedAt         time.Time           `json:"createdAt" db:"created_at"`
+	UpdatedAt         time.Time           `json:"updatedAt" db:"updated_at"`
+	Items             []OrderItem         `json:"items,omitempty" db:"-"`
+	Payments          []PaymentRecord     `json:"payments,omitempty" db:"-"`
 }
 
-// IsProcessed returns true if order is in a final state
-func (o *Order) IsProcessed() bool {
-	return o.Status == "success" || o.Status == "failed" || o.Status == "fraud"
+// --- OrderItem Struct ---
+type OrderItem struct {
+	ID           uuid.UUID `json:"id" db:"id"`
+	OrderID      uuid.UUID `json:"orderId" db:"order_id"`
+	EventTitle   string    `json:"eventTitle" db:"event_title"`
+	EventID      uuid.UUID `json:"eventId" db:"event_id"`
+	TicketTierID uuid.UUID `json:"ticketTierId" db:"ticket_tier_id"`
+	TierName     string    `json:"tierName" db:"tier_name"`
+	Quantity     int32     `json:"quantity" db:"quantity"`
+	UnitPrice    int64     `json:"unitPrice" db:"unit_price"`
+	Subtotal     int64     `json:"subtotal" db:"subtotal"`
 }
 
-// IsPending returns true if order is still awaiting payment confirmation
-func (o *Order) IsPending() bool {
-	return o.Status == "pending"
-}
-
-// IsSuccess returns true if order was successfully paid
-func (o *Order) IsSuccess() bool {
-	return o.Status == "success"
-}
-
-// ============================================================================
-// FEE CALCULATION HELPERS
-// ============================================================================
-// NOTE: These functions delegate to shared/fee_config.go for centralized logic
-
-// CalculateServiceFee calculates the service fee using the tiered percentage model.
-// See shared/fee_config.go for detailed tier breakdown.
-func CalculateServiceFee(subtotal int) int {
-	return shared.CalculateServiceFee(subtotal)
-}
-
-// CalculateVAT calculates the VAT (7.5%) on the given amount.
-// See shared/fee_config.go for implementation.
-func CalculateVAT(amount int) int {
-	return shared.CalculateVAT(amount)
-}
-
-// CalculateTotals is a helper that calculates all financial totals for an order based on items.
-// Returns: subtotal, serviceFee, vatAmount, finalTotal (all in Kobo)
-func CalculateTotals(items []OrderItem) (int, int, int, int) {
-	subtotal := 0
-	for _, item := range items {
-		// IMPORTANT: This calculation assumes item.Price has been set by the server.
-		subtotal += item.Price * item.Quantity
+// --- Calculation Helpers ---
+func CalculateServiceFee(subtotal int64) int64 {
+	if subtotal <= 0 {
+		return 0
 	}
-	
-	// Use centralized calculation from shared config
-	return shared.CalculateOrderTotals(subtotal)
+	fee := float64(subtotal) * ServiceFeeRate
+	return int64(math.Round(fee))
+}
+
+func CalculateVAT(taxableAmount int64) int64 {
+	if taxableAmount <= 0 {
+		return 0
+	}
+	tax := float64(taxableAmount) * VATRate
+	return int64(math.Round(tax))
+}
+
+// --- sql.Null Helpers ---
+func ToNullString(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
+func ToNullTime(t *time.Time) sql.NullTime {
+	if t == nil {
+		return sql.NullTime{Valid: false}
+	}
+	return sql.NullTime{Time: *t, Valid: true}
+}
+
+func ToNullUUID(id uuid.UUID) NullUUID {
+	if id == uuid.Nil {
+		return NullUUID{Valid: false}
+	}
+	return NullUUID{V: id, Valid: true}
+}
+
+func (n NullUUID) Ptr() *uuid.UUID {
+	// The underlying type is sql.Null[uuid.UUID], so we access V directly
+	if n.Valid {
+		return &n.V
+	}
+	return nil
 }

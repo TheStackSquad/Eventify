@@ -2,10 +2,10 @@
 
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
-import { useSelector, useDispatch } from "react-redux";
+import React, { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X } from "lucide-react";
+import { useEventAnalytics } from "@/utils/hooks/useEvents";
+//import { X } from "lucide-react";
 
 // Components
 import AnalyticsHeader from "./analytics/analyticsHeader";
@@ -13,7 +13,7 @@ import AnalyticsKeyMetrics from "./analytics/analyticsKeyMetrics";
 import AnalyticsSkeleton from "./analytics/analyticsSkeleton";
 import ExportButton from "./analytics/shared/exportButton";
 
-// Sections (lazy loaded)
+// Sections
 import RevenueSection from "./analytics/sections/revenueSection";
 import TicketTiersSection from "./analytics/sections/ticketTiersSection";
 import OrdersSection from "./analytics/sections/ordersSection";
@@ -27,9 +27,6 @@ import {
   saveSectionState,
 } from "./analytics/utils/analyticsStorage";
 
-// Redux
-import { fetchEventAnalytics } from "@/redux/action/eventAction";
-import { STATUS } from "@/utils/constants/globalConstants";
 
 export default function AnalyticsModal({
   isOpen,
@@ -37,20 +34,18 @@ export default function AnalyticsModal({
   eventId,
   eventTitle,
 }) {
-  const dispatch = useDispatch();
-
-  // Get analytics from Redux
-   const analyticsState = useSelector(
-     (state) => state.events?.eventAnalytics?.[eventId] || {}
-   );
-
+  // ============================================================================
+  // TANSTACK QUERY STATE (REPLACES REDUX)
+  // The hook handles fetching, caching, loading, and error states.
+  // ============================================================================
   const {
-    data: analytics = {},
-    status = STATUS.IDLE,
-    error = null,
-  } = analyticsState;
-  const isLoading = status === STATUS.LOADING;
-  const isError = status === STATUS.FAILED;
+    data: analytics = null, // Data object (or null if not fetched yet)
+    isLoading, // True if fetching for the first time or background refetching
+    isError, // True if the last fetch failed
+    error: queryError, // Error object containing the message
+    refetch, // Function to manually trigger a refresh
+    dataUpdatedAt, // Timestamp of the last successful data fetch
+  } = useEventAnalytics(eventId);
 
   // Section collapse states (persisted in localStorage)
   const [expandedSections, setExpandedSections] = useState(() =>
@@ -65,6 +60,7 @@ export default function AnalyticsModal({
           ...prev,
           [sectionKey]: !prev[sectionKey],
         };
+        // Local storage utility persists the UI state regardless of data source
         saveSectionState(eventId, newState);
         return newState;
       });
@@ -72,7 +68,7 @@ export default function AnalyticsModal({
     [eventId]
   );
 
-  // Handle ESC key
+  // Handle ESC key and scroll lock
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key === "Escape" && isOpen) {
@@ -91,16 +87,12 @@ export default function AnalyticsModal({
     };
   }, [isOpen, onClose]);
 
-  // Fetch analytics if not available
-  useEffect(() => {
-    if (isOpen && eventId && (!analytics || status === STATUS.FAILED)) {
-      dispatch(fetchEventAnalytics({ eventId }));
-    }
-  }, [isOpen, eventId, analytics, status, dispatch]);
+  // ❌ Removed: The useEffect that manually dispatched fetchEventAnalytics.
+  // The useEventAnalytics hook handles this declaratively based on eventId.
 
   if (!isOpen) return null;
 
-  // Animation variants
+  // Animation variants (kept for smooth UX)
   const backdropVariants = {
     visible: { opacity: 1 },
     hidden: { opacity: 0 },
@@ -119,6 +111,8 @@ export default function AnalyticsModal({
       scale: 0.96,
     },
   };
+
+  const isDataAvailable = analytics && !isError;
 
   return (
     <AnimatePresence>
@@ -157,9 +151,13 @@ export default function AnalyticsModal({
                   <h3 className="text-xl font-bold text-red-900 mb-2">
                     Failed to Load Analytics
                   </h3>
-                  <p className="text-red-700 mb-4">{error}</p>
+                  {/* 🆕 Use the error object from the query */}
+                  <p className="text-red-700 mb-4">
+                    {queryError?.message ||
+                      "An unexpected network error occurred."}
+                  </p>
                   <button
-                    onClick={() => dispatch(fetchEventAnalytics({ eventId }))}
+                    onClick={refetch} // 🆕 Call refetch()
                     className="px-6 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold"
                   >
                     Try Again
@@ -168,7 +166,7 @@ export default function AnalyticsModal({
               )}
 
               {/* Success State - Show Analytics */}
-              {analytics && !isLoading && (
+              {isDataAvailable && (
                 <>
                   {/* Key Metrics - Always Visible */}
                   <AnalyticsKeyMetrics analytics={analytics} />
@@ -222,10 +220,10 @@ export default function AnalyticsModal({
           {/* Sticky Footer */}
           <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             <div className="text-sm text-gray-600">
-              {analytics?.overview && (
+              {/* 🆕 Use dataUpdatedAt for the last update time */}
+              {dataUpdatedAt && (
                 <span>
-                  Last updated:{" "}
-                  {new Date(analyticsState.fetchedAt).toLocaleString()}
+                  Last updated: {new Date(dataUpdatedAt).toLocaleString()}
                 </span>
               )}
             </div>
@@ -234,7 +232,7 @@ export default function AnalyticsModal({
               <ExportButton analytics={analytics} eventTitle={eventTitle} />
 
               <button
-                onClick={() => dispatch(fetchEventAnalytics({ eventId }))}
+                onClick={refetch} // 🆕 Call refetch()
                 className="flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 disabled={isLoading}
               >

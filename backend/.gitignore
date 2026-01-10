@@ -1,0 +1,49 @@
+# Binaries (compiled executables)
+backend.exe
+main.exe
+*.exe
+backend
+main
+
+# Environment variables
+.env
+.env.local
+*.env.*
+cookies.txt
+login_headers.txt
+
+# Go-specific (but NOT go.mod or go.sum)
+#vendor/           # Dependencies folder (can be ignored if using go modules)
+*.test           # Test binaries
+*.out           # Build outputs
+coverage.html   # Test coverage reports
+coverage.out
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+
+# Logs
+*.log
+logs/
+tmp/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+
+# Scripts that should not be tracked if they contain sensitive commands/paths
+port-kill.sh
+test-api.sh
