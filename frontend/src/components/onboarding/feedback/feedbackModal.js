@@ -2,9 +2,9 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import FeedbackHeader from "./components/FeedbackHeader";
-import FeedbackForm from "./components/FeedbackForm";
-import useFeedbackForm from "./hooks/useFeedbackForm";
+import FeedbackHeader from "@/components/onboarding/feedback/components/feedbackHeader";
+import FeedbackForm from "@/components/onboarding/feedback/components/feedbackForm";
+import useFeedbackForm from "@/components/onboarding/feedback/hooks/useFeedbackForm";
 
 /**
  * Main Feedback Modal Wrapper
