@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"database/sql"
 
 	"eventify/backend/pkg/models"
 	"eventify/backend/pkg/utils"
@@ -38,7 +39,7 @@ func (s *OrderServiceImpl) InitializePendingOrder(
 	pendingOrder.CustomerFirstName = req.FirstName
 	pendingOrder.CustomerLastName = req.LastName
 	pendingOrder.CustomerPhone = models.ToNullString(req.Phone)
-	pendingOrder.GuestID = guestID
+	pendingOrder.GuestID = sql.NullString{String: guestID, Valid: guestID != ""}
 	pendingOrder.CreatedAt = time.Now().UTC()
 	pendingOrder.UpdatedAt = time.Now().UTC()
 
@@ -74,9 +75,9 @@ func (s *OrderServiceImpl) GetOrderByReference(
     }
 
     // Guest user access
-    if order.GuestID != "" && order.GuestID == guestID {
-		return order, nil
-	}
+    if order.GuestID.Valid && order.GuestID.String == guestID && guestID != "" { 
+        return order, nil
+    }
 
     return nil, errors.New("unauthorized access to order")
 }

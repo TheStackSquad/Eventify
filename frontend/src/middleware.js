@@ -28,6 +28,10 @@ const PUBLIC_UI_ROUTES = [
   "/confirmation", // e.g., for payment or email confirmation
   "/events/[slug]", // Assuming dynamic event detail page is public
   "/vendors/[id]", // Assuming vendor profile is public
+  "/api/*-image",
+  "/api/v1/feedback",
+  "/api/feedback-image",
+  "/api/feedback",
 ];
 
 // API Endpoints that must be accessible even when unauthenticated

@@ -46,7 +46,6 @@ export const REDUX_ACTION_TYPES = {
   RESET_CREATE_FEEDBACK_STATUS: "feedback/resetCreateFeedbackStatus",
 };
 
-
 // ========== API ENDPOINTS ==========
 export const API_ENDPOINTS = {
   AUTH: {
@@ -57,7 +56,10 @@ export const API_ENDPOINTS = {
     LOGOUT: "/auth/logout",
     VERIFY: "/auth/me",
     REFRESH: "/auth/refresh",
-    LOGIN: "/auth/login", // Alias for SIGNIN for backward compatibility
+    LOGIN: "/auth/login",
+    FORGOT_PASSWORD: "/auth/forgot-password",
+    VERIFY_RESET_TOKEN: "/auth/verify-reset-token",
+    RESET_PASSWORD: "/auth/reset-password",
   },
 
   EVENTS: {
@@ -79,6 +81,16 @@ export const API_ENDPOINTS = {
     GET_PROFILE: "/api/v1/vendors/:id",
     REGISTER: "/api/v1/vendors/register",
     UPDATE: "/api/v1/vendors/:id",
+
+    // Analytics endpoints
+    ANALYTICS: {
+      OVERVIEW: "/api/v1/vendors/:id/analytics/overview",
+      HEALTH: "/api/v1/vendors/analytics/health",
+      // Future endpoints (Phase 2)
+      // TRENDS: "/api/v1/vendors/:id/analytics/trends",
+      // COMPARE: "/api/v1/vendors/:id/analytics/compare",
+      // EXPORT: "/api/v1/vendors/:id/analytics/export",
+    },
   },
 
   INQUIRIES: {
@@ -140,19 +152,19 @@ export const API_ENDPOINTS = {
 
 // ========== ROUTES ==========
 export const ROUTES = {
- LOGIN: "/account/auth/login",
+  LOGIN: "/account/auth/login",
   MY_EVENTS: "/events/my-events",
-  CREATE_EVENT: "/events/create-events", //possible endpoint mismatch here 
- // 🚨 Note: You have a duplicate 'LOGIN' key here. Using the first one.
-// LOGIN: "/login", 
-DASHBOARD: "/dashboard",
+  CREATE_EVENT: "/events/create-events", //possible endpoint mismatch here
+  // 🚨 Note: You have a duplicate 'LOGIN' key here. Using the first one.
+  // LOGIN: "/login",
+  DASHBOARD: "/dashboard",
 
-// Vendor Routes (New)
-VENDOR_LISTING: "/vendors",
-VENDOR_PROFILE: "/vendors/:slug", // We'll use a slug for the UI route
+  // Vendor Routes (New)
+  VENDOR_LISTING: "/vendors",
+  VENDOR_PROFILE: "/vendors/:slug", // We'll use a slug for the UI route
 
- // Admin Routes (New)
- ADMIN_VENDOR_MANAGEMENT: "/admin/vendors",
+  // Admin Routes (New)
+  ADMIN_VENDOR_MANAGEMENT: "/admin/vendors",
 };
 
 // ========== REDIRECT PATHS (For axios interceptor) ==========
@@ -228,6 +240,73 @@ export const EVENT_DEFAULTS = {
 // Analytics cache duration (5 minutes)
 export const ANALYTICS_CACHE_DURATION_MS = 5 * 60 * 1000;
 
+// ========== ANALYTICS CONSTANTS ==========
+export const ANALYTICS_CONSTANTS = {
+  // Insight types (for styling)
+  INSIGHT_TYPES: {
+    CRITICAL: "critical",
+    WARNING: "warning",
+    TIP: "tip",
+    SUCCESS: "success",
+  },
+
+  // Insight type colors (Tailwind classes)
+  INSIGHT_COLORS: {
+    critical: {
+      bg: "bg-red-50",
+      border: "border-red-200",
+      text: "text-red-800",
+      icon: "text-red-600",
+    },
+    warning: {
+      bg: "bg-yellow-50",
+      border: "border-yellow-200",
+      text: "text-yellow-800",
+      icon: "text-yellow-600",
+    },
+    tip: {
+      bg: "bg-blue-50",
+      border: "border-blue-200",
+      text: "text-blue-800",
+      icon: "text-blue-600",
+    },
+    success: {
+      bg: "bg-green-50",
+      border: "border-green-200",
+      text: "text-green-800",
+      icon: "text-green-600",
+    },
+  },
+
+  // Account status
+  ACCOUNT_STATUS: {
+    NEW: "new",
+    ACTIVE: "active",
+    INACTIVE: "inactive",
+  },
+
+  // Trend indicators
+  TRENDS: {
+    INCREASING: "increasing",
+    STABLE: "stable",
+    DECREASING: "decreasing",
+    IMPROVING: "improving",
+    DECLINING: "declining",
+  },
+
+  // Refresh intervals (milliseconds)
+  REFRESH_INTERVALS: {
+    ANALYTICS_OVERVIEW: 60000, // 1 minute
+    REAL_TIME_METRICS: 30000, // 30 seconds
+  },
+
+  // Cache time (milliseconds)
+  CACHE_TIME: {
+    ANALYTICS: 300000, // 5 minutes
+    STATIC_DATA: 600000, // 10 minutes
+  },
+};
+
 // ========== ERROR MESSAGES ==========
 export const ERROR_MESSAGES = {
   // Event Operations
@@ -246,6 +325,23 @@ export const ERROR_MESSAGES = {
   FEEDBACK_SUBMIT_FAILED: "Failed to submit feedback. Please try again.",
   FEEDBACK_DELETE_FAILED: "Failed to delete feedback. Please try again.",
   FEEDBACK_FETCH_FAILED: "Failed to fetch feedback. Please try again.",
+
+  REVIEW: {
+    DUPLICATE: "You've already reviewed this vendor",
+    INVALID_RATING: "Please select a rating between 1 and 5 stars",
+    MISSING_FIELDS: "Please fill in all required fields",
+    INVALID_EMAIL: "Please enter a valid email address",
+    COMMENT_TOO_SHORT: "Please write a few words about your experience",
+    COMMENT_TOO_LONG:
+      "Your review is too long. Please keep it under 500 characters",
+    SUBMISSION_FAILED:
+      "We couldn't submit your review right now. Please try again.",
+    NETWORK_ERROR: "Network error. Please check your connection and try again.",
+  },
+  INQUIRY: {
+    DUPLICATE: "You've already contacted this vendor",
+    SUBMISSION_FAILED: "Failed to send inquiry. Please try again.",
+  },
 
   // General
   AUTH_REQUIRED: "Authentication required. Please log in to continue.",
@@ -272,6 +368,20 @@ export const SUCCESS_MESSAGES = {
   VENDOR_DELETED: "Vendor permanently removed from the platform.",
 };
 
+export const replaceUrlParams = (url, params) => {
+  if (!url) return "";
+  if (!params || typeof params !== "object") return url;
+
+  let replacedUrl = url;
+
+  Object.keys(params).forEach((key) => {
+    const value = params[key];
+    // Replace :key with value
+    replacedUrl = replacedUrl.replace(`:${key}`, value);
+  });
+
+  return replacedUrl;
+};
 // Named export for the entire constants object
 const globalConstants = {
   REDUX_ACTION_TYPES,

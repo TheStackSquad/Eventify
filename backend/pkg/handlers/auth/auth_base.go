@@ -1,26 +1,30 @@
-// backend/pkg/handlers/auth/auth_base.go
-
 package auth
 
 import (
 	"net/http"
-	repoauth "eventify/backend/pkg/repository/auth"
-	"eventify/backend/pkg/services/jwt"
 	"os"
 	"time"
-	//"string"
+
+	repoauth "eventify/backend/pkg/repository/auth"
+	servicejwt "eventify/backend/pkg/services/jwt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
+// AuthHandler handles authentication requests
 type AuthHandler struct {
 	AuthRepo         repoauth.AuthRepository
 	RefreshTokenRepo repoauth.RefreshTokenRepository
-	JWTService       jwt.JWTService
+	JWTService       *servicejwt.JWTService // ✅ Changed to pointer
 }
 
-func NewAuthHandler(authRepo repoauth.AuthRepository, tokenRepo repoauth.RefreshTokenRepository, jwtService jwt.JWTService) *AuthHandler {
+// NewAuthHandler creates a new AuthHandler instance
+func NewAuthHandler(
+	authRepo repoauth.AuthRepository,
+	tokenRepo repoauth.RefreshTokenRepository,
+	jwtService *servicejwt.JWTService, // ✅ Changed to pointer
+) *AuthHandler {
 	return &AuthHandler{
 		AuthRepo:         authRepo,
 		RefreshTokenRepo: tokenRepo,
@@ -28,20 +32,22 @@ func NewAuthHandler(authRepo repoauth.AuthRepository, tokenRepo repoauth.Refresh
 	}
 }
 
+// Cookie configuration constants
 const (
 	AccessTokenCookieName  = "access_token"
 	RefreshTokenCookieName = "refresh_token"
 	
-	// ✅ WEEK 1 ENHANCEMENT: Extended token durations for better UX
+	// Extended token durations for better UX
 	AccessMaxAge  = 3600 * 24      // 24 hours (1 day)
 	RefreshMaxAge = 3600 * 24 * 30 // 30 days
 	
-	// ✅ WEEK 2 ENHANCEMENT: Absolute session timeout
-	AbsoluteSessionTimeout = 3600 * 24 * 30 // 30 days max, regardless of activity
+	// Absolute session timeout (30 days max, regardless of activity)
+	AbsoluteSessionTimeout = 3600 * 24 * 30
 	
 	ResetTokenExpiry = 15 * time.Minute
 )
 
+// getCookieDomain returns the domain for cookies based on environment
 func getCookieDomain() string {
 	domain := os.Getenv("COOKIE_DOMAIN")
 	if domain == "" || domain == "localhost" {
@@ -50,6 +56,7 @@ func getCookieDomain() string {
 	return domain
 }
 
+// getCookieSameSite returns the SameSite policy for cookies
 func getCookieSameSite() http.SameSite {
 	sameSite := os.Getenv("COOKIE_SAMESITE")
 	switch sameSite {
@@ -64,6 +71,7 @@ func getCookieSameSite() http.SameSite {
 	}
 }
 
+// setAuthCookies sets access and refresh token cookies
 func setAuthCookies(c *gin.Context, accessToken, refreshToken string) {
 	domain := getCookieDomain()
 	secure := os.Getenv("COOKIE_SECURE") == "true"
@@ -97,13 +105,9 @@ func setAuthCookies(c *gin.Context, accessToken, refreshToken string) {
 		secure,
 		true, // httpOnly
 	)
-
-	// log.Debug().
-	// 	Str("sameSite", sameSite.String()).
-	// 	Bool("secure", secure).
-	// 	Msg("Auth: Cookies set with explicit SameSite")
 }
 
+// clearAuthCookies removes authentication cookies
 func clearAuthCookies(c *gin.Context) {
 	domain := getCookieDomain()
 	sameSite := getCookieSameSite()

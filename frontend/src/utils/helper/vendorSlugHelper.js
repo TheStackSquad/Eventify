@@ -34,70 +34,33 @@ export const generateVendorSlug = (vendor) => {
 };
 
 export const parseSlugToId = (slug) => {
-  if (process.env.NODE_ENV === "development") {
-    console.log("🔍 Parsing slug:", slug);
-  }
-
-  if (!slug) {
-    if (process.env.NODE_ENV === "development") {
-      console.error("❌ No slug provided for parsing");
-    }
-    return null;
-  }
+  if (!slug) return null;
 
   try {
-    // Split by last hyphen to separate name from ID
-    const parts = slug.split("-");
+    // 1. Define a UUID regex (Matches 8-4-4-4-12 hex format)
+    const uuidRegex =
+      /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/;
 
-    if (process.env.NODE_ENV === "development") {
-      console.log("📋 Slug parts:", parts);
-    }
+    // 2. Try to find the UUID inside the slug
+    const match = slug.match(uuidRegex);
 
-    // The ID should be the last part
-    const potentialId = parts[parts.length - 1];
-
-    if (process.env.NODE_ENV === "development") {
-      console.log("🎯 Potential ID:", potentialId);
-    }
-
-    // Validate it looks like a MongoDB ID (24 hex chars)
-    const isValidId = potentialId && /^[0-9a-fA-F]{24}$/.test(potentialId);
-
-    if (isValidId) {
+    if (match) {
       if (process.env.NODE_ENV === "development") {
-        console.log("✅ Valid vendor ID found:", potentialId);
+        console.log("✅ Valid UUID found in slug:", match[0]);
       }
-      return potentialId;
-    } else {
-      if (process.env.NODE_ENV === "development") {
-        console.warn(
-          "❌ Invalid vendor ID in slug:",
-          potentialId,
-          "Slug:",
-          slug
-        );
-      }
-
-      // Try alternative parsing: maybe the ID is somewhere else in the slug
-      for (let part of parts) {
-        if (/^[0-9a-fA-F]{24}$/.test(part)) {
-          if (process.env.NODE_ENV === "development") {
-            console.log("🔄 Found valid ID in alternative part:", part);
-          }
-          return part;
-        }
-      }
-
-      return null;
+      return match[0];
     }
+
+    // 3. Fallback for 24-char IDs (if you use them elsewhere)
+    const mongoRegex = /[0-9a-fA-F]{24}/;
+    const mongoMatch = slug.match(mongoRegex);
+
+    return mongoMatch ? mongoMatch[0] : null;
   } catch (error) {
-    if (process.env.NODE_ENV === "development") {
-      console.error("❌ Error parsing vendor slug:", error, "Slug:", slug);
-    }
+    console.error("❌ Error parsing vendor slug:", error);
     return null;
   }
 };
-
 
 export const isValidVendorSlug = (slug) => {
   const result = !!parseSlugToId(slug);

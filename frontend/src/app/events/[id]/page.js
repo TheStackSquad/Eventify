@@ -47,30 +47,35 @@ async function fetchEventById(eventId) {
   }
 }
 
-// Generate static params for popular events
 export async function generateStaticParams() {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
 
   try {
     const res = await fetch(`${baseUrl}/events?limit=50`);
 
-    if (!res.ok) {
-      console.log("⚠️ Could not fetch events for static generation");
+    if (!res.ok) return [];
+
+    const data = await res.json();
+
+    // Defensive check: Access the array inside the object
+    const eventsArray =
+      data.events || data.data || (Array.isArray(data) ? data : []);
+
+    if (!Array.isArray(eventsArray)) {
+      console.warn("⚠️ API did not return an array in the expected format");
       return [];
     }
 
-    const events = await res.json();
-
-    return events.slice(0, 50).map((event) => ({
-      id: event.id,
+    return eventsArray.slice(0, 50).map((event) => ({
+      id: event.id.toString(),
     }));
   } catch (error) {
-    console.error("❌ Error generating static params:", error);
+    console.error("Error generating static params:", error);
     return [];
   }
 }
 
-// 🎯 PREMIUM SEO METADATA GENERATION
+// PREMIUM SEO METADATA GENERATION
 export async function generateMetadata({ params }) {
   // ✅ FIX: Await params before destructuring
   const { id } = await params;
@@ -196,7 +201,7 @@ export async function generateMetadata({ params }) {
   };
 }
 
-// 🌐 Main Server Component
+// Main Server Component
 export default async function EventDetailPage({ params }) {
   console.log("Component Mount 2");
   // ✅ FIX: Await params before destructuring

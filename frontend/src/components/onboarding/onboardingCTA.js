@@ -8,7 +8,7 @@ import FeatureCards from "@/components/onboarding/featureCards";
 import UserTypeSelector from "@/components/onboarding/userTypeSelector";
 import CommissionInfo from "@/components/onboarding/commisionInfo";
 import GuidelinesSection from "@/components/onboarding/guidelinesSection";
-import FeedbackModal from "@/components/onboarding/feedbackModal";
+import FeedbackModal from "@/components/onboarding/feedback/feedbackModal";
 
 export default function OnboardingCTA() {
   const [showFeedback, setShowFeedback] = useState(false);

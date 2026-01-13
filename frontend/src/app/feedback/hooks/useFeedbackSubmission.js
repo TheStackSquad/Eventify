@@ -1,8 +1,11 @@
 // frontend/src/app/feedback/hooks/useFeedbackSubmission.js
-
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { uploadToBlob, deleteFromBlob } from "@/services/mediaServices";
+import {
+  uploadToFeedbackBlob,
+  deleteFromBlob,
+  validateImageFile,
+} from "@/services/mediaServices";
 import { createFeedbackAPI } from "@/services/feedbackAPI";
 import toastAlert from "@/components/common/toast/toastAlert";
 
@@ -14,57 +17,129 @@ export default function useFeedbackSubmission(onSuccess) {
     mutationFn: async ({ formData, imageFile }) => {
       let uploadedImageUrl = "";
       let blobPathname = "";
+      let cleanupRequired = false;
 
-      // 1. Optional Image Upload phase
-      if (imageFile) {
-        setUploadProgress(20);
+      // 1. Validate and upload image if provided
+      if (imageFile && imageFile.size > 0) {
+        // Validate image first
+        const validation = validateImageFile(imageFile);
+        if (!validation.isValid) {
+          throw new Error(`Image validation failed: ${validation.error}`);
+        }
+
         try {
-          const uploadResult = await uploadToBlob(
+          setUploadProgress(20);
+
+          // Use the existing uploadToBlob function
+          const uploadResult = await uploadToFeedbackBlob(
             imageFile,
-            "/api/feedback-image"
+            "feedback-image"
           );
+
           uploadedImageUrl = uploadResult.url;
-          blobPathname = uploadResult.filename; // Captured for potential cleanup
+          blobPathname = uploadResult.filename || uploadResult.pathname;
+          cleanupRequired = true; // Mark that cleanup is needed if backend fails
+
           setUploadProgress(60);
+          console.log("[useFeedbackSubmission] Image uploaded:", {
+            url: uploadedImageUrl,
+            pathname: blobPathname,
+          });
         } catch (uploadError) {
-          throw new Error("Image upload failed. Please try again.");
+          console.error(
+            "[useFeedbackSubmission] Image upload error:",
+            uploadError
+          );
+          throw new Error(`Image upload failed: ${uploadError.message}`);
         }
       }
 
-      // 2. Data Submission phase
+      // 2. Prepare payload for backend API
+      const payload = {
+        name: formData.name,
+        email: formData.email,
+        type: formData.type,
+        message: formData.message,
+        imageUrl: uploadedImageUrl, // Could be empty string
+      };
+
+      console.log("[useFeedbackSubmission] Submitting to backend:", payload);
+
       try {
-        const payload = { ...formData, imageUrl: uploadedImageUrl };
+        // 3. Submit feedback to backend
         const response = await createFeedbackAPI(payload);
         setUploadProgress(100);
+
+        // Success - no cleanup needed
+        cleanupRequired = false;
+
         return response;
       } catch (apiError) {
-        // 3. ATOMIC CLEANUP: Rollback image if backend fails
-        if (blobPathname) {
-          // Fire and forget cleanup or await depending on preference
-          // Awaiting ensures we don't finish the catch block until cleanup is attempted
-          await deleteFromBlob(blobPathname).catch((err) =>
-            console.error("Cleanup failed for:", blobPathname, err)
+        console.error("[useFeedbackSubmission] Backend API error:", apiError);
+
+        // 4. ATOMIC CLEANUP: Rollback image if backend fails
+        if (cleanupRequired && blobPathname) {
+          console.log(
+            "[useFeedbackSubmission] Starting cleanup of orphaned image:",
+            blobPathname
           );
+
+          try {
+            // Use the deleteFromBlob function for cleanup
+            await deleteFromBlob(blobPathname);
+            console.log(
+              "[useFeedbackSubmission] Orphaned image cleaned up successfully"
+            );
+          } catch (cleanupError) {
+            console.error(
+              "[useFeedbackSubmission] Cleanup failed, adding to orphaned list:",
+              cleanupError
+            );
+
+            // Store in localStorage for later cleanup (handled by mediaServices.cleanupOrphanedImages)
+            const orphaned = JSON.parse(
+              localStorage.getItem("orphanedImages") || "[]"
+            );
+            orphaned.push({
+              url: uploadedImageUrl,
+              pathname: blobPathname,
+              endpoint: "feedback-image",
+              timestamp: Date.now(),
+              type: "feedback",
+            });
+            localStorage.setItem("orphanedImages", JSON.stringify(orphaned));
+          }
         }
 
-        // Extract meaningful error from backend or fallback
+        // Extract user-friendly error message
         const errorMessage =
-          apiError.response?.data?.message || "Server rejected feedback.";
+          apiError.response?.data?.message ||
+          apiError.response?.data?.error ||
+          apiError.message ||
+          "Failed to submit feedback. Please try again.";
+
         throw new Error(errorMessage);
       }
     },
-    onSuccess: () => {
-      // Refresh admin lists if they are open in the background
+    onSuccess: (data) => {
+      console.log("[useFeedbackSubmission] Success response:", data);
+
+      // Refresh admin lists if they are open
       queryClient.invalidateQueries({ queryKey: ["feedbackList"] });
 
-      // Single source of success toast
+      // Show success message
       toastAlert.success("Thank you! Your feedback has been received.");
 
+      // Call success callback
       if (onSuccess) onSuccess();
     },
     onError: (error) => {
-      // Single source of error toast
-      toastAlert.error(error.message);
+      console.error("[useFeedbackSubmission] Mutation error:", error);
+
+      // Show error message (avoid duplicates if already shown in try-catch)
+      if (!error.message.includes("Image upload failed")) {
+        toastAlert.error(error.message);
+      }
     },
     onSettled: () => {
       setUploadProgress(0);
@@ -76,5 +151,6 @@ export default function useFeedbackSubmission(onSuccess) {
     isSubmitting: mutation.isPending,
     uploadProgress,
     status: mutation.status,
+    error: mutation.error,
   };
 }

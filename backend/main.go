@@ -14,6 +14,7 @@ import (
 	"eventify/backend/pkg/analytics"
 	"eventify/backend/pkg/db"
 	"eventify/backend/pkg/routes"
+	"eventify/backend/pkg/utils"
 
 	// Repositories (aliased)
 	repoauth "eventify/backend/pkg/repository/auth"
@@ -48,9 +49,10 @@ import (
 	handlervendor "eventify/backend/pkg/handlers/vendor"
 
 	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
+
+const serviceName = "eventify-api"
 
 // startTokenCleanup schedules periodic cleanup of expired refresh tokens
 func startTokenCleanup(repo repoauth.RefreshTokenRepository) {
@@ -61,9 +63,9 @@ func startTokenCleanup(repo repoauth.RefreshTokenRepository) {
 		ctx := context.Background()
 		deleted, err := repo.CleanupExpiredTokens(ctx)
 		if err != nil {
-			log.Error().Err(err).Msg("Failed initial token cleanup")
+			utils.LogError(serviceName, "token-cleanup", "Initial cleanup failed", err)
 		} else {
-			log.Info().Int64("count", deleted).Msg("Initial token cleanup completed")
+			utils.LogSuccess(serviceName, "token-cleanup", fmt.Sprintf("Initial cleanup completed (%d tokens)", deleted))
 		}
 	}()
 
@@ -73,39 +75,62 @@ func startTokenCleanup(repo repoauth.RefreshTokenRepository) {
 			ctx := context.Background()
 			deleted, err := repo.CleanupExpiredTokens(ctx)
 			if err != nil {
-				log.Error().Err(err).Msg("Failed scheduled token cleanup")
+				utils.LogError(serviceName, "token-cleanup", "Scheduled cleanup failed", err)
 			} else {
-				log.Info().Int64("count", deleted).Msg("Scheduled token cleanup completed")
+				utils.LogInfo(serviceName, "token-cleanup", "🧹 Scheduled cleanup completed (%d tokens)", deleted)
 			}
 		}
 	}()
 
-	log.Info().Msg("Token cleanup scheduler started (24-hour intervals)")
+	utils.LogSuccess(serviceName, "token-cleanup", "Cleanup scheduler started (24-hour intervals)")
 }
 
 func main() {
-	// Logger setup
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	log.Logger = log.Output(zerolog.ConsoleWriter{
-		Out:        os.Stderr,
-		TimeFormat: time.RFC3339,
-	}).With().Timestamp().Logger()
+	// ============================================================================
+	// STEP 1: LOGGING CONFIGURATION
+	// ============================================================================
+	utils.InitLogger()
+	env := os.Getenv("NODE_ENV")
+	if env == "" {
+		env = "development"
+	}
 
-	// Gin mode configuration
+	utils.LogInfo(serviceName, "startup", "🚀 Starting Eventify API [env=%s]", env)
+
+	// ============================================================================
+	// STEP 2: JWT SERVICE INITIALIZATION
+	// ============================================================================
+	jwtService := servicejwt.NewJWTService()
+	if err := jwtService.Initialize(); err != nil {
+		log.Fatal().
+			Err(err).
+			Str("service", serviceName).
+			Str("operation", "jwt-init").
+			Msg("💀 FATAL: Failed to initialize JWT service - check RSA key configuration")
+	}
+	utils.LogSuccess(serviceName, "jwt-init", "JWT service initialized")
+
+	// ============================================================================
+	// STEP 3: GIN MODE CONFIGURATION
+	// ============================================================================
 	if os.Getenv("GIN_MODE") == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	} else {
 		gin.SetMode(gin.DebugMode)
 	}
 
-	// Database initialization
+	// ============================================================================
+	// STEP 4: DATABASE INITIALIZATION
+	// ============================================================================
 	db.ConnectDB()
-	log.Info().Msg("Database connection established")
+	utils.LogSuccess(serviceName, "database", "Database connection established")
 	defer db.CloseDB()
 
 	dbClient := db.GetDB()
 
-	// Repository initialization
+	// ============================================================================
+	// STEP 5: REPOSITORY INITIALIZATION
+	// ============================================================================
 	vendorRepo := repovendor.NewPostgresVendorRepository(dbClient)
 	authRepo := repoauth.NewPostgresAuthRepository(dbClient)
 	refreshTokenRepo := repoauth.NewPostgresRefreshTokenRepository(dbClient)
@@ -121,7 +146,11 @@ func main() {
 	vendorMetricsRepo := repovendor.NewVendorMetricsRepository(dbClient)
 	vendorDataRepo := repovendor.NewVendorDataRepository(dbClient)
 
-	// Service initialization
+	utils.LogSuccess(serviceName, "repositories", "All repositories initialized")
+
+	// ============================================================================
+	// STEP 6: SERVICE INITIALIZATION
+	// ============================================================================
 	eventService := serviceevent.NewEventService(dbClient, eventRepo)
 	likeService := servicelike.NewLikeService(likeRepo)
 	vendorService := servicevendor.NewVendorService(vendorRepo)
@@ -147,9 +176,12 @@ func main() {
 		pricingService,
 		paystackClient,
 	)
-	jwtService := servicejwt.NewJWTService()
 
-	// Handler initialization
+	utils.LogSuccess(serviceName, "services", "All services initialized")
+
+	// ============================================================================
+	// STEP 7: HANDLER INITIALIZATION
+	// ============================================================================
 	authHandler := handlerauth.NewAuthHandler(authRepo, refreshTokenRepo, jwtService)
 	eventHandler := handlerevent.NewEventHandler(eventService, likeService)
 	vendorHandler := handlervendor.NewVendorHandler(vendorService)
@@ -160,10 +192,16 @@ func main() {
 	analyticsHandler := handleranalytics.NewAnalyticsHandler(analyticsService)
 	vendorAnalyticsHandler := handlervendor.NewVendorAnalyticsHandler(vendorAnalyticsService)
 
-	// Start token cleanup scheduler
+	utils.LogSuccess(serviceName, "handlers", "All handlers initialized")
+
+	// ============================================================================
+	// STEP 8: START BACKGROUND JOBS
+	// ============================================================================
 	startTokenCleanup(refreshTokenRepo)
 
-	// Router configuration
+	// ============================================================================
+	// STEP 9: ROUTER CONFIGURATION
+	// ============================================================================
 	router := routes.ConfigureRouter(
 		authHandler,
 		eventHandler,
@@ -175,9 +213,14 @@ func main() {
 		authRepo,
 		analyticsHandler,
 		vendorAnalyticsHandler,
+		jwtService,
 	)
 
-	// Server configuration
+	utils.LogSuccess(serviceName, "router", "Router configured with all endpoints")
+
+	// ============================================================================
+	// STEP 10: SERVER CONFIGURATION AND STARTUP
+	// ============================================================================
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"
@@ -192,34 +235,35 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server
+	// Start server in goroutine
 	go func() {
-		log.Info().
-			Str("service", "eventify-api").
-			Str("addr", serverAddr).
-			Msgf("Server starting on %s", serverAddr)
+		utils.LogInfo(serviceName, "server", "🎉 Server listening on %s - All systems operational", serverAddr)
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal().
 				Err(err).
+				Str("service", serviceName).
+				Str("operation", "server-start").
 				Str("addr", serverAddr).
-				Msg("Server failed to start")
+				Msg("💀 Server failed to start")
 		}
 	}()
 
-	// Graceful shutdown
+	// ============================================================================
+	// STEP 11: GRACEFUL SHUTDOWN
+	// ============================================================================
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Warn().Msg("Server shutting down...")
+	utils.LogWarn(serviceName, "shutdown", "Shutdown signal received - initiating graceful shutdown", nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal().Err(err).Msg("Server forced to shutdown")
+		utils.LogError(serviceName, "shutdown", "Server forced to shutdown", err)
 	}
 
-	log.Info().Msg("Server stopped gracefully")
+	utils.LogInfo(serviceName, "shutdown", "👋 Server stopped gracefully - goodbye!")
 }

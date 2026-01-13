@@ -31,10 +31,10 @@ const AboutUI = () => {
           {/* Content Section */}
           <div className="max-w-2xl lg:w-1/2">
             <h1 className="text-4xl lg:text-5xl font-bold leading-tight mb-6">
-              Welcome to <span className="text-yellow-300">BandHit</span>
+              Welcome to <span className="text-yellow-300">Eventify</span>
             </h1>
             <p className="text-lg leading-relaxed mb-8">
-              BandHit is your one-stop platform for seamless ticketing, vendor
+              Eventify is your one-stop platform for seamless ticketing, vendor
               connections, and entertainment booking. Whether you are an event
               organizer, a vendor, or an entertainer, we bring you together to
               create unforgettable moments.

@@ -4,37 +4,101 @@ package feedback
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"errors"
 	"fmt"
-	"time"
 
 	"eventify/backend/pkg/models"
-	"github.com/google/uuid"
+
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rs/zerolog/log"
 )
 
 func (r *postgresFeedbackRepository) CreateFeedback(ctx context.Context, feedback *models.Feedback) error {
-	// 1. Set internal metadata (ID and timestamps)
-	feedback.ID = uuid.New()
-	feedback.CreatedAt = time.Now()
-	feedback.UpdatedAt = time.Now()
+	// Validate that required fields are set (defensive programming)
+	if feedback.ID.String() == "00000000-0000-0000-0000-000000000000" {
+		return fmt.Errorf("feedback ID is required")
+	}
+	if feedback.GuestID == "" {
+		return fmt.Errorf("guest_id is required")
+	}
+	if feedback.Name == "" || feedback.Email == "" || feedback.Message == "" {
+		return fmt.Errorf("name, email, and message are required fields")
+	}
 
-	// 2. The SQL INSERT query
-	// The ':user_id' placeholder will automatically receive NULL if feedback.UserID.Valid is false.
 	query := `
-		INSERT INTO feedback (id, user_id, type, message, image_url, name, email, created_at, updated_at)
-		VALUES (:id, :user_id, :type, :message, :image_url, :name, :email, :created_at, :updated_at)
+		INSERT INTO feedback (
+			id, 
+			user_id, 
+			guest_id, 
+			type, 
+			message, 
+			image_url, 
+			name, 
+			email, 
+			created_at, 
+			updated_at
+		)
+		VALUES (
+			:id, 
+			:user_id, 
+			:guest_id, 
+			:type, 
+			:message, 
+			:image_url, 
+			:name, 
+			:email, 
+			:created_at, 
+			:updated_at
+		)
 	`
 
-	// 3. Execute the query using NamedExecContext
-	// sqlx handles the sql.Null[uuid.UUID] -> NULL conversion automatically.
-	_, err := r.db.NamedExecContext(ctx, query, feedback) 
+	result, err := r.db.NamedExecContext(ctx, query, feedback)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to create feedback in DB")
+		// Check for specific database errors
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			log.Error().
+				Str("code", pgErr.Code).
+				Str("detail", pgErr.Detail).
+				Str("constraint", pgErr.ConstraintName).
+				Msg("Database constraint violation")
+
+			// Handle specific constraint violations
+			switch pgErr.Code {
+			case "23505": // unique_violation
+				return fmt.Errorf("duplicate feedback entry")
+			case "23503": // foreign_key_violation
+				return fmt.Errorf("invalid user reference")
+			case "23502": // not_null_violation
+				return fmt.Errorf("required field missing: %s", pgErr.ColumnName)
+			default:
+				return fmt.Errorf("database error: %s", pgErr.Message)
+			}
+		}
+
+		log.Error().Err(err).
+			Str("feedback_id", feedback.ID.String()).
+			Msg("Failed to insert feedback into database")
 		return fmt.Errorf("repository failed to insert feedback: %w", err)
 	}
 
-	log.Info().Str("feedback_id", feedback.ID.String()).Msg("Feedback created successfully")
+	// Verify the insert was successful
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Warn().Err(err).Msg("Could not verify rows affected")
+	} else if rowsAffected == 0 {
+		log.Warn().Msg("No rows were inserted")
+		return fmt.Errorf("no rows inserted")
+	}
+
+	log.Debug().
+		Str("feedback_id", feedback.ID.String()).
+		Str("type", string(feedback.Type)).
+		Bool("has_user", feedback.UserID.Valid).
+		Bool("has_image", feedback.ImageURL.Valid).
+		Msg("Feedback inserted into database successfully")
+
 	return nil
 }
 

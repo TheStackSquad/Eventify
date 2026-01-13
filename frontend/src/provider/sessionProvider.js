@@ -1,5 +1,4 @@
 // frontend/src/provider/sessionProvider.js
-
 "use client";
 
 import React, {
@@ -11,15 +10,23 @@ import React, {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { verifySessionApi } from "@/services/authAPI";
+//import { initializeTokenRefresh } from "@/axiosConfig/axios";
 
 export const AuthContext = createContext(null);
 
 export default function SessionProvider({ children }) {
+  // State
   const [user, setUserState] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // 1. TanStack Query for session verification
+  // Initialize token refresh system on mount
+  // useEffect(() => {
+  //   console.info("[Auth] Initializing token refresh system");
+  //   initializeTokenRefresh();
+  // }, []);
+
+  // Session verification query
   const {
     data: sessionUser,
     isLoading: isSessionLoading,
@@ -28,53 +35,63 @@ export default function SessionProvider({ children }) {
   } = useQuery({
     queryKey: ["session"],
     queryFn: verifySessionApi,
-    retry: false, // Don't retry on 401
+    retry: false, // No retry on 401
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     staleTime: Infinity,
   });
 
-  // 2. Effect to update local state after session query completes
+  // Update local state when session verification completes
   useEffect(() => {
     if (isSessionFetched) {
-      console.log("🔍 [SESSION] Verification completed", {
-        hasUser: !!sessionUser,
-        error: sessionError?.message,
-      });
-
       if (sessionUser) {
-        console.log("✅ [SESSION] User authenticated:", {
-          email: sessionUser.email,
-          id: sessionUser.id,
+        console.info("[Auth] User authenticated", {
+          userId: sessionUser.id,
+          email: sessionUser.email?.substring(0, 10) + "...", // Privacy-safe logging
+          role: sessionUser.role,
         });
         setUserState(sessionUser);
         setIsAuthenticated(true);
+      } else if (sessionError) {
+        console.warn("[Auth] Session verification failed", {
+          error: sessionError.message,
+          code: sessionError.response?.status,
+        });
+        setUserState(null);
+        setIsAuthenticated(false);
       } else {
-        console.log("❌ [SESSION] No user session found");
+        console.info("[Auth] No active session found");
         setUserState(null);
         setIsAuthenticated(false);
       }
 
       setIsInitialized(true);
+      console.debug("[Auth] Session initialization complete", {
+        authenticated: !!sessionUser,
+        initialized: true,
+      });
     }
   }, [sessionUser, isSessionFetched, sessionError]);
 
-  // 3. Stable state setters
+  // State setters
   const setUser = useCallback((userData) => {
-    console.log("👤 [SESSION] Setting user:", userData?.email);
+    console.info("[Auth] Setting user session", {
+      userId: userData?.id,
+      hasData: !!userData,
+    });
     setUserState(userData);
     setIsAuthenticated(!!userData);
     setIsInitialized(true);
   }, []);
 
   const clearAuth = useCallback(() => {
-    console.log("🧹 [SESSION] Clearing auth state");
+    console.info("[Auth] Clearing authentication state");
     setUserState(null);
     setIsAuthenticated(false);
     setIsInitialized(true);
   }, []);
 
-  // 4. Memoized context value
+  // Memoized context value
   const value = useMemo(
     () => ({
       user,
@@ -88,16 +105,17 @@ export default function SessionProvider({ children }) {
     [user, isAuthenticated, isInitialized, isSessionLoading, setUser, clearAuth]
   );
 
-  // 5. Debug logging
+  // Debug logging (development only)
   useEffect(() => {
-    console.log("🎯 [SESSION] State:", {
-      hasUser: !!value.user,
-      userEmail: value.user?.email,
-      isAuthenticated: value.isAuthenticated,
-      isInitialized: value.isInitialized,
-      isLoading: value.isLoading,
-    });
-  }, [value]);
+    if (process.env.NODE_ENV === "development") {
+      console.debug("[Auth] State update", {
+        authenticated: isAuthenticated,
+        userId: user?.id,
+        initialized: isInitialized,
+        loading: isSessionLoading,
+      });
+    }
+  }, [isAuthenticated, user, isInitialized, isSessionLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -27,7 +27,8 @@ const nextConfig = {
         protocol: "https",
         hostname: "kphwpin3r1kcmjsx.public.blob.vercel-storage.com",
         port: "",
-        pathname: "/event-images/**",
+        //  pathname: "/event-images/**",a
+        pathname: "/**",
       },
       // Add this new pattern for vendor images
       {

@@ -32,32 +32,30 @@ const (
 
 // --- Order Struct ---
 type Order struct {
-	ID                uuid.UUID           `json:"id" db:"id"`
-//	UserID            sql.Null[uuid.UUID] `json:"userId,omitempty" db:"user_id"`
-	// UserID			  NullUUID			  `json:"userId,omitempty" db:"user_id"`
-	UserID 	  *uuid.UUID 		  `json:"userId,omitempty" db:"user_id"`
-	GuestID           string              `db:"guest_id"`
-	Reference         string              `json:"reference" db:"reference"`
-	Status            OrderStatus         `json:"status" db:"status"`
-	IPAddress         sql.NullString      `json:"ipAddress,omitempty" db:"ip_address"`
-	UserAgent         sql.NullString      `json:"userAgent,omitempty" db:"user_agent"`
-	Subtotal          int64               `json:"subtotal" db:"subtotal"`
-	ServiceFee        int64               `json:"serviceFee" db:"service_fee"`
-	VATAmount         int64               `json:"vatAmount" db:"vat_amount"`
-	FinalTotal        int64               `json:"finalTotal" db:"final_total"`
-	AmountPaid        int64               `json:"amountPaid" db:"amount_paid"`
-	PaymentChannel    sql.NullString      `json:"paymentChannel,omitempty" db:"payment_channel"`
-	PaidAt            sql.NullTime        `json:"paidAt,omitempty" db:"paid_at"`
-	ProcessedBy       sql.NullString      `json:"processedBy,omitempty" db:"processed_by"`
-	WebhookAttempts   int                 `json:"webhookAttempts" db:"webhook_attempts"`
-	CustomerEmail     string              `json:"customerEmail" db:"customer_email"`
-	CustomerFirstName string              `json:"customerFirstName" db:"customer_first_name"`
-	CustomerLastName  string              `json:"customerLastName" db:"customer_last_name"`
-	CustomerPhone     sql.NullString      `json:"customerPhone,omitempty" db:"customer_phone"`
-	CreatedAt         time.Time           `json:"createdAt" db:"created_at"`
-	UpdatedAt         time.Time           `json:"updatedAt" db:"updated_at"`
-	Items             []OrderItem         `json:"items,omitempty" db:"-"`
-	Payments          []PaymentRecord     `json:"payments,omitempty" db:"-"`
+	ID                uuid.UUID      `json:"id" db:"id"`
+	UserID            *uuid.UUID     `json:"userId,omitempty" db:"user_id"`
+	GuestID           sql.NullString `json:"guestId,omitempty" db:"guest_id"` // ✅ FIXED: Changed from string to sql.NullString
+	Reference         string         `json:"reference" db:"reference"`
+	Status            OrderStatus    `json:"status" db:"status"`
+	IPAddress         sql.NullString `json:"ipAddress,omitempty" db:"ip_address"`
+	UserAgent         sql.NullString `json:"userAgent,omitempty" db:"user_agent"`
+	Subtotal          int64          `json:"subtotal" db:"subtotal"`
+	ServiceFee        int64          `json:"serviceFee" db:"service_fee"`
+	VATAmount         int64          `json:"vatAmount" db:"vat_amount"`
+	FinalTotal        int64          `json:"finalTotal" db:"final_total"`
+	AmountPaid        int64          `json:"amountPaid" db:"amount_paid"`
+	PaymentChannel    sql.NullString `json:"paymentChannel,omitempty" db:"payment_channel"`
+	PaidAt            sql.NullTime   `json:"paidAt,omitempty" db:"paid_at"`
+	ProcessedBy       sql.NullString `json:"processedBy,omitempty" db:"processed_by"`
+	WebhookAttempts   int            `json:"webhookAttempts" db:"webhook_attempts"`
+	CustomerEmail     string         `json:"customerEmail" db:"customer_email"`
+	CustomerFirstName string         `json:"customerFirstName" db:"customer_first_name"`
+	CustomerLastName  string         `json:"customerLastName" db:"customer_last_name"`
+	CustomerPhone     sql.NullString `json:"customerPhone,omitempty" db:"customer_phone"`
+	CreatedAt         time.Time      `json:"createdAt" db:"created_at"`
+	UpdatedAt         time.Time      `json:"updatedAt" db:"updated_at"`
+	Items             []OrderItem    `json:"items,omitempty" db:"-"`
+	Payments          []PaymentRecord `json:"payments,omitempty" db:"-"`
 }
 
 // --- OrderItem Struct ---
@@ -113,7 +111,6 @@ func ToNullUUID(id uuid.UUID) NullUUID {
 }
 
 func (n NullUUID) Ptr() *uuid.UUID {
-	// The underlying type is sql.Null[uuid.UUID], so we access V directly
 	if n.Valid {
 		return &n.V
 	}

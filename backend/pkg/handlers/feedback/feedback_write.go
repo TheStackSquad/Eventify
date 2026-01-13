@@ -1,5 +1,4 @@
 // backend/pkg/handlers/feedback/feedback_write.go
-
 package feedback
 
 import (
@@ -15,38 +14,104 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// ErrorResponse represents a standardized error response
+type ErrorResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+	Details string `json:"details,omitempty"`
+}
+
+// SuccessResponse represents a standardized success response
+type SuccessResponse struct {
+	Status string      `json:"status"`
+	Data   interface{} `json:"data"`
+}
+
 // CreateFeedback handles user submissions of feedback (POST /api/v1/feedback)
 func (h *FeedbackHandler) CreateFeedback(c *gin.Context) {
-	var req models.CreateFeedbackRequest
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
+	// Parse and validate request
+	var req models.CreateFeedbackRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid request format"})
+		log.Warn().Err(err).Msg("Failed to bind CreateFeedbackRequest")
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Status:  "error",
+			Message: "Invalid request format",
+			Details: err.Error(),
+		})
 		return
 	}
 
-	// 1. Get User/Guest ID from context
+	log.Debug().
+		Str("name", req.Name).
+		Str("email", req.Email).
+		Str("type", string(req.Type)).
+		Bool("has_image", req.ImageURL.Valid).
+		Msg("Received feedback creation request")
+
+	// Get User ID from context (set by OptionalAuth middleware)
 	var userID *uuid.UUID
 	if idVal, exists := c.Get("user_id"); exists {
 		if id, ok := idVal.(uuid.UUID); ok {
 			userID = &id
+			log.Debug().Str("user_id", id.String()).Msg("Request from authenticated user")
 		}
 	}
-	// Assuming Guest ID is handled by a previous middleware and retrieved from cookies or context
-	guestID, _ := c.Cookie("guest_id") // Adjust if you store guestID in context
 
-	// 2. Call service layer
-	response, err := h.service.CreateFeedback(ctx, req, userID, guestID)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to create feedback")
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to submit feedback"})
+	// Get Guest ID from cookie (set by GuestMiddleware)
+	guestID, err := c.Cookie("guest_id")
+	if err != nil || guestID == "" {
+		log.Warn().Err(err).Msg("No guest_id cookie found")
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Status:  "error",
+			Message: "Guest session required",
+		})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"status": "success",
-		"data":   response,
+	// Call service layer to create feedback
+	response, err := h.service.CreateFeedback(ctx, req, userID, guestID)
+	if err != nil {
+		// Check for validation errors
+		var validationErr models.ValidationError
+		if errors.As(err, &validationErr) {
+			log.Warn().Err(err).Msg("Validation error in feedback creation")
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Status:  "error",
+				Message: validationErr.Error(),
+			})
+			return
+		}
+
+		// Check for context errors
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Error().Err(err).Msg("Request timeout creating feedback")
+			c.JSON(http.StatusRequestTimeout, ErrorResponse{
+				Status:  "error",
+				Message: "Request timeout",
+			})
+			return
+		}
+
+		// Generic internal error
+		log.Error().Err(err).Msg("Failed to create feedback")
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Status:  "error",
+			Message: "Failed to submit feedback. Please try again later.",
+		})
+		return
+	}
+
+	log.Info().
+		Str("feedback_id", response.ID).
+		Str("email", response.Email).
+		Msg("Feedback created successfully")
+
+	c.JSON(http.StatusCreated, SuccessResponse{
+		Status: "success",
+		Data:   response,
 	})
 }
 

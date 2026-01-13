@@ -1,35 +1,16 @@
 // src/components/homepage/ticketElements.js
 
 import React, { useState, useMemo } from "react";
+import { formatPrice } from "@/utils/currency";
 
-export const formatPrice = (price) => {
-  if (price === 0 || price === null) return "FREE";
-  // Add null check for price
-  if (typeof price !== "number") return "Price TBD";
-
-  return `₦${price.toLocaleString("en-NG", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  })}`;
-};
-
-// Safe version of getStartingPrice
 const getStartingPrice = (tickets) => {
-  // Ensure tickets is an array
   const safeTickets = Array.isArray(tickets) ? tickets : [];
-
-  // Filter available tickets safely
   const availableTickets = safeTickets.filter((t) => t && t.available);
-
   if (availableTickets.length === 0) return null;
-
-  // Safely extract prices
   const prices = availableTickets
     .map((t) => t.price)
     .filter((price) => typeof price === "number");
-
   if (prices.length === 0) return null;
-
   const minPrice = Math.min(...prices);
   return minPrice;
 };
@@ -38,16 +19,14 @@ export const TicketSelector = ({ event }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
 
-  // Safely handle event data
-const safeTickets = useMemo(() => {
+  const safeTickets = useMemo(() => {
     const safeEvent = event || {};
     return Array.isArray(safeEvent.tickets) ? safeEvent.tickets : [];
-  }, [event]); // Dependency is 'event'
+  }, [event]);
 
-  // Memoize calculations with safe data
   const startingPrice = useMemo(
     () => getStartingPrice(safeTickets),
-    [safeTickets] // safeTickets is now stable when event doesn't change
+    [safeTickets]
   );
 
   const hasMultipleTickets = safeTickets.length > 1;
@@ -57,7 +36,6 @@ const safeTickets = useMemo(() => {
 
   return (
     <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-      {/* Starting Price Display (Toggle button) */}
       <div
         className={`flex items-center justify-between ${
           hasMultipleTickets ? "cursor-pointer" : ""
@@ -109,7 +87,6 @@ const safeTickets = useMemo(() => {
         )}
       </div>
 
-      {/* Expanded Ticket Options */}
       {isExpanded && hasMultipleTickets && (
         <div className="space-y-2 pt-2 border-t border-gray-200 animate-in slide-in-from-top duration-300">
           {safeTickets.map((ticket, idx) => (
@@ -168,7 +145,7 @@ const safeTickets = useMemo(() => {
                     : "text-gray-900"
                 }`}
               >
-                {formatPrice(ticket?.price)}
+                {formatPriceDisplay(ticket?.price)}
               </p>
             </button>
           ))}

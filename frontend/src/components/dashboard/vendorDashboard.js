@@ -6,7 +6,7 @@ import React from "react";
 import { useDispatch, useSelector } from "react-redux";
 
 // REMOVED: VendorListingView import
-import VendorRegistrationView from "@/components/vendorUI/vendorRegistrationView";
+import VendorRegistrationView from "@/components/vendorUI/components/form/vendorRegistrationView";
 
 // NOTE: Renamed the export to better reflect its purpose as a hub/management view
 export default function VendorManagementView({ activeView }) {

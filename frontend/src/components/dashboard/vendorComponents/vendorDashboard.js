@@ -4,7 +4,7 @@
 import React from "react";
 import { useAuth } from "@/utils/hooks/useAuth";
 import LoadingSpinner from "@/components/common/loading/loadingSpinner";
-import VendorRegistrationView from "@/components/vendorUI/vendorRegistrationView";
+import VendorRegistrationView from "@/components/vendorUI/components/form/vendorRegistrationView";
 import VendorAnalyticsDashboard from "./vendorAnalytics/vendorAnalyticsDashboard";
 
 export default function VendorManagementView({ activeView }) {

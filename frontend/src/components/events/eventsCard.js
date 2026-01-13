@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import { useLikeEvent } from "@/utils/hooks/useEvents";
+import { formatPrice } from "@/utils/currency";
 
 export default function EventCard({ event }) {
   const { mutate: toggleLike, isPending } = useLikeEvent();
@@ -14,10 +15,9 @@ export default function EventCard({ event }) {
     return null;
   }
 
-  
   console.log("📦 EventCard received:", event);
   const isFavorited = event.isLikedByUser || false;
-  const likeCount = event.likeCount || 0;   
+  const likeCount = event.likeCount || 0;
 
   console.log("❤️ likeCount:", likeCount);
   console.log("💚 isFavorited:", isFavorited);
@@ -106,7 +106,7 @@ export default function EventCard({ event }) {
             {category}
           </p>
           <p className="text-xl font-extrabold text-green-600 font-header">
-            {isFree ? "FREE" : `₦${price.toLocaleString()}`}
+            {isFree ? "FREE" : formatPrice((price))}
           </p>
         </div>
 

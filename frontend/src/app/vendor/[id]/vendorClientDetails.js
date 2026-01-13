@@ -2,23 +2,11 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useDispatch, useSelector } from "react-redux";
-
-import {
-  clearSelectedVendor,
-  clearProfileError,
-} from "../../../redux/reducer/vendorReducer";
-import { getVendorProfile } from "../../../redux/action/vendorAction";
-import { STATUS } from "../../../utils/constants/globalConstants";
-import {
-  selectSelectedVendor,
-  selectProfileStatus,
-  selectProfileError,
-} from "../../../redux/selectors/vendorSelectors";
+import React from "react";
+import { useVendorProfile } from "@/utils/hooks/useVendorData";
 import ContactVendorButton from "../../../components/common/contactVendorButton";
 import RateVendor from "../../../components/common/rateVendor";
-import VendorProfileDetail from "../../../components/vendorUI/vendorProfileDetail";
+import VendorProfileDetail from "../../../components/vendorUI/vendorProfileWrapper/vendorProfileDetail";
 import LoadingSpinner from "../../../components/common/loading/loadingSpinner";
 
 const VendorClientDetails = ({
@@ -27,71 +15,32 @@ const VendorClientDetails = ({
   slug,
   initialError = null,
 }) => {
-  const dispatch = useDispatch();
+  const {
+    data: vendor,
+    isLoading: isClientLoading,
+    isError: isClientError,
+    error: clientError,
+    refetch,
+    isFetching,
+  } = useVendorProfile(vendorId, {
+    initialData: vendorData,
+    enabled: !!vendorId,
+    staleTime: 1000 * 60 * 5,
+  });
 
-  // The core vendor data is now managed here.
-  // We use server-fetched data as the initial state.
-  const [vendor, setVendor] = useState(vendorData);
+  const currentError = isClientError ? clientError : initialError;
 
-  // Redux state for client-side actions (e.g., manual retry, rating submission status)
-  const selectedVendor = useSelector(selectSelectedVendor);
-  const status = useSelector(selectProfileStatus);
-  const error = useSelector(selectProfileError);
-
-  // Combine server error with client error logic
-  const currentError = error || initialError;
-
-  // Sync Redux changes to local state after a client-side action (like a manual retry)
-  useEffect(() => {
-    if (selectedVendor && selectedVendor.id === vendorId) {
-      console.log("🔄 Syncing Redux vendor to local state after client action");
-      setVendor(selectedVendor);
-    }
-  }, [selectedVendor, vendorId]);
-
-  // Show error toast when client-side manual fetch fails
-  useEffect(() => {
-    if (status === STATUS.FAILED && currentError) {
-      // Using a simple console log as a fallback if toastAlert fails to resolve
-      console.error(
-        "Client Fetch Error:",
-        currentError.message || "Failed to load vendor profile"
-      );
-      // toastAlert.error(currentError.message || "Failed to load vendor profile");
-    }
-  }, [status, currentError]);
-
-  // Cleanup on component unmount
-  useEffect(() => {
-    return () => {
-      dispatch(clearSelectedVendor());
-      dispatch(clearProfileError());
-    };
-  }, [dispatch]);
-
-  // Handler for manual retry (Client-side fetch)
   const handleRetry = () => {
-    console.log(
-      "🔄 Manual retry - fetching from server (via client action)..."
-    );
-    // toastAlert.info("Reloading profile...");
-    dispatch(clearProfileError());
-    dispatch(getVendorProfile(vendorId));
+    refetch();
   };
 
   const handleRatingSubmit = (rating, reviewText) => {
-    // Example: Dispatch the rating submission action
-    // dispatch(submitRating({ vendorId, rating, review: reviewText }));
     console.log(
       `Submitting rating for ${vendorId}: ${rating} stars, "${reviewText}"`
     );
   };
 
-  // --- Conditional Rendering for Client ---
-
-  // Loading state for client-side retries
-  if (status === STATUS.LOADING) {
-    // Use a less aggressive spinner for client-side actions
+  if (isClientLoading || isFetching) {
     return (
       <LoadingSpinner
         message="Loading vendor profile..."
@@ -100,8 +49,7 @@ const VendorClientDetails = ({
     );
   }
 
-  // No data found - show error with retry option
-  if (!vendor) {
+  if (!vendor || currentError) {
     return (
       <ErrorState
         error={
@@ -111,32 +59,22 @@ const VendorClientDetails = ({
         }
         vendorId={vendorId}
         slug={slug}
-        isLoading={status === STATUS.LOADING}
+        isLoading={isClientLoading}
         onRetry={handleRetry}
       />
     );
   }
 
-  // Success - render vendor profile layout (Optimized for Lighthouse)
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <main className="max-w-7xl mx-auto py-8 px-4 md:py-12 md:px-8 lg:px-12">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Main Content Area */}
           <div className="lg:col-span-3">
-            {/* LCP Optimization: Ensure VendorProfileDetail loads the main content
-                          above the fold efficiently.
-                        */}
             <VendorProfileDetail vendor={vendor} />
           </div>
-
-          {/* Sidebar Area */}
           <aside className="lg:col-span-1 space-y-6">
             <div className="sticky top-20 space-y-6">
-              {/* Contact Card */}
               <ContactCard vendor={vendor} vendorId={vendorId} />
-
-              {/* Rating Card */}
               <RatingCard
                 vendor={vendor}
                 vendorId={vendorId}
@@ -152,9 +90,6 @@ const VendorClientDetails = ({
 
 export default VendorClientDetails;
 
-// --- [ SUPPORTING CLIENT COMPONENTS ] ---
-
-// These components remain client components because they use window.history or client-side props
 const ErrorState = ({ error, vendorId, slug, isLoading, onRetry }) => {
   const isNotFound = error?.status === "NOT_FOUND";
 

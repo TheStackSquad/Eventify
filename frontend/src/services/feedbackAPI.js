@@ -1,27 +1,34 @@
-//frontend/src/services/feedbackAPI.js
+// frontend/src/services/feedbackAPI.js
+import axios from "@/axiosConfig/axios";
 
-import axios, { ENDPOINTS } from "@/axiosConfig/axios";
+const FEEDBACK_URL = "/api/v1/feedback"; // Backend endpoint
 
-// Define the base URL for the admin feedback API endpoints
-const API_BASE_URL = ENDPOINTS.ADMIN_FEEDBACK;
+export async function createFeedbackAPI(feedbackData) {
+  // Backend expects: { name, email, type, message, imageUrl }
+  const payload = {
+    name: feedbackData.name,
+    email: feedbackData.email,
+    type: feedbackData.type,
+    message: feedbackData.message,
+    imageUrl: feedbackData.imageUrl || "", // Empty string if no image
+  };
 
-/**
- * Fetches all feedback submissions from the backend (GET /api/admin/feedback).
- * @returns {Promise<Array>} A promise that resolves to a list of feedback objects.
- */
-export async function fetchAllFeedback() {
-  // This assumes the API response structure is { data: { feedbackList: [...] } }
-  // Adjust based on your actual backend response structure.
-  const response = await axios.get(API_BASE_URL);
-  return response.data.feedbackList || response.data;
+  console.log("[createFeedbackAPI] Sending to backend:", {
+    endpoint: FEEDBACK_URL,
+    payload: payload,
+  });
+
+  const response = await axios.post(FEEDBACK_URL, payload);
+  return response.data;
 }
 
-/**
- * Deletes a specific feedback submission (DELETE /api/admin/feedback/:feedbackId).
- * @param {string} feedbackId - The ID of the feedback to delete.
- * @returns {Promise<Object>} A promise that resolves to the success response data.
- */
+// Optional: Admin endpoints
+export async function fetchAllFeedback() {
+  const response = await axios.get("/api/v1/admin/feedback"); // Adjust if different
+  return response.data?.data || response.data;
+}
+
 export async function deleteFeedback(feedbackId) {
-  const response = await axios.delete(`${API_BASE_URL}/${feedbackId}`);
+  const response = await axios.delete(`/api/v1/admin/feedback/${feedbackId}`);
   return response.data;
 }

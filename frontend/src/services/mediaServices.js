@@ -123,3 +123,37 @@ export const uploadToBlob = async (file, endpoint = "vendor-image") => {
   }
   return await response.json();
 };
+
+
+export const uploadToFeedbackBlob = async (file, endpoint = "feedback-image") => {
+  const formData = new FormData();
+  formData.append("file", file);
+  
+  console.log("[uploadToBlob] Uploading to:", `/api/${endpoint}`);
+  
+  try {
+    const response = await fetch(`/api/${endpoint}`, {
+      method: "POST",
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[uploadToBlob] API Error:", errorText);
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: `Server error: ${response.status}` };
+      }
+      throw new Error(errorData.error || `Failed to upload image (${response.status})`);
+    }
+    
+    const data = await response.json();
+    console.log("[uploadToBlob] Upload success:", data);
+    return data;
+  } catch (error) {
+    console.error("[uploadToBlob] Network error:", error);
+    throw new Error(`Upload failed: ${error.message}`);
+  }
+};

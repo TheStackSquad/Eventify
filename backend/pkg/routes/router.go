@@ -1,5 +1,4 @@
 // backend/pkg/routes/router.go
-
 package routes
 
 import (
@@ -16,6 +15,7 @@ import (
 	handlervendor "eventify/backend/pkg/handlers/vendor"
 
 	repoauth "eventify/backend/pkg/repository/auth"
+	servicejwt "eventify/backend/pkg/services/jwt"
 
 	"eventify/backend/pkg/middleware"
 	"eventify/backend/pkg/utils"
@@ -25,6 +25,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
+
+const serviceName = "router"
 
 func ConfigureRouter(
 	authHandler *handlerauth.AuthHandler,
@@ -37,29 +39,26 @@ func ConfigureRouter(
 	authRepo repoauth.AuthRepository,
 	analyticsHandler *handleranalytics.AnalyticsHandler,
 	vendorAnalyticsHandler *handlervendor.VendorAnalyticsHandler,
+	jwtService *servicejwt.JWTService,
 ) *gin.Engine {
+
+	utils.LogInfo(serviceName, "configure", "Initializing router configuration")
 
 	router := gin.New()
 	router.RedirectTrailingSlash = false
 
-	// --- GLOBAL MIDDLEWARE ---
 	router.Use(gin.Recovery())
 	router.Use(requestLogger())
 	router.Use(ginzerolog.SetLogger())
 	router.Use(corsConfig())
 
-	// Log rate limiting configuration on startup
 	log.Info().
 		Bool("skip_localhost", utils.SkipLocalhostRateLimit).
 		Msg("🔒 Rate limiting configured")
 
-	// 1. Establish Identity First
 	router.Use(middleware.GuestMiddleware())
-
-	// 2. Apply a General Public Rate Limit (prevent scraping/DDoS)
 	router.Use(middleware.RateLimit(utils.PublicLimiter))
 
-	// Health check endpoints
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "Eventify API is running",
@@ -76,7 +75,6 @@ func ConfigureRouter(
 		})
 	})
 
-	// --- AUTH ROUTES (Strict Limiting) ---
 	auth := router.Group("/auth")
 	auth.Use(middleware.RateLimit(utils.AuthLimiter))
 	{
@@ -84,29 +82,26 @@ func ConfigureRouter(
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/refresh", authHandler.RefreshToken)
 		auth.POST("/logout", authHandler.Logout)
-		auth.GET("/me", middleware.AuthMiddleware(), authHandler.GetCurrentUser)
+		auth.GET("/me", middleware.AuthMiddleware(jwtService), authHandler.GetCurrentUser)
 		auth.POST("/forgot-password", authHandler.ForgotPassword)
 		auth.GET("/verify-reset-token", authHandler.VerifyResetToken)
 		auth.POST("/reset-password", authHandler.ResetPassword)
 	}
 
-	// --- PAYMENT & ORDERS ---
 	paymentRoutes := router.Group("/api/payments")
 	{
 		paymentRoutes.GET("/verify/:reference", orderHandler.VerifyPayment)
 	}
 
 	orderRoutes := router.Group("/api/orders")
-	orderRoutes.Use(middleware.RateLimit(utils.WriteLimiter)) // Prevent order initialization spam
+	orderRoutes.Use(middleware.RateLimit(utils.WriteLimiter))
 	{
-		orderRoutes.Use(middleware.OptionalAuth())
+		orderRoutes.Use(middleware.OptionalAuth(jwtService))
 		orderRoutes.POST("/initialize", orderHandler.InitializeOrder)
 	}
 
-	// Webhook (No rate limit - handled by Paystack signature verification)
 	router.POST("/api/webhooks/paystack", orderHandler.HandlePaystackWebhook)
 
-	// --- VENDOR ROUTES ---
 	vendorPublic := router.Group("/api/v1/vendors")
 	{
 		vendorPublic.GET("", vendorHandler.ListVendors)
@@ -114,38 +109,35 @@ func ConfigureRouter(
 	}
 
 	vendorProtected := router.Group("/api/v1/vendors")
-	vendorProtected.Use(middleware.AuthMiddleware(), middleware.RateLimit(utils.WriteLimiter))
+	vendorProtected.Use(middleware.AuthMiddleware(jwtService), middleware.RateLimit(utils.WriteLimiter))
 	{
 		vendorProtected.POST("/register", vendorHandler.RegisterVendor)
 	}
 
 	vendorAnalytics := router.Group("/api/v1/vendors/:id/analytics")
-	vendorAnalytics.Use(middleware.AuthMiddleware())
+	vendorAnalytics.Use(middleware.AuthMiddleware(jwtService))
 	{
 		vendorAnalytics.GET("/overview", vendorAnalyticsHandler.GetVendorAnalytics)
 	}
 
-	// --- REVIEWS & INQUIRIES ---
-	RegisterReviewRoutes(router, reviewHandler)
-	RegisterInquiryRoutes(router, inquiryHandler)
+	RegisterReviewRoutes(router, reviewHandler, jwtService)
+	RegisterInquiryRoutes(router, inquiryHandler, jwtService)
 
-	// --- FEEDBACK (Write Limited) ---
 	router.POST("/api/v1/feedback", middleware.RateLimit(utils.WriteLimiter), feedbackHandler.CreateFeedback)
 
-	// --- EVENT ROUTES ---
 	publicEvents := router.Group("/events")
 	{
 		publicEvents.GET("", eventHandler.GetAllEvents)
 		publicEvents.GET("/:eventId", eventHandler.GetPublicEventByID)
 		publicEvents.POST("/:eventId/like",
 			middleware.RateLimit(utils.WriteLimiter),
-			middleware.OptionalAuth(),
+			middleware.OptionalAuth(jwtService),
 			eventHandler.ToggleLike,
 		)
 	}
 
 	protectedEvents := router.Group("/api/events")
-	protectedEvents.Use(middleware.AuthMiddleware())
+	protectedEvents.Use(middleware.AuthMiddleware(jwtService))
 	{
 		protectedEvents.POST("/create", middleware.RateLimit(utils.WriteLimiter), eventHandler.CreateEvent)
 		protectedEvents.GET("/my-events", eventHandler.GetUserEvents)
@@ -155,16 +147,27 @@ func ConfigureRouter(
 		protectedEvents.GET("/:eventId/analytics", analyticsHandler.FetchEventAnalytics)
 	}
 
-	// --- ADMIN ROUTES ---
-	setupAdminRoutes(router, authHandler, eventHandler, vendorHandler, reviewHandler, inquiryHandler, feedbackHandler, authRepo)
+	setupAdminRoutes(router, authHandler, eventHandler, vendorHandler, reviewHandler, inquiryHandler, feedbackHandler, authRepo, jwtService)
 
+	utils.LogSuccess(serviceName, "configure", "Router configuration completed")
 	printRegisteredRoutes(router)
+	
 	return router
 }
 
-func setupAdminRoutes(r *gin.Engine, ah *handlerauth.AuthHandler, eh *handlerevent.EventHandler, vh *handlervendor.VendorHandler, rh *handlerreview.ReviewHandler, ih *handlerinquiries.InquiryHandler, fh *handlerfeedback.FeedbackHandler, repo repoauth.AuthRepository) {
+func setupAdminRoutes(
+	r *gin.Engine,
+	ah *handlerauth.AuthHandler,
+	eh *handlerevent.EventHandler,
+	vh *handlervendor.VendorHandler,
+	rh *handlerreview.ReviewHandler,
+	ih *handlerinquiries.InquiryHandler,
+	fh *handlerfeedback.FeedbackHandler,
+	repo repoauth.AuthRepository,
+	jwtService *servicejwt.JWTService,
+) {
 	admin := r.Group("/api/v1/admin")
-	admin.Use(middleware.AuthMiddleware(), middleware.AdminMiddleware(repo))
+	admin.Use(middleware.AuthMiddleware(jwtService), middleware.AdminMiddleware(repo))
 	{
 		admin.PUT("/vendors/:id/verify/identity", vh.ToggleIdentityVerification)
 		admin.GET("/feedback", fh.GetAllFeedback)
@@ -172,25 +175,25 @@ func setupAdminRoutes(r *gin.Engine, ah *handlerauth.AuthHandler, eh *handlereve
 	}
 }
 
-func RegisterReviewRoutes(r *gin.Engine, reviewHandler *handlerreview.ReviewHandler) {
+func RegisterReviewRoutes(r *gin.Engine, reviewHandler *handlerreview.ReviewHandler, jwtService *servicejwt.JWTService) {
 	v1 := r.Group("/api/v1/vendors/:id/reviews")
 	{
 		v1.GET("", reviewHandler.GetVendorReviews)
 		v1.POST("",
 			middleware.RateLimit(utils.WriteLimiter),
-			middleware.OptionalAuth(),
+			middleware.OptionalAuth(jwtService),
 			reviewHandler.CreateReview,
 		)
 	}
 }
 
-func RegisterInquiryRoutes(r *gin.Engine, inquiryHandler *handlerinquiries.InquiryHandler) {
+func RegisterInquiryRoutes(r *gin.Engine, inquiryHandler *handlerinquiries.InquiryHandler, jwtService *servicejwt.JWTService) {
 	inquiries := r.Group("/api/v1/inquiries")
 	{
 		inquiries.POST("/vendor/:vendor_id",
 			middleware.RateLimit(utils.WriteLimiter),
 			middleware.GuestMiddleware(),
-			middleware.OptionalAuth(),
+			middleware.OptionalAuth(jwtService),
 			inquiryHandler.CreateInquiry,
 		)
 		inquiries.GET("/vendor/:vendor_id", inquiryHandler.GetVendorInquiries)
@@ -227,8 +230,8 @@ func corsConfig() gin.HandlerFunc {
 }
 
 func printRegisteredRoutes(router *gin.Engine) {
-	log.Info().Msg("🔍 Registered Routes:")
+	utils.LogDebug(serviceName, "routes", "Registered routes:")
 	for _, route := range router.Routes() {
-		log.Info().Str("method", route.Method).Str("path", route.Path).Msg("Route")
+		log.Debug().Str("method", route.Method).Str("path", route.Path).Msg("  Route")
 	}
 }

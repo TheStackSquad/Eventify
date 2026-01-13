@@ -1,17 +1,15 @@
 // frontend/src/app/layout.js
-
 import { Plus_Jakarta_Sans, Onest } from "next/font/google";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import Header from "@/components/common/Header";
 import { CartProvider } from "@/context/cartContext";
 import ToastProvider from "@/components/common/toast/toastProvider";
-import ReduxProvider from "@/provider/reduxProvider";
 import ReactQueryProvider from "@/provider/reactQueryProvider";
 import SessionProvider from "@/provider/sessionProvider";
-import GuestIdInitializer from "@/utils/hooks/guestIdInitializer";
+import PaystackScriptProvider from "@/provider/paystackScriptProvider";
 import "./globals.css";
 
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-
+// Font configurations
 const headerFont = Plus_Jakarta_Sans({
   subsets: ["latin"],
   display: "swap",
@@ -24,12 +22,66 @@ const bodyFont = Onest({
   variable: "--font-onest",
 });
 
+// SEO metadata
 export const metadata = {
-  title: "Eventify | Discover Events, Buy Tickets, & Promote Your Show",
+  metadataBase: new URL(
+    process.env.NODE_ENV === "development"
+      ? "http://localhost:3000"
+      : "https://eventify.com"
+  ),
+  title: {
+    default: "Eventify | Discover Events & Professional Vendors",
+    template: "%s | Eventify",
+  },
   description:
-    "Eventify is the premier platform for event discovery, secure ticket purchasing, and seamless show promotion. List your event, sell tickets, and reach a global audience.",
+    "Eventify is the premier platform for event discovery, professional vendor booking, and secure ticket purchasing. Find decorators, caterers, and photographers, or list your show and reach a global audience.",
+  keywords: [
+    "event vendors",
+    "event planners",
+    "buy tickets",
+    "decorators",
+    "caterers",
+    "photographers",
+    "Nigeria events",
+    "Lagos vendors",
+    "event services",
+    "show promotion",
+  ],
+  openGraph: {
+    title: "Eventify | Discover Events, Buy Tickets, & Book Vendors",
+    description:
+      "Browse verified event vendors and discover the best shows in Nigeria. All-in-one platform for event hosts and guests.",
+    url: "https://eventify.com",
+    siteName: "Eventify",
+    locale: "en_NG",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Eventify | Discover Events & Professional Vendors",
+    description:
+      "Find verified decorators, caterers, and photographers or promote your next big show.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
+
+// Structured data for SEO
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "WebApplication",
@@ -54,34 +106,32 @@ const structuredData = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${headerFont.variable} ${bodyFont.variable}`}>
-      <body>
+      <head>
+        {/* Preconnect to Paystack for faster script loading */}
+        <link rel="preconnect" href="https://js.paystack.co" />
+        <link rel="dns-prefetch" href="https://js.paystack.co" />
+
+        {/* Structured data for SEO */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
-
-        {/* 
-          PROVIDER HIERARCHY (Bottom-Up):
-          1. ReduxProvider - Will be removed after full migration
-          2. ReactQueryProvider - NEW: React Query for server state
-          3. SessionProvider - Auth Context (uses React Query hooks)
-          4. CartProvider - Cart state
-        */}
-        <ReduxProvider>
-          <ReactQueryProvider>
-            <ReactQueryDevtools initialIsOpen={false} />;
-            <GuestIdInitializer />
-            <SessionProvider>
-              <CartProvider>
+      </head>
+      <body>
+        <ReactQueryProvider>
+          <ReactQueryDevtools initialIsOpen={false} />
+          <SessionProvider>
+            <CartProvider>
+              <PaystackScriptProvider>
                 <Header />
                 <main id="main-content" className="min-h-screen">
                   {children}
                 </main>
                 <ToastProvider />
-              </CartProvider>
-            </SessionProvider>
-          </ReactQueryProvider>
-        </ReduxProvider>
+              </PaystackScriptProvider>
+            </CartProvider>
+          </SessionProvider>
+        </ReactQueryProvider>
       </body>
     </html>
   );

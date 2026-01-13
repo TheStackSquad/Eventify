@@ -1,12 +1,11 @@
 // frontend/src/app/events/[id]/ticketPurchaseSection.js
-
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
 import { useCart } from "@/context/cartContext";
 import { useRouter } from "next/navigation";
 import { ShoppingCart, CheckCircle, Ticket, ChevronDown } from "lucide-react";
-import { formatPriceDisplay, normalizePrice } from "@/utils/currency";
+import { koboToNaira, formatCurrency } from "@/utils/currency";
 
 // Ticket purchase component - handles tier selection and cart actions
 const TicketPurchaseSection = ({ event }) => {
@@ -21,6 +20,20 @@ const TicketPurchaseSection = ({ event }) => {
   const [isAdded, setIsAdded] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
+  // Helper to format price from kobo to naira
+  const formatPrice = useCallback((priceInKobo) => {
+    if (priceInKobo === 0) return "FREE";
+    if (
+      priceInKobo === null ||
+      typeof priceInKobo !== "number" ||
+      priceInKobo < 0
+    )
+      return "Price TBD";
+
+    const priceInNaira = koboToNaira(priceInKobo);
+    return formatCurrency(priceInNaira);
+  }, []);
+
   // Memoize selected ticket to prevent recalculation
   const selectedTier = useMemo(() => {
     return event.tickets.find((t) => t.tierName === selectedTierId);
@@ -31,11 +44,9 @@ const TicketPurchaseSection = ({ event }) => {
     return selectedTier && selectedTier.quantity < 1;
   }, [selectedTier]);
 
-  // Memoize total price calculation (with normalization)
+  // Memoize total price calculation (stays in kobo)
   const totalPrice = useMemo(() => {
-    if (!selectedTier) return 0;
-    const normalizedPrice = normalizePrice(selectedTier.price);
-    return normalizedPrice * quantity;
+    return selectedTier ? selectedTier.price * quantity : 0;
   }, [selectedTier, quantity]);
 
   // Add to cart handler with user feedback
@@ -47,7 +58,7 @@ const TicketPurchaseSection = ({ event }) => {
       tierId: selectedTier.tierName,
       eventTitle: event.eventTitle,
       tierName: selectedTier.tierName,
-      price: selectedTier.price, // Keep original (kobo) for backend
+      price: selectedTier.price, // Keep in kobo
       eventImage: event.eventImage,
       maxQuantity: selectedTier.quantity,
     };
@@ -158,7 +169,7 @@ const TicketPurchaseSection = ({ event }) => {
                         {selectedTier.tierName}
                       </span>
                       <span className="text-red-600 font-semibold whitespace-nowrap">
-                        {formatPriceDisplay(selectedTier.price)}
+                        {formatPrice(selectedTier.price)}
                       </span>
                     </span>
                   )}
@@ -208,7 +219,7 @@ const TicketPurchaseSection = ({ event }) => {
                             </div>
                             <div className="flex items-center gap-3 flex-shrink-0">
                               <span className="text-red-600 font-semibold whitespace-nowrap">
-                                {formatPriceDisplay(tier.price)}
+                                {formatPrice(tier.price)}
                               </span>
                               <span
                                 className={`text-xs whitespace-nowrap ${
@@ -306,7 +317,7 @@ const TicketPurchaseSection = ({ event }) => {
             <div className="flex justify-between items-center gap-2">
               <span className="text-sm text-gray-600">Price per ticket:</span>
               <span className="text-sm font-medium text-gray-900">
-                {formatPriceDisplay(selectedTier.price)}
+                {formatPrice(selectedTier.price)}
               </span>
             </div>
             <div className="flex justify-between items-center gap-2">
@@ -322,7 +333,7 @@ const TicketPurchaseSection = ({ event }) => {
               Total:
             </span>
             <span className="text-xl sm:text-2xl font-bold text-red-600">
-              {formatPriceDisplay(totalPrice)}
+              {formatPrice(totalPrice)}
             </span>
           </div>
 

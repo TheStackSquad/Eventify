@@ -1,13 +1,12 @@
-// backend/pkg/handlers/auth/auth_session.go
-
 package auth
 
 import (
 	"context"
-	"eventify/backend/pkg/models"
-	"eventify/backend/pkg/utils"
 	"net/http"
 	"time"
+
+	"eventify/backend/pkg/models"
+	//repoauth "eventify/backend/pkg/repository/auth"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -15,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Login handles user authentication
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req models.LoginRequest
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
@@ -31,8 +31,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	access, _ := h.JWTService.GenerateAccessJWT(user.ID.String())
-	refresh, _ := h.JWTService.GenerateRefreshJWT(user.ID.String())
+	// ✅ Fixed: Use new method names from JWT service
+	access, _ := h.JWTService.GenerateAccessToken(user.ID.String())    // Changed from GenerateAccessJWT
+	refresh, _ := h.JWTService.GenerateRefreshToken(user.ID.String()) // Changed from GenerateRefreshJWT
 
 	h.RefreshTokenRepo.SaveRefreshToken(ctx, user.ID, refresh, RefreshMaxAge)
 	setAuthCookies(c, access, refresh)
@@ -47,7 +48,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 }
 
-//Token rotation + Absolute session timeout
+// RefreshToken handles token rotation with absolute session timeout
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
@@ -58,8 +59,8 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// Validate refresh token JWT
-	claims, err := h.JWTService.ValidateTokenType(oldRefreshToken, utils.TokenTypeRefresh)
+	// ✅ Fixed: Use ValidateRefreshToken instead of ValidateTokenType with constant
+	claims, err := h.JWTService.ValidateRefreshToken(oldRefreshToken) // Changed from ValidateTokenType
 	if err != nil {
 		log.Debug().Err(err).Msg("Auth: Refresh token expired or invalid")
 		clearAuthCookies(c)
@@ -74,7 +75,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// ✅ WEEK 1 ENHANCEMENT: Validate refresh token exists in DB and isn't revoked
+	// Validate refresh token exists in DB and isn't revoked
 	valid, err := h.RefreshTokenRepo.ValidateRefreshToken(ctx, userID, oldRefreshToken)
 	if err != nil || !valid {
 		log.Debug().Msg("Auth: Refresh token not found or revoked in database")
@@ -83,8 +84,8 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// ✅ WEEK 2 ENHANCEMENT: Check absolute session timeout
-	tokenAge := time.Since(time.Unix(claims.IssuedAt, 0))
+	// Check absolute session timeout
+	tokenAge := time.Since(claims.IssuedAt.Time)
 	if tokenAge > AbsoluteSessionTimeout*time.Second {
 		log.Info().
 			Str("user_id", userID.String()[:8]).
@@ -102,15 +103,16 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// ✅ WEEK 1 ENHANCEMENT: Generate NEW tokens (rotation for security)
-	newAccessToken, err := h.JWTService.GenerateAccessJWT(claims.UserID)
+	// Generate NEW tokens (rotation for security)
+	// ✅ Fixed: Use new method names
+	newAccessToken, err := h.JWTService.GenerateAccessToken(claims.UserID)    // Changed from GenerateAccessJWT
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate new access token")
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to refresh session."})
 		return
 	}
 
-	newRefreshToken, err := h.JWTService.GenerateRefreshJWT(claims.UserID)
+	newRefreshToken, err := h.JWTService.GenerateRefreshToken(claims.UserID) // Changed from GenerateRefreshJWT
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to generate new refresh token")
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to refresh session."})
@@ -141,6 +143,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Session refreshed successfully"})
 }
 
+// Logout handles user session termination
 func (h *AuthHandler) Logout(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()

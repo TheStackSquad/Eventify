@@ -1,14 +1,12 @@
 // frontend/src/axiosConfig/interceptorService.js
-
-import { API_ENDPOINTS } from "@/utils/constants/globalConstants";
 import {
   getAccessTokenFromCookies,
   getRefreshTokenFromCookies,
   scheduleTokenRefresh,
   clearRefreshTimer,
-} from "./tokenUtils";
+} from "./tokenService";
 
-// --- Token refresh queue management ---
+// === TOKEN REFRESH QUEUE ===
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -23,7 +21,7 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-
+// === RESPONSE INTERCEPTOR ===
 export const createResponseInterceptor = (backendInstance) => {
   return async (error) => {
     const originalRequest = error.config;
@@ -62,13 +60,12 @@ export const createResponseInterceptor = (backendInstance) => {
 
     try {
       console.log("Attempting token refresh");
-      // const refreshToken = getRefreshTokenFromCookies();
+      const refreshToken = getRefreshTokenFromCookies();
 
-      // if (!refreshToken) {
-      //   throw new Error("No refresh token found");
-      // }
+      if (!refreshToken) {
+        throw new Error("No refresh token found");
+      }
 
-      // NOTE: Using the instance passed to the interceptor
       await backendInstance.post(API_ENDPOINTS.AUTH.REFRESH, {
         refresh_token: refreshToken,
       });
@@ -92,5 +89,13 @@ export const createResponseInterceptor = (backendInstance) => {
       clearRefreshTimer();
       return Promise.reject(refreshError);
     }
+  };
+};
+
+// === REQUEST INTERCEPTOR (optional) ===
+export const createRequestInterceptor = () => {
+  return (config) => {
+    // You can add any custom request logic here if needed
+    return config;
   };
 };

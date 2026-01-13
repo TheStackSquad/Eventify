@@ -1,43 +1,35 @@
 // frontend/src/app/forgot-password/page.js
-
 "use client";
 
 import React, { useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
 import { Mail, ArrowLeft, CheckCircle } from "lucide-react";
 import Link from "next/link";
-import { requestPasswordReset } from "@/redux/action/passwordResetAction";
-import { clearPasswordResetState } from "@/redux/reducer/passwordResetReducer";
-import { STATUS } from "@/utils/constants/globalConstants";
+import { useForgotPassword } from "@/utils/hooks/useAuth";
+import toastAlert from "@/components/common/toast/toastAlert";
 
 export default function ForgotPasswordPage() {
-  const dispatch = useDispatch();
   const [email, setEmail] = useState("");
-
-  const { status, error, successMessage } = useSelector(
-    (state) => state.passwordReset
-  );
-
-  const isLoading = status === STATUS.LOADING;
-  const isSuccess = status === STATUS.SUCCEEDED;
+  const { mutate: requestReset, isPending, isSuccess } = useForgotPassword();
+  const [submittedEmail, setSubmittedEmail] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!email.trim()) {
+      toastAlert.error("Please enter your email address");
       return;
     }
 
-    try {
-      await dispatch(requestPasswordReset({ email })).unwrap();
-    } catch (error) {
-      // Error is already handled by Redux and displayed
-      console.error("Password reset request failed:", error);
-    }
-  };
-
-  const handleBackToLogin = () => {
-    dispatch(clearPasswordResetState());
+    requestReset(email, {
+      onSuccess: () => {
+        setSubmittedEmail(email);
+        toastAlert.success("If that email exists, a reset link has been sent.");
+      },
+      onError: (error) => {
+        const errorMessage = error.message || "Failed to send reset email";
+        toastAlert.error(errorMessage);
+      },
+    });
   };
 
   // Success State
@@ -55,26 +47,30 @@ export default function ForgotPasswordPage() {
             </h1>
 
             <p className="text-gray-600 mb-6 font-body leading-relaxed">
-              {successMessage ||
-                "We've sent a password reset link to your email address. Please check your inbox and follow the instructions."}
+              If that email exists, a password reset link has been sent to your
+              email address. Please check your inbox and follow the
+              instructions.
             </p>
 
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 mb-6 border border-blue-100">
               <p className="text-sm text-gray-700 font-body">
                 <strong className="text-blue-700">Email sent to:</strong>
                 <br />
-                <span className="font-mono text-gray-900">{email}</span>
+                <span className="font-mono text-gray-900">
+                  {submittedEmail}
+                </span>
               </p>
             </div>
 
             <div className="space-y-3">
               <p className="text-sm text-gray-500 font-body">
-                Didn&apos;t receive the email? Check your spam folder or try again.
+                Didn&apos;t receive the email? Check your spam folder or try
+                again.
               </p>
 
               <button
                 onClick={() => {
-                  dispatch(clearPasswordResetState());
+                  setSubmittedEmail("");
                   setEmail("");
                 }}
                 className="w-full py-3 text-sm font-semibold text-blue-600 hover:text-blue-700 border-2 border-blue-600 hover:border-blue-700 rounded-full transition duration-300 font-body"
@@ -84,7 +80,6 @@ export default function ForgotPasswordPage() {
 
               <Link
                 href="/account/auth/login"
-                onClick={handleBackToLogin}
                 className="block w-full py-3 text-sm font-semibold text-gray-600 hover:text-gray-700 transition duration-300 font-body"
               >
                 <ArrowLeft className="w-4 h-4 inline mr-2" />
@@ -112,20 +107,10 @@ export default function ForgotPasswordPage() {
             </h1>
 
             <p className="text-sm text-gray-500 font-body">
-              No worries! Enter your email address and we&apos;ll send you a link to
-              reset your password.
+              No worries! Enter your email address and we&apos;ll send you a
+              link to reset your password.
             </p>
           </div>
-
-          {/* Error Message Display */}
-          {error && (
-            <div
-              className="p-3 mb-4 text-sm text-red-700 bg-red-100 rounded-xl border border-red-300"
-              role="alert"
-            >
-              {error}
-            </div>
-          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email Input */}
@@ -153,14 +138,14 @@ export default function ForgotPasswordPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isLoading || !email.trim()}
+              disabled={isPending || !email.trim()}
               className={`w-full py-3 text-lg font-semibold text-white rounded-full transition duration-300 shadow-lg ${
-                isLoading || !email.trim()
+                isPending || !email.trim()
                   ? "bg-blue-400 cursor-not-allowed"
                   : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
               } flex items-center justify-center font-body`}
             >
-              {isLoading ? (
+              {isPending ? (
                 <svg
                   className="animate-spin h-5 w-5 text-white"
                   xmlns="http://www.w3.org/2000/svg"

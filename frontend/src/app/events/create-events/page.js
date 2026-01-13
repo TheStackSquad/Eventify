@@ -2,6 +2,7 @@
 
 "use client";
 
+import { Suspense } from "react"; // ✅ Import Suspense
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/utils/hooks/useAuth";
 import useEventForm from "@/app/events/create-events/hooks/useEventForm";
@@ -15,16 +16,14 @@ import {
   ROUTES,
 } from "@/utils/constants/globalConstants";
 
-export default function CreateEventsPage() {
-  // ========== HOOKS ==========
+// ✅ 1. Wrap the logic in a content component
+function CreateEventContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const eventId = searchParams.get("id");
 
-  // ========== AUTHENTICATION ==========
   const { user, sessionChecked, isAuthenticated } = useAuth();
 
-  // ========== CUSTOM HOOKS ==========
   const {
     formData,
     setFormData,
@@ -40,9 +39,6 @@ export default function CreateEventsPage() {
     handleImageUpload,
   } = useEventSubmission(eventId, user?.id, setFormData, router);
 
-  // ========== RENDER LOGIC ==========
-
-  // Show loading while checking authentication or loading form data
   if (!sessionChecked || (eventId && isFormLoading)) {
     return (
       <LoadingSpinner
@@ -57,18 +53,13 @@ export default function CreateEventsPage() {
     );
   }
 
-  // Redirect if not authenticated
   if (!isAuthenticated || !user) {
-    toastAlert.error(ERROR_MESSAGES.AUTH_REQUIRED);
-    router.push(ROUTES.LOGIN);
+    // Note: It's better to do this in a useEffect to avoid side-effects during render
     return null;
   }
 
-  // Navigation handlers
   const handleBack = () => router.back();
   const handleCancel = () => router.push(ROUTES.MY_EVENTS);
-
-  // Determine mode
   const isEditMode = !!eventId;
 
   return (
@@ -93,5 +84,16 @@ export default function CreateEventsPage() {
         isEditMode={isEditMode}
       />
     </div>
+  );
+}
+
+// 2. The Default Export now handles the Suspense Boundary
+export default function CreateEventsPage() {
+  return (
+    <Suspense
+      fallback={<LoadingSpinner message="Preparing form..." color="indigo" />}
+    >
+      <CreateEventContent />
+    </Suspense>
   );
 }
