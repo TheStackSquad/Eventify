@@ -24,6 +24,11 @@ export const backendInstance = axios.create({
   withCredentials: true,
 });
 
+// 🔧 FIX: Copy static methods from original axios to the instance
+backendInstance.isCancel = axios.isCancel;
+backendInstance.CancelToken = axios.CancelToken;
+backendInstance.isAxiosError = axios.isAxiosError;
+
 /**
  * FRONTEND API INSTANCE
  * For frontend-only API calls (e.g., local Next.js API routes)
@@ -33,6 +38,11 @@ export const frontendInstance = axios.create({
   timeout: 30000,
   withCredentials: true,
 });
+
+// 🔧 FIX: Also copy static methods to frontend instance
+frontendInstance.isCancel = axios.isCancel;
+frontendInstance.CancelToken = axios.CancelToken;
+frontendInstance.isAxiosError = axios.isAxiosError;
 
 // === BACKEND INTERCEPTORS ===
 // Request interceptor for logging and auth header

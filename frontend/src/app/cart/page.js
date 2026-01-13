@@ -9,19 +9,13 @@ import { useCart } from "@/context/cartContext";
 import CartUI from "@/components/cart/cartUI";
 import toastAlert from "@/components/common/toast/toastAlert";
 import Link from "next/link";
-import { useRouter } from "next/navigation"; // 💡 Import useRouter
+import { useRouter } from "next/navigation"; 
+import { formatCurrency } from "@/utils/currency";
 
 // --- Fee & Currency Configuration ---
 const SERVICE_FEE = 500; // Mock Service Fee in Naira (₦)
 const VAT_RATE = 0.075; // 7.5% VAT (Standard Nigerian VAT)
 
-// Utility for formatting currency (Updated to Naira)
-const formatCurrency = (amount) => {
-  return `₦${Number(amount).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-};
 
 /**
  * CartPage Component (Container)
