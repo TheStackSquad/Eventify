@@ -6,9 +6,9 @@ import { useRouter } from "next/navigation";
 import TicketHeader from "./components/ticketHeader";
 import TicketSelector from "./components/ticketSelector";
 import QuantitySelector from "./components/quantitySelector";
-import OrderSummary from "./components/OrderSummary";
+import OrderSummary from "./components/orderSummary";
 import ActionButtons from "./components/actionButtons";
-import  useTicketPurchase  from "@/app/events/[id]/utils/ticketUtils";
+import { useTicketPurchase } from "@/app/events/[id]/ticketUI/ticketUtils";
 
 const TicketPurchaseSection = ({ event }) => {
   const router = useRouter();

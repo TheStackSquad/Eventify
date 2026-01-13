@@ -1,52 +1,57 @@
-//frontend/src/utils/hooks/usePaystackIntegration.js
-
+// frontend/src/utils/hooks/usePaystackIntegration.js
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useCart } from "@/context/cartContext";
 import { useRouter } from "next/navigation";
 import toastAlert from "@/components/common/toast/toastAlert";
-import axios, { ENDPOINTS } from "@/axiosConfig/axios";
+import axios from "axios"; // Original axios for static methods
+import backendInstance, { ENDPOINTS } from "@/axiosConfig/axios"; // Custom instance
 
+/**
+ * Builds payment initialization payload with PascalCase keys for backend compatibility
+ */
 const buildInitializationPayload = (email, items, metadata) => {
   const customerInfo = metadata?.customer_info || {};
 
   return {
-    email,
-    items: items.map((item) => ({
-      event_id: item.eventId,
-      tier_name: item.tierName,
-      quantity: item.quantity,
+    Email: email,
+    Items: items.map((item) => ({
+      EventID: item.eventId,
+      TierName: item.tierName,
+      Quantity: item.quantity,
     })),
-    // Customer information
-    customer: {
-      first_name: customerInfo.firstName || "",
-      last_name: customerInfo.lastName || "",
-      email: customerInfo.email || email,
-      phone: customerInfo.phone || "",
-      city: customerInfo.city || "",
-      state: customerInfo.state || "",
-      country: customerInfo.country || "Nigeria",
-    },
+    FirstName: customerInfo.firstName || "",
+    LastName: customerInfo.lastName || "",
+    Phone: customerInfo.phone || "",
+    City: customerInfo.city || "",
+    State: customerInfo.state || "",
+    Country: customerInfo.country || "Nigeria",
   };
 };
 
+/**
+ * Custom hook for Paystack payment integration with robust error handling
+ * and request cancellation to prevent race conditions
+ */
 export function usePaystackIntegration({ email, metadata }) {
   const router = useRouter();
-  const { clearCart, items } = useCart();
+  const { items } = useCart();
   const [isScriptLoaded, setIsScriptLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Ref to store the AbortController for the initialization request
+  // Refs for cleanup and request management
+  const isMountedRef = useRef(true);
   const initRequestControllerRef = useRef(null);
+  const requestIdRef = useRef(0);
 
-  // --- Constants ---
+  // Environment variables
   const PAYSTACK_PUBLIC_KEY = useMemo(
     () => process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY,
     []
   );
 
-  // --- SDK Loading Effect ---
+  // Load Paystack SDK script
   useEffect(() => {
     const scriptId = "paystack-script";
 
@@ -60,52 +65,59 @@ export function usePaystackIntegration({ email, metadata }) {
     script.src = "https://js.paystack.co/v1/inline.js";
     script.async = true;
 
-    script.onload = () => setIsScriptLoaded(true);
+    script.onload = () => isMountedRef.current && setIsScriptLoaded(true);
     script.onerror = () => {
       console.error("Failed to load Paystack script.");
-      toastAlert.error("Payment system unavailable. Please refresh.");
-      setIsScriptLoaded(false);
+      if (isMountedRef.current) {
+        toastAlert.error("Payment system unavailable. Please refresh.");
+        setIsScriptLoaded(false);
+      }
     };
 
     document.head.appendChild(script);
 
     return () => {
       const existingScript = document.getElementById(scriptId);
-      if (existingScript) {
-        document.head.removeChild(existingScript);
-      }
+      existingScript && document.head.removeChild(existingScript);
     };
   }, []);
 
-  // --- Cleanup Effect on Unmount ---
+  // Cleanup on unmount
   useEffect(() => {
+    isMountedRef.current = true;
+
     return () => {
-      if (initRequestControllerRef.current) {
-        console.log("🧹 [CLEANUP] Aborting Paystack initialization.");
-        initRequestControllerRef.current.abort();
-        initRequestControllerRef.current = null;
-      }
+      console.log("🧹 Cleaning up - aborting pending requests");
+      isMountedRef.current = false;
+      initRequestControllerRef.current?.abort();
+      initRequestControllerRef.current = null;
     };
   }, []);
 
-  // --- Payment Handlers ---
+  // Payment success handler
   const handleSuccess = useCallback(
     (response) => {
-      console.log("✅ Paystack Transaction Successful:", response);
-      router.push(
-        `/checkout/confirmation?trxref=${response.reference}&status=success`
-      );
+      console.log("✅ Payment successful:", response);
+      isMountedRef.current &&
+        router.push(
+          `/checkout/confirmation?trxref=${response.reference}&status=success`
+        );
     },
     [router]
   );
 
+  // Payment modal close handler
   const handleClose = useCallback(() => {
-    console.log("Paystack Checkout Modal Closed.");
-    toastAlert.warn("Payment cancelled. You can try again anytime.");
+    console.log("Payment modal closed");
+    isMountedRef.current &&
+      toastAlert.warn("Payment cancelled. You can try again anytime.");
   }, []);
 
+  /**
+   * Main payment handler with request deduplication and error recovery
+   */
   const handlePayment = useCallback(async () => {
-    // --- Pre-flight Validation ---
+    // Pre-flight validation
     if (!isScriptLoaded || !window.PaystackPop) {
       toastAlert.error("Payment gateway not ready. Please wait.");
       return;
@@ -118,73 +130,71 @@ export function usePaystackIntegration({ email, metadata }) {
       toastAlert.error("Please provide a valid email address.");
       return;
     }
-    if (!items || items.length === 0) {
+    if (!items?.length) {
       toastAlert.error("Your cart is empty.");
       return;
     }
 
+    const currentRequestId = ++requestIdRef.current;
+    console.log(`🚀 Starting payment request #${currentRequestId}`);
+
     setIsLoading(true);
 
-    // 🔑 Abort previous request and set up new controller
-    if (initRequestControllerRef.current) {
-      initRequestControllerRef.current.abort();
-    }
+    // Cancel any previous request
+    initRequestControllerRef.current?.abort();
+
     const controller = new AbortController();
     initRequestControllerRef.current = controller;
 
     try {
-      // 1. Build MINIMAL payload (no prices, just identification)
+      // Build and send initialization request
       const orderInitializationData = buildInitializationPayload(
         email,
         items,
         metadata
       );
 
-      const initializationEndpoint =
-        axios.defaults.baseURL + ENDPOINTS.ORDERS.INITIALIZE;
+      console.log(
+        `📡 Initializing order #${currentRequestId}:`,
+        orderInitializationData
+      );
 
-      console.log(`📡 Initializing order: POST ${initializationEndpoint}`);
-      console.log("📦 Payload (identification only):", orderInitializationData);
-
-      // 2. Initialize order - SERVER calculates the authoritative amount
-      const response = await axios.post(
+      const response = await backendInstance.post(
         ENDPOINTS.ORDERS.INITIALIZE,
         orderInitializationData,
-        { signal: controller.signal } // Pass the abort signal
+        { signal: controller.signal }
       );
+
+      // Check if request is still valid
+      if (!isMountedRef.current || currentRequestId !== requestIdRef.current) {
+        console.log(`⏭️ Request #${currentRequestId} superseded or cancelled`);
+        return;
+      }
 
       const result = response.data;
 
       if (result.status !== "success" || !result.data?.reference) {
-        throw new Error(
-          result.message || "Failed to initialize order on server."
-        );
+        throw new Error(result.message || "Order initialization failed");
       }
 
-      // CRITICAL: Extract server-calculated amount
-      const dbReference = result.data.reference;
-      const serverAmountKobo = result.data.amount_kobo; // SERVER AUTHORITY!
+      const { reference: dbReference, amount_kobo: serverAmountKobo } =
+        result.data;
 
-      console.log("✅ Order initialized successfully");
-      console.log(`Reference: ${dbReference}`);
       console.log(
-        `Server-calculated amount: ₦${(serverAmountKobo / 100).toFixed(2)}`
+        `✅ Order initialized: ${dbReference} (₦${serverAmountKobo / 100})`
       );
 
-      // 3. Open Paystack with SERVER-AUTHORITATIVE amount
-      const customerInfo = orderInitializationData.customer;
-
+      // Open Paystack checkout
       const handler = window.PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email,
-        amount: serverAmountKobo, // 🔒 USE SERVER AMOUNT, NOT CLIENT CALCULATION!
+        amount: serverAmountKobo,
         ref: dbReference,
         currency: "NGN",
         channels: ["card", "bank", "ussd", "qr", "mobile_money"],
         metadata: {
           reference: dbReference,
-          customer_info: customerInfo,
-          // ✅ Include item details for Paystack dashboard (display only)
+          customer_info: orderInitializationData,
           items: items.map((item) => ({
             event_id: item.eventId,
             event_title: item.eventTitle,
@@ -193,52 +203,51 @@ export function usePaystackIntegration({ email, metadata }) {
           })),
           timestamp: new Date().toISOString(),
         },
-        callback: (response) => {
-          setIsLoading(false);
-          handleSuccess(response);
-        },
-        onClose: () => {
-          setIsLoading(false);
-          handleClose();
-        },
+        callback: (response) =>
+          isMountedRef.current &&
+          (setIsLoading(false), handleSuccess(response)),
+        onClose: () =>
+          isMountedRef.current && (setIsLoading(false), handleClose()),
       });
 
       handler.openIframe();
     } catch (error) {
-      // 🔑 Check for Abort and handle silently
+      // Silent handling for cancelled requests
       if (axios.isCancel(error) || error.name === "AbortError") {
-        console.log("Initialization aborted. A new request may have started.");
-        return; // Exit without showing error or stopping loading immediately
+        console.log(`🛑 Request #${currentRequestId} cancelled`);
+        return;
+      }
+
+      // Only show errors for valid, current requests
+      if (!isMountedRef.current || currentRequestId !== requestIdRef.current) {
+        return;
       }
 
       const serverMessage = error.response?.data?.message || error.message;
       const serverDetails = error.response?.data?.details;
 
-      console.error("❌ Payment initialization failed:", error);
+      console.error(`❌ Payment failed #${currentRequestId}:`, error);
 
-      // Provide helpful error messages
+      // User-friendly error messages
       let errorMessage = "Could not start payment. Please try again.";
 
-      if (
-        serverDetails?.includes("out of stock") ||
-        serverDetails?.includes("insufficient")
-      ) {
-        errorMessage =
-          "Some items are no longer available. Please update your cart.";
-      } else if (
-        serverDetails?.includes("not found") ||
-        serverDetails?.includes("invalid event")
-      ) {
-        errorMessage =
-          "Some items in your cart are no longer valid. Please refresh and try again.";
+      if (serverDetails?.match(/out of stock|insufficient/i)) {
+        errorMessage = "Some items are no longer available. Update your cart.";
+      } else if (serverDetails?.match(/not found|invalid event/i)) {
+        errorMessage = "Cart items are invalid. Please refresh and try again.";
       } else if (serverMessage) {
         errorMessage = serverMessage;
       }
 
       toastAlert.error(errorMessage);
     } finally {
-      // 🔑 Cleanup: Only reset state if the request that finished is the current one
-      if (initRequestControllerRef.current === controller) {
+      // Clean up only for current valid request
+      if (
+        isMountedRef.current &&
+        currentRequestId === requestIdRef.current &&
+        initRequestControllerRef.current === controller
+      ) {
+        console.log(`🏁 Finalizing request #${currentRequestId}`);
         setIsLoading(false);
         initRequestControllerRef.current = null;
       }
@@ -253,7 +262,7 @@ export function usePaystackIntegration({ email, metadata }) {
     handleClose,
   ]);
 
-  // ✅ UPDATED: isReady check (no longer checks amountInKobo)
+  // Readiness check
   const isReady =
     isScriptLoaded && !!PAYSTACK_PUBLIC_KEY && !!email && items?.length > 0;
 
