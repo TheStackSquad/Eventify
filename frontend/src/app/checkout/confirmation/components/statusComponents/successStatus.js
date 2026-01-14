@@ -4,6 +4,7 @@ import { CheckCircle, Download } from "lucide-react";
 import Link from "next/link";
 
 export function SuccessStatus({ paymentData, trxref, formatCurrency }) {
+  console.log('payment Data:', paymentData);
   return (
     <div className="text-center">
       <CheckCircle className="mx-auto h-16 w-16 text-green-600 mb-4" />

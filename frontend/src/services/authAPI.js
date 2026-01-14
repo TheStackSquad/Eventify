@@ -1,6 +1,6 @@
 // frontend/src/services/authApi.js
 
-import axios, { ENDPOINTS } from "@/axiosConfig/axios";
+import backendInstance, { ENDPOINTS } from "@/axiosConfig/axios";
 
 /**
  * AUTH API FUNCTIONS
@@ -15,7 +15,7 @@ export const signupApi = async (formData) => {
   // Remove confirmPassword before sending to backend
   const { confirmPassword, ...apiPayload } = formData;
   
-  const response = await axios.post(ENDPOINTS.AUTH.SIGNUP, apiPayload);
+  const response = await backendInstance.post(ENDPOINTS.AUTH.SIGNUP, apiPayload);
   return response.data;
 };
 
@@ -23,7 +23,10 @@ export const signupApi = async (formData) => {
 // LOGIN
 // ====================================================================
 export const loginApi = async (credentials) => {
-  const response = await axios.post(ENDPOINTS.AUTH.LOGIN, credentials);
+  const response = await backendInstance.post(
+    ENDPOINTS.AUTH.LOGIN,
+    credentials
+  );
   return response.data;
 };
 
@@ -31,7 +34,7 @@ export const loginApi = async (credentials) => {
 // VERIFY SESSION
 // ====================================================================
 export const verifySessionApi = async () => {
-  const response = await axios.get(ENDPOINTS.AUTH.ME);
+  const response = await backendInstance.get(ENDPOINTS.AUTH.ME);
   return response.data.user;
 };
 
@@ -39,7 +42,7 @@ export const verifySessionApi = async () => {
 // LOGOUT
 // ====================================================================
 export const logoutApi = async () => {
-  const response = await axios.post(ENDPOINTS.AUTH.LOGOUT);
+  const response = await backendInstance.post(ENDPOINTS.AUTH.LOGOUT);
   return response.data;
 };
 
@@ -47,21 +50,26 @@ export const logoutApi = async () => {
 // PASSWORD RESET (Future use)
 // ====================================================================
 export const forgotPasswordApi = async (email) => {
-  const response = await axios.post(ENDPOINTS.AUTH.FORGOT_PASSWORD, { email });
-  return response.data;
-};
-
-export const verifyResetTokenApi = async (token) => {
-  const response = await axios.get(ENDPOINTS.AUTH.VERIFY_RESET_TOKEN, {
-    params: { token }
+  const response = await backendInstance.post(ENDPOINTS.AUTH.FORGOT_PASSWORD, {
+    email,
   });
   return response.data;
 };
 
+export const verifyResetTokenApi = async (token) => {
+  const response = await backendInstance.get(
+    ENDPOINTS.AUTH.VERIFY_RESET_TOKEN,
+    {
+      params: { token },
+    }
+  );
+  return response.data;
+};
+
 export const resetPasswordApi = async (token, newPassword) => {
-  const response = await axios.post(ENDPOINTS.AUTH.RESET_PASSWORD, {
+  const response = await backendInstance.post(ENDPOINTS.AUTH.RESET_PASSWORD, {
     token,
-    newPassword
+    newPassword,
   });
   return response.data;
 };

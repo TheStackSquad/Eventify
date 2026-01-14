@@ -5,12 +5,11 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useCart } from "@/context/cartContext";
 import { useRouter } from "next/navigation";
 import toastAlert from "@/components/common/toast/toastAlert";
-import axios from "axios"; // Original axios for static methods
-import backendInstance, { ENDPOINTS } from "@/axiosConfig/axios"; // Custom instance
+import backendInstance, { ENDPOINTS } from "@/axiosConfig/axios";
 
-/**
- * Builds payment initialization payload with PascalCase keys for backend compatibility
- */
+
+//Builds payment initialization payload with PascalCase keys for backend compatibility
+
 const buildInitializationPayload = (email, items, metadata) => {
   const customerInfo = metadata?.customer_info || {};
 
@@ -160,6 +159,7 @@ export function usePaystackIntegration({ email, metadata }) {
       );
 
       const response = await backendInstance.post(
+        // ✅ Using backendInstance correctly
         ENDPOINTS.ORDERS.INITIALIZE,
         orderInitializationData,
         { signal: controller.signal }
@@ -212,8 +212,8 @@ export function usePaystackIntegration({ email, metadata }) {
 
       handler.openIframe();
     } catch (error) {
-      // Silent handling for cancelled requests
-      if (axios.isCancel(error) || error.name === "AbortError") {
+      // ✅ FIXED: Use backendInstance.isCancel instead of axios.isCancel
+      if (backendInstance.isCancel(error) || error.name === "AbortError") {
         console.log(`🛑 Request #${currentRequestId} cancelled`);
         return;
       }

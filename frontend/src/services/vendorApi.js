@@ -1,5 +1,5 @@
 // frontend/src/services/vendorApi.js
-import axios from "@/axiosConfig/axios";
+import backendInstance from "@/axiosConfig/axios";
 import {
   API_ENDPOINTS,
   replaceUrlParams,
@@ -13,7 +13,7 @@ export async function fetchVendorsApi(filters = {}, signal) {
     ...filters,
   });
 
-  const response = await axios.get(
+  const response = await backendInstance.get(
     `${API_ENDPOINTS.VENDORS.LIST}?${queryParams}`,
     { signal }
   );
@@ -29,13 +29,13 @@ export async function fetchVendorProfileApi(vendorId, signal) {
   const endpoint = replaceUrlParams(API_ENDPOINTS.VENDORS.GET_PROFILE, {
     id: vendorId,
   });
-  const response = await axios.get(endpoint, { signal });
+  const response = await backendInstance.get(endpoint, { signal });
   return response.data;
 }
 
 // Register new vendor with extended timeout
 export async function registerVendorApi(vendorData) {
-  const response = await axios.post(
+  const response = await backendInstance.post(
     API_ENDPOINTS.VENDORS.REGISTER,
     vendorData,
     { timeout: 15000 }
@@ -48,7 +48,7 @@ export async function updateVendorApi({ vendorId, data }) {
   const endpoint = replaceUrlParams(API_ENDPOINTS.VENDORS.UPDATE, {
     id: vendorId,
   });
-  const response = await axios.patch(endpoint, data);
+  const response = await backendInstance.patch(endpoint, data);
   return response.data;
 }
 
@@ -63,7 +63,7 @@ export async function fetchVendorAnalyticsApi(vendorId) {
   });
 
   try {
-    const response = await axios.get(url, {
+    const response = await backendInstance.get(url, {
       withCredentials: true,
       timeout: 10000,
     });
