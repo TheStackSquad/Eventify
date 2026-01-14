@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"eventify/backend/pkg/models"
@@ -18,208 +19,358 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// ============================================================================
+// ERRORS
+// ============================================================================
+
 var (
-    ErrAlreadyProcessed = errors.New("order already processed")
-    ErrOrderNotPending  = errors.New("order is not in pending status")
-    ErrUnauthorized     = errors.New("unauthorized access to order")
+	ErrAlreadyProcessed = errors.New("order already processed")
+	ErrOrderNotPending  = errors.New("order is not in pending status")
+	ErrUnauthorized     = errors.New("unauthorized access to order")
 )
 
-// Payment verification and processing
+// ============================================================================
+// REQUEST DEDUPLICATION
+// ============================================================================
+
+var verificationLocks sync.Map // Global cache to prevent duplicate processing
+
+// verificationLock tracks in-flight verification requests
+type verificationLock struct {
+	mu        sync.Mutex
+	inFlight  bool
+	expiresAt time.Time
+}
+
+// ============================================================================
+// PUBLIC API - PAYMENT VERIFICATION AND PROCESSING
+// ============================================================================
+
+/*
+VerifyAndProcess handles payment verification with request deduplication and idempotency.
+
+This is the main entry point for verifying Paystack payments after the checkout flow.
+It ensures:
+1. Only one request processes a given payment reference at a time
+2. Returns cached results for duplicate requests (idempotent)
+3. Validates authorization and order state
+4. Calls Paystack API to confirm transaction status
+5. Updates order, reduces stock, and generates tickets atomically
+
+Flow:
+1. Acquire lock for the payment reference
+2. If another request is processing, wait briefly and return cached result
+3. Verify transaction with Paystack
+4. Update order status, reduce stock, generate tickets in a transaction
+5. Release lock and cleanup
+
+Parameters:
+  - ctx:       Context for cancellation/timeout
+  - reference: Paystack payment reference (unique per transaction)
+  - guestID:   Optional guest identifier for authorization
+
+Returns:
+  - *models.Order: The processed order with tickets
+  - error:        Processing error or nil on success
+*/
 func (s *OrderServiceImpl) VerifyAndProcess(
-    ctx context.Context,
-    reference string,
-    guestID string,
+	ctx context.Context,
+	reference string,
+	guestID string,
 ) (*models.Order, error) {
-    order, err := s.OrderRepo.GetOrderByReference(ctx, reference)
-    if err != nil {
-        return nil, fmt.Errorf("order not found for reference %s: %w", reference, err)
-    }
+	// 1. ACQUIRE DEDUPLICATION LOCK
+	lockInterface, _ := verificationLocks.LoadOrStore(reference, &verificationLock{})
+	lock := lockInterface.(*verificationLock)
 
-    if _, authErr := s.GetOrderByReference(ctx, reference, order.UserID, guestID); authErr != nil {
-        return nil, fmt.Errorf("authorization failed for order %s: %w", reference, authErr)
-    }
+	lock.mu.Lock()
 
-    // ✅ If already processed, return order WITHOUT error (idempotent success)
-    if order.Status == models.OrderStatusSuccess {
-        log.Info().
-            Str("ref", reference).
-            Str("processed_by", order.ProcessedBy.String).
-            Msg("Order already processed - idempotent verification")
-        return order, nil // ✅ Success, not error
-    }
+	// 2. HANDLE DUPLICATE REQUESTS
+	if lock.inFlight {
+		lock.mu.Unlock()
+		log.Info().Str("ref", reference).Msg("Duplicate verification request - returning cached result")
 
-    if order.Status == models.OrderStatusFailed || order.Status == models.OrderStatusFraud {
-        return order, fmt.Errorf("order is in %s state and cannot be verified", order.Status)
-    }
+		// Brief wait to allow first request to complete
+		time.Sleep(100 * time.Millisecond)
 
-    resp, err := s.PaystackClient.VerifyTransaction(ctx, reference)
-    if err != nil {
-        return nil, fmt.Errorf("paystack verification failed: %w", err)
-    }
+		// Return cached result (already processed order)
+		order, err := s.OrderRepo.GetOrderByReference(ctx, reference)
+		if err != nil {
+			return nil, err
+		}
+		return order, nil
+	}
 
-    order, err = s.finalizeOrder(ctx, order, resp.Data, "verification")
-    
-    // ✅ Handle race condition case (webhook processed between our checks)
-    if err != nil && errors.Is(err, ErrAlreadyProcessed) {
-        log.Info().
-            Str("ref", reference).
-            Msg("Order processed by webhook during verification")
-        return order, nil // ✅ Success
-    }
+	// 3. MARK AS IN-FLIGHT
+	lock.inFlight = true
+	lock.expiresAt = time.Now().Add(30 * time.Second)
+	lock.mu.Unlock()
 
-    return order, err
+	// 4. CLEANUP LOCK AFTER PROCESSING
+	defer func() {
+		lock.mu.Lock()
+		lock.inFlight = false
+		lock.mu.Unlock()
+
+		// Async cleanup of expired locks
+		go cleanupExpiredLocks()
+	}()
+
+	// 5. FETCH ORDER FROM DATABASE
+	order, err := s.OrderRepo.GetOrderByReference(ctx, reference)
+	if err != nil {
+		return nil, fmt.Errorf("order not found for reference %s: %w", reference, err)
+	}
+
+	// 6. AUTHORIZATION CHECK
+	if _, authErr := s.GetOrderByReference(ctx, reference, order.UserID, guestID); authErr != nil {
+		return nil, fmt.Errorf("authorization failed for order %s: %w", reference, authErr)
+	}
+
+	// 7. IDEMPOTENCY CHECK: ALREADY PROCESSED
+	if order.Status == models.OrderStatusSuccess {
+		log.Info().
+			Str("ref", reference).
+			Str("processed_by", order.ProcessedBy.String).
+			Msg("Order already processed - idempotent verification")
+		return order, nil
+	}
+
+	// 8. CHECK FOR FAILED STATES
+	if order.Status == models.OrderStatusFailed || order.Status == models.OrderStatusFraud {
+		return order, fmt.Errorf("order is in %s state and cannot be verified", order.Status)
+	}
+
+	// 9. VERIFY WITH PAYSTACK API
+	resp, err := s.PaystackClient.VerifyTransaction(ctx, reference)
+	if err != nil {
+		return nil, fmt.Errorf("paystack verification failed: %w", err)
+	}
+
+	// 10. FINALIZE ORDER (update DB, reduce stock, generate tickets)
+	order, err = s.finalizeOrder(ctx, order, resp.Data, "verification")
+
+	// 11. HANDLE RACE CONDITION (webhook processed first)
+	if err != nil && errors.Is(err, ErrAlreadyProcessed) {
+		log.Info().
+			Str("ref", reference).
+			Msg("Order processed by webhook during verification")
+		return order, nil
+	}
+
+	return order, err
 }
 
-// Webhook processing
+// ============================================================================
+// WEBHOOK PROCESSING
+// ============================================================================
+
+/*
+ProcessWebhook handles Paystack webhook callbacks for payment events.
+
+Webhooks are asynchronous notifications from Paystack about transaction status.
+They can arrive:
+1. Before user returns to the site (pre-verification)
+2. After successful verification (idempotent)
+3. Multiple times for the same transaction (idempotent)
+
+This function ensures:
+- Idempotent processing (duplicate webhooks are safe)
+- Doesn't fail for missing orders (prevents webhook retries)
+- Updates order status atomically
+*/
 func (s *OrderServiceImpl) ProcessWebhook(
-    ctx context.Context,
-    payload *models.PaystackWebhook,
-    signature string,
+	ctx context.Context,
+	payload *models.PaystackWebhook,
+	signature string,
 ) error {
-    data := payload.Data
-    if data == nil {
-        return errors.New("webhook data is nil")
-    }
+	data := payload.Data
+	if data == nil {
+		return errors.New("webhook data is nil")
+	}
 
-    order, err := s.OrderRepo.GetOrderByReference(ctx, data.Reference)
-    if err != nil {
-        log.Warn().Str("reference", data.Reference).Err(err).
-            Msg("Order not found during webhook")
-        return nil // ✅ Don't fail webhook for missing orders
-    }
+	// Fetch order by Paystack reference
+	order, err := s.OrderRepo.GetOrderByReference(ctx, data.Reference)
+	if err != nil {
+		log.Warn().Str("reference", data.Reference).Err(err).
+			Msg("Order not found during webhook")
+		return nil // Don't fail webhook - prevents retry loops
+	}
 
-    _, err = s.finalizeOrder(ctx, order, data, "webhook")
-    
-    // ✅ Idempotency - webhook called multiple times is OK
-    if err != nil && errors.Is(err, ErrAlreadyProcessed) {
-        log.Info().
-            Str("ref", data.Reference).
-            Msg("Webhook received for already processed order")
-        return nil // ✅ Success
-    }
+	// Process order (idempotent - safe for duplicates)
+	_, err = s.finalizeOrder(ctx, order, data, "webhook")
 
-    return err
+	// Handle idempotent success
+	if err != nil && errors.Is(err, ErrAlreadyProcessed) {
+		log.Info().
+			Str("ref", data.Reference).
+			Msg("Webhook received for already processed order")
+		return nil // Success - webhook processed safely
+	}
+
+	return err
 }
 
-// Private helper methods for order processing
+// ============================================================================
+// PRIVATE HELPERS
+// ============================================================================
+
+/*
+finalizeOrder atomically processes a verified payment.
+
+This is the core business logic that:
+1. Validates transaction data matches order
+2. Updates order status to "success"
+3. Reduces ticket stock
+4. Generates tickets
+5. Executes all DB operations in a single transaction
+
+Atomicity ensures:
+- Either ALL operations succeed, or NONE do
+- No partial updates (e.g., stock reduced but no tickets)
+- Race condition protection via database constraints
+
+Parameters:
+  - ctx:         Context
+  - order:       Order to process
+  - data:        Paystack transaction data
+  - processedBy: Source of processing ("webhook" or "verification")
+
+Returns:
+  - *models.Order: Updated order
+  - error:        Processing error or nil on success
+*/
 func (s *OrderServiceImpl) finalizeOrder(
-    ctx context.Context,
-    order *models.Order,
-    data *models.PaystackData,
-    processedBy string,
+	ctx context.Context,
+	order *models.Order,
+	data *models.PaystackData,
+	processedBy string,
 ) (*models.Order, error) {
-    // ✅ Use sentinel error
-    if order.Status != models.OrderStatusPending {
-        log.Info().
-            Str("ref", order.Reference).
-            Str("status", string(order.Status)).
-            Str("attempted_by", processedBy).
-            Msg("Order not in pending status")
-        return order, ErrAlreadyProcessed
-    }
+	// 1. STATUS VALIDATION (idempotency guard)
+	if order.Status != models.OrderStatusPending {
+		log.Info().
+			Str("ref", order.Reference).
+			Str("status", string(order.Status)).
+			Str("attempted_by", processedBy).
+			Msg("Order not in pending status")
+		return order, ErrAlreadyProcessed
+	}
 
-    if data.Status != "success" {
-        log.Warn().
-            Str("ref", order.Reference).
-            Str("status", data.Status).
-            Msg("Transaction failed upstream.")
-        _ = s.OrderRepo.UpdateOrderStatus(ctx, order.ID, models.OrderStatusFailed)
-        return order, errors.New("transaction verification failed with status: " + data.Status)
-    }
+	// 2. PAYMENT STATUS CHECK
+	if data.Status != "success" {
+		log.Warn().
+			Str("ref", order.Reference).
+			Str("status", data.Status).
+			Msg("Transaction failed upstream.")
+		_ = s.OrderRepo.UpdateOrderStatus(ctx, order.ID, models.OrderStatusFailed)
+		return order, errors.New("transaction verification failed with status: " + data.Status)
+	}
 
-   if int64(data.Amount) != order.FinalTotal { // FIX 1: Cast data.Amount to int64 for comparison
+	// 3. AMOUNT VALIDATION (fraud detection)
+	if int64(data.Amount) != order.FinalTotal {
 		log.Warn().
 			Int64("expected", order.FinalTotal).
-			Int64("received", int64(data.Amount)). // Cast here for logging consistency
+			Int64("received", int64(data.Amount)).
 			Str("reference", order.Reference).
 			Msg("Amount mismatch detected.")
 		_ = s.OrderRepo.UpdateOrderStatus(ctx, order.ID, models.OrderStatusFraud)
 		return order, fmt.Errorf("AmountMismatch: expected %d, received %d", order.FinalTotal, data.Amount)
 	}
 
-	order.AmountPaid = int64(data.Amount)     // FIX 2: Cast data.Amount to int64 for assignment
-	order.ServiceFee = int64(data.Fees)       // FIX 3: Cast data.Fees to int64 for assignment
+	// 4. UPDATE ORDER WITH PAYMENT DETAILS
+	order.AmountPaid = int64(data.Amount)
+	order.ServiceFee = int64(data.Fees)
 	order.PaymentChannel = models.ToNullString(data.Channel)
 
-    // Parse Paystack's PaidAt timestamp
-    var paidAt time.Time
-    if data.PaidAt != "" {
-        t, err := time.Parse("2006-01-02T15:04:05.000Z", data.PaidAt)
-        if err != nil {
-            t, err = time.Parse(time.RFC3339, data.PaidAt)
-            if err != nil {
-                log.Warn().Err(err).Str("paid_at", data.PaidAt).
-                    Msg("Failed to parse PaidAt from Paystack")
-            } else {
-                paidAt = t
-            }
-        } else {
-            paidAt = t
-        }
-    }
+	// 5. PARSE PAYMENT TIMESTAMP
+	var paidAt time.Time
+	if data.PaidAt != "" {
+		t, err := time.Parse("2006-01-02T15:04:05.000Z", data.PaidAt)
+		if err != nil {
+			t, err = time.Parse(time.RFC3339, data.PaidAt)
+			if err != nil {
+				log.Warn().Err(err).Str("paid_at", data.PaidAt).
+					Msg("Failed to parse PaidAt from Paystack")
+			} else {
+				paidAt = t
+			}
+		} else {
+			paidAt = t
+		}
+	}
 
-    if !paidAt.IsZero() {
-        order.PaidAt = models.ToNullTime(&paidAt)
-    }
+	if !paidAt.IsZero() {
+		order.PaidAt = models.ToNullTime(&paidAt)
+	}
 
-    order.Status = models.OrderStatusSuccess
-    order.ProcessedBy = models.ToNullString(processedBy)
-    order.UpdatedAt = time.Now().UTC()
+	// 6. SET ORDER STATUS
+	order.Status = models.OrderStatusSuccess
+	order.ProcessedBy = models.ToNullString(processedBy)
+	order.UpdatedAt = time.Now().UTC()
 
-    tickets, err := s.generateTicketsForOrder(ctx, order)
-    if err != nil {
-        return order, fmt.Errorf("failed to generate tickets: %w", err)
-    }
+	// 7. GENERATE TICKETS (in-memory, not saved yet)
+	tickets, err := s.generateTicketsForOrder(ctx, order)
+	if err != nil {
+		return order, fmt.Errorf("failed to generate tickets: %w", err)
+	}
 
-    // ✅ Execute atomic transaction
-    err = s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
-        // Update order status (with idempotency check)
-        if err := s.OrderRepo.UpdateOrderToPaidTx(ctx, tx, order); err != nil {
-            return err
-        }
+	// 8. ATOMIC TRANSACTION
+	err = s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
+		// 8a. Update order status (with idempotency check)
+		if err := s.OrderRepo.UpdateOrderToPaidTx(ctx, tx, order); err != nil {
+			return err
+		}
 
-        // Apply stock reductions
-        if err := s.applyStockReductionsTx(ctx, tx, order); err != nil {
-            if strings.Contains(err.Error(), "insufficient stock") {
-                log.Warn().Err(err).Str("ref", order.Reference).
-                    Msg("Stock exhaustion during finalization")
-                return fmt.Errorf("tickets no longer available: %w", err)
-            }
-            return err
-        }
+		// 8b. Reduce ticket stock
+		if err := s.applyStockReductionsTx(ctx, tx, order); err != nil {
+			if strings.Contains(err.Error(), "insufficient stock") {
+				log.Warn().Err(err).Str("ref", order.Reference).
+					Msg("Stock exhaustion during finalization")
+				return fmt.Errorf("tickets no longer available: %w", err)
+			}
+			return err
+		}
 
-        // Insert tickets
-        if err := s.OrderRepo.InsertTicketsTx(ctx, tx, order, tickets); err != nil {
-            return err
-        }
+		// 8c. Insert generated tickets
+		if err := s.OrderRepo.InsertTicketsTx(ctx, tx, order, tickets); err != nil {
+			return err
+		}
 
-        return nil // ✅ All operations succeeded
-    })
+		return nil // All operations succeeded
+	})
 
-    // ✅ Handle transaction result OUTSIDE the transaction function
-    if err != nil {
-        // Check for database-level idempotency (status check failed)
-        if strings.Contains(err.Error(), "status was not 'pending'") || 
-           strings.Contains(err.Error(), "already processed") {
-            log.Info().
-                Str("ref", order.Reference).
-                Msg("Database idempotency check caught race condition")
-            return order, ErrAlreadyProcessed
-        }
-        
-        log.Error().Err(err).Str("ref", order.Reference).Msg("Transaction failed")
-        return order, fmt.Errorf("atomic finalization failed: %w", err)
-    }
+	// 9. HANDLE TRANSACTION RESULT
+	if err != nil {
+		// Database-level idempotency (race condition caught)
+		if strings.Contains(err.Error(), "status was not 'pending'") ||
+			strings.Contains(err.Error(), "already processed") {
+			log.Info().
+				Str("ref", order.Reference).
+				Msg("Database idempotency check caught race condition")
+			return order, ErrAlreadyProcessed
+		}
 
-    // ✅ Success
-    log.Info().
-        Str("ref", order.Reference).
-        Str("processed_by", processedBy).
-        Msg("Order finalized successfully")
-    
-    return order, nil
+		log.Error().Err(err).Str("ref", order.Reference).Msg("Transaction failed")
+		return order, fmt.Errorf("atomic finalization failed: %w", err)
+	}
+
+	// 10. SUCCESS
+	log.Info().
+		Str("ref", order.Reference).
+		Str("processed_by", processedBy).
+		Msg("Order finalized successfully")
+
+	return order, nil
 }
 
+/*
+generateTicketsForOrder creates ticket records for each purchased item.
+
+For each item in the order, creates N tickets (where N = quantity).
+Each ticket gets:
+- Unique code for validation
+- References to order, event, and ticket tier
+- User association (if logged in)
+*/
 func (s *OrderServiceImpl) generateTicketsForOrder(
 	ctx context.Context,
 	order *models.Order,
@@ -228,7 +379,9 @@ func (s *OrderServiceImpl) generateTicketsForOrder(
 	var tickets []models.Ticket
 	ticketIndex := 0
 
+	// Loop through each order item
 	for _, item := range order.Items {
+		// Create one ticket per quantity
 		for i := int32(0); i < item.Quantity; i++ {
 			ticket := models.Ticket{
 				ID:           uuid.New(),
@@ -242,9 +395,10 @@ func (s *OrderServiceImpl) generateTicketsForOrder(
 				UpdatedAt:    now,
 			}
 
-			if order.UserID != nil { 
-				 ticket.UserID = order.UserID 
-}
+			// Associate with user if logged in
+			if order.UserID != nil {
+				ticket.UserID = order.UserID
+			}
 
 			tickets = append(tickets, ticket)
 			ticketIndex++
@@ -254,22 +408,31 @@ func (s *OrderServiceImpl) generateTicketsForOrder(
 	return tickets, nil
 }
 
+/*
+applyStockReductionsTx reduces available ticket stock for purchased items.
+
+Groups reductions by ticket tier to minimize database calls.
+Critical for preventing over-selling (ensures stock consistency).
+*/
 func (s *OrderServiceImpl) applyStockReductionsTx(
 	ctx context.Context,
 	tx *sqlx.Tx,
 	order *models.Order,
 ) error {
+	// Group reductions by ticket tier ID
 	reductions := make(map[uuid.UUID]repoorder.StockReduction)
 
 	for _, item := range order.Items {
 		key := item.TicketTierID
 
 		if r, ok := reductions[key]; ok {
+			// Aggregate multiple items of same tier
 			r.Quantity += item.Quantity
 			reductions[key] = r
 			continue
 		}
 
+		// First reduction for this tier
 		reductions[key] = repoorder.StockReduction{
 			EventID:      item.EventID,
 			TicketTierID: item.TicketTierID,
@@ -278,6 +441,7 @@ func (s *OrderServiceImpl) applyStockReductionsTx(
 		}
 	}
 
+	// Apply each reduction
 	for _, r := range reductions {
 		err := s.EventRepo.DecrementTicketStockTx(
 			ctx,
@@ -294,11 +458,40 @@ func (s *OrderServiceImpl) applyStockReductionsTx(
 	return nil
 }
 
-// StockExhaustionError represents insufficient stock during order processing
+/*
+cleanupExpiredLocks removes old locks from the verification cache.
+
+Runs asynchronously to clean up memory. Locks expire after 30 seconds
+to prevent memory leaks from abandoned requests.
+*/
+func cleanupExpiredLocks() {
+	now := time.Now()
+	verificationLocks.Range(func(key, value interface{}) bool {
+		lock := value.(*verificationLock)
+		lock.mu.Lock()
+		// Remove if expired and not in-flight
+		if now.After(lock.expiresAt) && !lock.inFlight {
+			verificationLocks.Delete(key)
+		}
+		lock.mu.Unlock()
+		return true
+	})
+}
+
+// ============================================================================
+// CUSTOM ERROR TYPE
+// ============================================================================
+
+/*
+StockExhaustionError indicates insufficient ticket stock during processing.
+
+Used to differentiate stock issues from other errors.
+Contains detailed information for logging and client feedback.
+*/
 type StockExhaustionError struct {
-	TierName   string
-	Requested  int32
-	Available  int32
+	TierName  string
+	Requested int32
+	Available int32
 }
 
 func (e *StockExhaustionError) Error() string {

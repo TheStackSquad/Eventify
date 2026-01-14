@@ -72,20 +72,5 @@ func (r *PostgresOrderRepository) loadOrderRelations(ctx context.Context, order 
 	}
 	order.Items = items
 
-	// Load payment records if they exist
-	paymentsQuery := `
-		SELECT id, order_id, amount, status, payment_method, transaction_id, created_at
-		FROM payment_records 
-		WHERE order_id = $1
-		ORDER BY created_at DESC
-	`
-	var payments []models.PaymentRecord
-	if err := r.DB.SelectContext(ctx, &payments, paymentsQuery, order.ID); err != nil {
-		// Payment records might not exist for all orders, so just log
-		log.Debug().Err(err).Str("order_id", order.ID.String()).Msg("No payment records found")
-	} else {
-		order.Payments = payments
-	}
-
 	return nil
 }
