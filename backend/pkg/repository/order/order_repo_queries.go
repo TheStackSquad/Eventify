@@ -58,14 +58,34 @@ func (r *PostgresOrderRepository) GetByID(ctx context.Context, id uuid.UUID) (*m
 }
 
 // loadOrderRelations loads order items and payment records for an order
+// backend/pkg/repository/order/order_repo_queries.go
+
 func (r *PostgresOrderRepository) loadOrderRelations(ctx context.Context, order *models.Order) error {
-	// Load order items
+	// Load order items with event details
 	itemsQuery := `
-		SELECT id, order_id, event_id, ticket_tier_id, tier_name, quantity, unit_price, subtotal
-		FROM order_items 
-		WHERE order_id = $1
-		ORDER BY id
+		SELECT 
+			oi.id, 
+			oi.order_id, 
+			oi.event_id, 
+			oi.ticket_tier_id, 
+			oi.tier_name, 
+			oi.quantity, 
+			oi.unit_price, 
+			oi.subtotal,
+			e.title as event_title,
+			e.start_date as event_start_date,
+			e.end_date as event_end_date,
+			e.city as event_city,
+			e.state as event_state,
+			e.venue as event_venue,
+			e.address as event_address,
+			e.thumbnail_url as event_thumbnail
+		FROM order_items oi
+		LEFT JOIN events e ON oi.event_id = e.id
+		WHERE oi.order_id = $1
+		ORDER BY oi.id
 	`
+	
 	var items []models.OrderItem
 	if err := r.DB.SelectContext(ctx, &items, itemsQuery, order.ID); err != nil {
 		return fmt.Errorf("failed to load order items: %w", err)

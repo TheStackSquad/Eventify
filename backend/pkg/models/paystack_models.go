@@ -61,7 +61,7 @@ type PaystackData struct {
 	// Nested Objects
 	Customer      *PaystackCustomer      `json:"customer,omitempty"`
 	Authorization *PaystackAuthorization `json:"authorization,omitempty"`
-	Metadata      *PaystackMetadata      `json:"metadata,omitempty"`
+	Metadata      interface{}            `json:"metadata,omitempty"`
 	Log           *PaystackLog           `json:"log,omitempty"`
 	
 	// Complex Fields (typically null for simple transactions)

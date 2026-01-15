@@ -87,17 +87,24 @@ func (s *OrderServiceImpl) VerifyAndProcess(
 	// 2. HANDLE DUPLICATE REQUESTS
 	if lock.inFlight {
 		lock.mu.Unlock()
-		log.Info().Str("ref", reference).Msg("Duplicate verification request - returning cached result")
+		log.Info().Str("ref", reference).Msg("Duplicate verification request - polling for result")
 
-		// Brief wait to allow first request to complete
-		time.Sleep(100 * time.Millisecond)
-
-		// Return cached result (already processed order)
-		order, err := s.OrderRepo.GetOrderByReference(ctx, reference)
-		if err != nil {
-			return nil, err
+		// Poll for 2.5 seconds maximum
+		for i := 0; i < 5; i++ {
+			time.Sleep(500 * time.Millisecond) // Wait for processing to complete
+			
+			order, err := s.OrderRepo.GetOrderByReference(ctx, reference)
+			if err == nil && order.Status == models.OrderStatusSuccess {
+				return order, nil // Pilot finished successfully!
+			}
+			
+			// If order is in failed state, return immediately
+			if err == nil && (order.Status == models.OrderStatusFailed || order.Status == models.OrderStatusFraud) {
+				return order, fmt.Errorf("order is in %s state", order.Status)
+			}
 		}
-		return order, nil
+		
+		return nil, errors.New("verification is taking too long, please check your email")
 	}
 
 	// 3. MARK AS IN-FLIGHT
@@ -256,14 +263,17 @@ func (s *OrderServiceImpl) finalizeOrder(
 	}
 
 	// 2. PAYMENT STATUS CHECK
-	if data.Status != "success" {
-		log.Warn().
-			Str("ref", order.Reference).
-			Str("status", data.Status).
-			Msg("Transaction failed upstream.")
-		_ = s.OrderRepo.UpdateOrderStatus(ctx, order.ID, models.OrderStatusFailed)
-		return order, errors.New("transaction verification failed with status: " + data.Status)
-	}
+    if data.Status != "success" {
+        log.Warn().Str("ref", order.Reference).Msg("Transaction failed upstream.")
+        
+        // ATOMIC RECOVERY: Mark failed AND release stock in one transaction
+        _ = s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
+            _ = s.OrderRepo.UpdateOrderStatusTx(ctx, tx, order.ID, models.OrderStatusFailed)
+            return s.releaseReservedStockTx(ctx, tx, order) // Implement this to increment stock back
+        })
+        
+        return order, errors.New("transaction verification failed")
+    }
 
 	// 3. AMOUNT VALIDATION (fraud detection)
 	if int64(data.Amount) != order.FinalTotal {
@@ -309,9 +319,9 @@ func (s *OrderServiceImpl) finalizeOrder(
 
 	// 7. GENERATE TICKETS (in-memory, not saved yet)
 	tickets, err := s.generateTicketsForOrder(ctx, order)
-	if err != nil {
-		return order, fmt.Errorf("failed to generate tickets: %w", err)
-	}
+    if err != nil {
+        return order, fmt.Errorf("failed to generate tickets: %w", err)
+    }
 
 	// 8. ATOMIC TRANSACTION
 	err = s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
@@ -320,17 +330,7 @@ func (s *OrderServiceImpl) finalizeOrder(
 			return err
 		}
 
-		// 8b. Reduce ticket stock
-		if err := s.applyStockReductionsTx(ctx, tx, order); err != nil {
-			if strings.Contains(err.Error(), "insufficient stock") {
-				log.Warn().Err(err).Str("ref", order.Reference).
-					Msg("Stock exhaustion during finalization")
-				return fmt.Errorf("tickets no longer available: %w", err)
-			}
-			return err
-		}
-
-		// 8c. Insert generated tickets
+		// 8b. Insert generated tickets
 		if err := s.OrderRepo.InsertTicketsTx(ctx, tx, order, tickets); err != nil {
 			return err
 		}
@@ -497,4 +497,15 @@ type StockExhaustionError struct {
 func (e *StockExhaustionError) Error() string {
 	return fmt.Sprintf("insufficient stock for %s: requested %d, only %d available",
 		e.TierName, e.Requested, e.Available)
+}
+
+func (s *OrderServiceImpl) releaseReservedStockTx(ctx context.Context, tx *sqlx.Tx, order *models.Order) error {
+    for _, item := range order.Items {
+        // We use an INCREMENT query in the repository
+        err := s.EventRepo.IncrementTicketStockTx(ctx, tx, item.EventID, item.TierName, item.Quantity)
+        if err != nil {
+            return err
+        }
+    }
+    return nil
 }

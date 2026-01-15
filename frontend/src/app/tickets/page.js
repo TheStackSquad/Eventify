@@ -1,25 +1,81 @@
-// frontend/src/app/ticket/page.js
-
+// frontend/src/app/tickets/page.js
 "use client";
 
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle } from "lucide-react";
-import axios, { ENDPOINTS } from "@/axiosConfig/axios";
+import backendInstance, { ENDPOINTS } from "@/axiosConfig/axios";
 
-// Custom UI Components
+// Components
 import LoadingSpinner from "@/components/common/loading/loadingSpinner";
 import ErrorState from "@/components/ticketUI/errorState";
+import TicketPageHeader from "@/components/ticketUI/components/ticketPageHeader";
+import TicketCard from "@/components/ticketUI/components/ticketCard";
 import TicketFooter from "@/components/ticketUI/footer";
 
-const TicketCard = lazy(() => import("@/components/ticketUI/ticketCard"));
+/**
+ * DebugPanel: Displays API response and URL params in development mode
+ */
+const DebugPanel = ({ data, error, searchParams }) => {
+  if (process.env.NODE_ENV !== "development") return null;
 
+  return (
+    <div className="fixed bottom-4 right-4 z-50 w-80 bg-gray-900 text-white p-4 rounded-lg shadow-2xl border border-gray-700 max-h-96 overflow-y-auto opacity-90 hover:opacity-100 transition-opacity">
+      <h3 className="text-sm font-bold mb-2 text-green-400 border-b border-gray-700 pb-1">
+        🔍 DEBUG PANEL
+      </h3>
+      <div className="space-y-3 text-xs font-mono">
+        <div>
+          <div className="text-gray-400">URL Params:</div>
+          <pre className="bg-gray-800 p-2 rounded mt-1 overflow-x-auto">
+            {JSON.stringify(
+              Object.fromEntries(searchParams.entries()),
+              null,
+              2
+            )}
+          </pre>
+        </div>
+
+        {error && (
+          <div>
+            <div className="text-red-400">Error:</div>
+            <div className="bg-red-900/30 p-2 rounded mt-1">
+              {error.message || String(error)}
+            </div>
+          </div>
+        )}
+
+        {data && (
+          <div>
+            <div className="text-blue-400">API Structure:</div>
+            <pre className="bg-gray-800 p-2 rounded mt-1 overflow-x-auto">
+              {JSON.stringify(
+                {
+                  status: data.status,
+                  hasData: !!data.data,
+                  itemsCount: data.data?.items?.length || 0,
+                  firstItemKeys: data.data?.items?.[0]
+                    ? Object.keys(data.data.items[0])
+                    : [],
+                },
+                null,
+                2
+              )}
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * TicketContent: Logic for fetching and rendering tickets
+ */
 function TicketContent() {
   const searchParams = useSearchParams();
   const reference = searchParams.get("ref") || searchParams.get("reference");
 
-  // React Query Fetcher
   const {
     data: orderData,
     isLoading,
@@ -29,58 +85,115 @@ function TicketContent() {
     queryKey: ["verifyTicket", reference],
     queryFn: async () => {
       if (!reference) throw new Error("Missing Reference");
-      const { data } = await axios.get(
-        `${ENDPOINTS.PAYMENTS.VERIFY}/${reference}`
-      );
-      if (data.status !== "success") throw new Error("Verification Failed");
-      return data.data;
+
+      try {
+        const response = await backendInstance.get(
+          `${ENDPOINTS.PAYMENTS.VERIFY}/${reference}`
+        );
+
+        // Log missing fields for debugging data rendering issues
+        if (response.data.data?.items) {
+          response.data.data.items.forEach((item, index) => {
+            console.log(`📄 Item ${index} field check:`, {
+              title: !!item.eventTitle,
+              date: !!item.eventDate,
+              venue: !!item.eventVenue,
+              keys: Object.keys(item),
+            });
+          });
+        }
+
+        if (response.data.status !== "success") {
+          throw new Error(response.data.message || "Verification Failed");
+        }
+
+        return response.data;
+      } catch (apiError) {
+        console.error(
+          "❌ API Error:",
+          apiError.response?.data || apiError.message
+        );
+        throw apiError;
+      }
     },
     enabled: !!reference,
-    retry: 2, // Automatically retry twice if network fails
+    retry: 1,
+    staleTime: 5 * 60 * 1000,
   });
 
-  // Handle Loading
-  if (isLoading) return <LoadingSpinner message="Verifying your ticket..." />;
+  // 1. Loading State
+  if (isLoading) {
+    return (
+      <>
+        <LoadingSpinner message="Verifying your ticket..." />
+        <DebugPanel
+          data={orderData}
+          error={error}
+          searchParams={searchParams}
+        />
+      </>
+    );
+  }
 
-  // Handle Missing Reference
-  if (!reference)
+  // 2. Error or Missing Data States
+  if (!reference) {
     return (
       <ErrorState
         message="No Reference Provided"
-        subtext="We need a transaction reference to verify your purchase."
+        subtext="A transaction reference is required."
       />
     );
+  }
 
-  // Handle Error or Empty Data
-  if (isError || !orderData?.items?.length)
+  if (isError || !orderData?.data?.items?.length) {
     return (
-      <ErrorState
-        message="Verification Failed"
-        subtext={error?.message || "Check your internet or reference code."}
-      />
+      <>
+        <ErrorState
+          message="Verification Failed"
+          subtext={error?.message || "We couldn't find your ticket record."}
+        />
+        <DebugPanel
+          data={orderData}
+          error={error}
+          searchParams={searchParams}
+        />
+      </>
     );
+  }
 
-  const { items, customer, reference: orderReference } = orderData;
-  const isMultiTicket = items.length > 1;
+  // 3. Data Extraction
+  const {
+    items,
+    reference: orderReference,
+    amountPaid,
+    customerEmail,
+    customerFirstName,
+    customerLastName,
+    customerPhone,
+  } = orderData.data;
+
+  const customer = {
+    firstName: customerFirstName,
+    lastName: customerLastName,
+    email: customerEmail,
+    phone: customerPhone?.String || customerPhone || "",
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-slate-50 py-8 sm:py-12 px-4">
-      <div className="max-w-4xl mx-auto">
-        <header className="text-center mb-8 sm:mb-12">
-          <div className="inline-flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-full mb-4">
-            <CheckCircle size={20} aria-hidden="true" />
-            <span className="font-medium">Payment Confirmed</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">
-            Your Ticket{isMultiTicket ? "s" : ""} 🎉
-          </h1>
-        </header>
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-slate-50 py-8 sm:py-12 px-4">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <TicketPageHeader
+            isMultiTicket={items.length > 1}
+            amountPaid={amountPaid}
+          />
 
-        <div className="space-y-6 sm:space-y-8">
-          <Suspense fallback={<LoadingSpinner fullScreen={false} size="sm" />}>
+          {/* Tickets List */}
+          <div className="space-y-6 sm:space-y-8">
             {items.map((item, index) => (
               <TicketCard
-                key={`${item.event_id}-${index}`}
+                key={`${item.eventId}-${index}`}
                 ticketItem={item}
                 customer={customer}
                 reference={orderReference}
@@ -88,21 +201,23 @@ function TicketContent() {
                 totalTickets={items.length}
               />
             ))}
-          </Suspense>
-        </div>
+          </div>
 
-        <TicketFooter />
+          <TicketFooter />
+        </div>
       </div>
-    </div>
+
+      <DebugPanel data={orderData} error={error} searchParams={searchParams} />
+    </>
   );
 }
 
 /**
- * Main Page Export with Suspense Wrapper for Next.js Build Compliance
+ * Main Page Export
  */
 export default function TicketPage() {
   return (
-    <Suspense fallback={<LoadingSpinner message="Initializing..." />}>
+    <Suspense fallback={<LoadingSpinner message="Loading your ticket..." />}>
       <TicketContent />
     </Suspense>
   );

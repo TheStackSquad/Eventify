@@ -118,7 +118,6 @@ func main() {
 	} else {
 		gin.SetMode(gin.DebugMode)
 	}
-
 	// ============================================================================
 	// STEP 4: DATABASE INITIALIZATION
 	// ============================================================================
@@ -167,6 +166,7 @@ func main() {
 	paystackClient := &serviceorder.PaystackClientImpl{
 		SecretKey:  os.Getenv("PAYSTACK_SECRET_KEY"),
 		HTTPClient: &http.Client{Timeout: 30 * time.Second},
+		FrontendBaseURL: os.Getenv("FRONTEND_URL"),
 	}
 
 	pricingService := servicepricing.NewPricingService(eventRepo)
@@ -198,6 +198,7 @@ func main() {
 	// STEP 8: START BACKGROUND JOBS
 	// ============================================================================
 	startTokenCleanup(refreshTokenRepo)
+	go orderService.StartStockReleaseWorker(context.Background(), 1*time.Minute, 15*time.Minute)
 
 	// ============================================================================
 	// STEP 9: ROUTER CONFIGURATION

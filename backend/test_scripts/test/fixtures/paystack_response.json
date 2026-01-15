@@ -1,0 +1,17 @@
+{
+  "status": "success",
+  "data": {
+    "status": "success",
+    "reference": "TIX_MOCK_123456789",
+    "amount": 1053750,
+    "gateway_response": "Successful",
+    "paid_at": "2026-01-14T18:30:00.000Z",
+    "channel": "card",
+    "currency": "NGN",
+    "ip_address": "127.0.0.1",
+    "fees": 1500,
+    "customer": {
+      "email": "test@example.com"
+    }
+  }
+}

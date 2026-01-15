@@ -1,7 +1,6 @@
 // frontend/src/utils/hooks/usePaymentVerification.js
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import backendInstance, { ENDPOINTS } from "@/axiosConfig/axios";
 import { useCart } from "@/context/cartContext";
 
@@ -13,7 +12,6 @@ const verifyPayment = async (reference) => {
 };
 
 export function usePaymentVerification(trxref) {
-  const router = useRouter();
   const { clearCart } = useCart();
 
   const [verificationStatus, setVerificationStatus] = useState("verifying");
@@ -24,15 +22,13 @@ export function usePaymentVerification(trxref) {
   const hasVerifiedRef = useRef(false);
   const retryTimeoutRef = useRef(null);
 
-  // ✅ Store stable references to router and clearCart
-  const routerRef = useRef(router);
+  // ✅ Store stable reference to clearCart
   const clearCartRef = useRef(clearCart);
 
-  // ✅ Update refs when values change (but don't trigger re-render)
+  // ✅ Update ref when clearCart changes (but don't trigger re-render)
   useEffect(() => {
-    routerRef.current = router;
     clearCartRef.current = clearCart;
-  }, [router, clearCart]);
+  }, [clearCart]);
 
   useEffect(() => {
     // Guard: Only verify once per reference
@@ -50,13 +46,11 @@ export function usePaymentVerification(trxref) {
           setVerificationStatus("success");
           setPaymentData(data.data);
 
-          // ✅ Use ref instead of direct reference
+          // ✅ Clear cart immediately on successful verification
           clearCartRef.current();
 
-          setTimeout(() => {
-            // ✅ Use ref instead of direct reference
-            routerRef.current.push(`/tickets?ref=${data.data.reference}`);
-          }, 2000);
+          // ❌ REMOVED: Auto-redirect - user controls navigation via button
+          // User will click "View Your Tickets" button to proceed to /tickets page
         } else if (data.status === "pending") {
           setVerificationStatus("pending");
 
@@ -98,7 +92,7 @@ export function usePaymentVerification(trxref) {
         clearTimeout(retryTimeoutRef.current);
       }
     };
-  }, [trxref, retryCount]); // ✅ Only trxref and retryCount - no warning!
+  }, [trxref, retryCount]);
 
   return {
     verificationStatus,

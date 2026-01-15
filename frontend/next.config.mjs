@@ -1,3 +1,5 @@
+// frontend/next.config.js
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Disable caching in development
@@ -22,20 +24,27 @@ const nextConfig = {
     ];
   },
   images: {
+    // Configure allowed qualities for Next.js 16+
+    qualities: [25, 50, 75, 85, 100],
     remotePatterns: [
       {
         protocol: "https",
         hostname: "kphwpin3r1kcmjsx.public.blob.vercel-storage.com",
         port: "",
-        //  pathname: "/event-images/**",a
         pathname: "/**",
       },
-      // Add this new pattern for vendor images
       {
         protocol: "https",
         hostname: "kphwpin3r1kcmjsx.public.blob.vercel-storage.com",
         port: "",
         pathname: "/vendor-images/**",
+      },
+      // ADD THIS: Allow QR code service
+      {
+        protocol: "https",
+        hostname: "api.qrserver.com",
+        port: "",
+        pathname: "/v1/create-qr-code/**",
       },
     ],
   },

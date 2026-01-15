@@ -1,10 +1,20 @@
-//frontend/src/app/checkout/confirmation/components/StatusComponents/SuccessStatus.js
+// frontend/src/app/checkout/confirmation/components/StatusComponents/SuccessStatus.js
 
 import { CheckCircle, Download } from "lucide-react";
 import Link from "next/link";
 
 export function SuccessStatus({ paymentData, trxref, formatCurrency }) {
-  console.log('payment Data:', paymentData);
+  console.log("payment Data:", paymentData);
+
+  // ✅ FIX: Handle the actual data structure from backend
+  const amountPaid = paymentData?.amountPaid || paymentData?.finalTotal || 0;
+  const reference = paymentData?.reference || trxref;
+  const customerName =
+    paymentData?.customerFirstName && paymentData?.customerLastName
+      ? `${paymentData.customerFirstName} ${paymentData.customerLastName}`
+      : null;
+  const customerEmail = paymentData?.customerEmail;
+
   return (
     <div className="text-center">
       <CheckCircle className="mx-auto h-16 w-16 text-green-600 mb-4" />
@@ -14,36 +24,33 @@ export function SuccessStatus({ paymentData, trxref, formatCurrency }) {
       <p className="text-gray-600 mb-4">
         Thank you for your purchase. Your tickets have been confirmed.
       </p>
+
       {paymentData && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-6 max-w-md mx-auto mb-6">
           <div className="text-sm text-green-800 space-y-3">
             <div className="flex justify-between items-center">
               <span>Amount Paid:</span>
               <span className="font-bold text-lg">
-                {formatCurrency(paymentData.amount_kobo / 100)}
+                {/* ✅ FIX: amountPaid is already in kobo, divide by 100 */}
+                {formatCurrency(amountPaid / 100)}
               </span>
             </div>
+
             <div className="border-t border-green-300 pt-2">
               <div className="flex justify-between">
                 <span>Reference:</span>
-                <span className="font-mono text-xs">
-                  {paymentData.reference}
-                </span>
+                <span className="font-mono text-xs">{reference}</span>
               </div>
-              {paymentData.customer?.first_name && (
+
+              {customerName && (
                 <>
                   <div className="flex justify-between mt-2">
                     <span>Customer:</span>
-                    <span className="font-medium">
-                      {paymentData.customer.first_name}{" "}
-                      {paymentData.customer.last_name}
-                    </span>
+                    <span className="font-medium">{customerName}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Email:</span>
-                    <span className="font-medium text-xs">
-                      {paymentData.customer.email}
-                    </span>
+                    <span className="font-medium text-xs">{customerEmail}</span>
                   </div>
                 </>
               )}
@@ -54,7 +61,7 @@ export function SuccessStatus({ paymentData, trxref, formatCurrency }) {
 
       <div className="space-y-3">
         <Link
-          href={`/tickets?ref=${paymentData?.reference || trxref}`}
+          href={`/tickets?ref=${reference}`}
           className="inline-flex items-center gap-2 bg-red-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-700 transition-colors"
         >
           <Download size={20} />
