@@ -131,7 +131,7 @@ func (r *postgresEventRepository) CreateTicketTiers(
 	return nil
 }
 
-// DecrementTicketStockTx (atomic with row locking)
+// DecrementTicketStockTx (Reserving tickets)
 func (r *postgresEventRepository) DecrementTicketStockTx(
 	ctx context.Context,
 	tx *sqlx.Tx,
@@ -139,15 +139,15 @@ func (r *postgresEventRepository) DecrementTicketStockTx(
 	tierName string,
 	quantity int32,
 ) error {
+	// We check (capacity - sold) >= quantity to ensure we don't oversell
 	query := `
-		UPDATE ticket_tiers 
-		SET available = available - $1,
-			sold = sold + $1,
-			updated_at = NOW()
-		WHERE event_id = $2 
-		  AND name = $3 
-		  AND available >= $1  -- 🔥 CRITICAL ATOMIC CHECK
-	`
+        UPDATE ticket_tiers 
+        SET sold = sold + $1,
+            available = available - $1, -- Added this to keep 'available' column in sync
+            updated_at = NOW()
+        WHERE event_id = $2 
+          AND name = $3 
+          AND (capacity - sold) >= $1`
 	
 	result, err := tx.ExecContext(ctx, query, quantity, eventID, tierName)
 	if err != nil {
@@ -156,19 +156,38 @@ func (r *postgresEventRepository) DecrementTicketStockTx(
 	
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
-		// Either tier doesn't exist OR insufficient stock
-		return fmt.Errorf(
-			"insufficient stock for tier '%s' or tier not found (requested: %d)",
-			tierName, quantity,
-		)
+		return fmt.Errorf("insufficient stock for tier '%s' (requested: %d)", tierName, quantity)
 	}
 	
-	// log.Info().
-	// 	Str("event_id", eventID.String()).
-	// 	Str("tier", tierName).
-	// 	Int32("quantity", quantity).
-	// 	Msg("Stock decremented atomically")
-	
+	return nil
+}
+
+// IncrementTicketStockTx (Releasing reserved tickets back to inventory)
+func (r *postgresEventRepository) IncrementTicketStockTx(
+	ctx context.Context, 
+	tx *sqlx.Tx, 
+	eventID uuid.UUID, 
+	tierName string, 
+	quantity int32,
+) error {
+	query := `
+        UPDATE ticket_tiers 
+        SET sold = sold - $1,
+            available = available + $1,
+            updated_at = NOW()
+        WHERE event_id = $2 
+          AND name = $3 
+          AND sold >= $1`
+
+	result, err := tx.ExecContext(ctx, query, quantity, eventID, tierName)
+	if err != nil {
+		return fmt.Errorf("stock increment failed: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("failed to release stock: tier not found or invalid sold_count for %s", tierName)
+	}
 	return nil
 }
 

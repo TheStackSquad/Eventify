@@ -66,6 +66,7 @@ type EventRepository interface {
 	
 	// Stock management
 	DecrementTicketStockTx(ctx context.Context, tx *sqlx.Tx, eventID uuid.UUID, tierName string, quantity int32) error
+	IncrementTicketStockTx(ctx context.Context, tx *sqlx.Tx, eventID uuid.UUID, tierName string, quantity int32) error
 	CheckTicketAvailability(ctx context.Context, eventID uuid.UUID, tierName string, quantity int) (bool, error)
 	
 	// Analytics

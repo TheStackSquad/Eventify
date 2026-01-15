@@ -78,6 +78,7 @@ func (s *PricingServiceImpl) CalculateAuthoritativeOrder(
 		orderItem := models.OrderItem{
 			TicketTierID: tierDetails.TicketTierID,
 			EventID:      clientItem.EventID,
+			EventTitle:   tierDetails.EventTitle,
 			TierName:     clientItem.TierName,
 			Quantity:     clientItem.Quantity,
 			UnitPrice:    unitPrice,

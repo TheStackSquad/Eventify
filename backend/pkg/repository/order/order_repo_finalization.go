@@ -69,11 +69,11 @@ func (r *PostgresOrderRepository) InsertOrderItemsTx(
     order *models.Order,
 ) error {
     // NOTE: Ensure order.Items has IDs and OrderIDs set BEFORE calling this method
-    itemQuery := `
+   itemQuery := `
         INSERT INTO order_items (
-            id, order_id, event_id, ticket_tier_id, tier_name, quantity, unit_price, subtotal
+            id, order_id, event_id, event_title, ticket_tier_id, tier_name, quantity, unit_price, subtotal
         ) VALUES (
-            :id, :order_id, :event_id, :ticket_tier_id, :tier_name, :quantity, :unit_price, :subtotal
+            :id, :order_id, :event_id, :event_title, :ticket_tier_id, :tier_name, :quantity, :unit_price, :subtotal
         )
     `
     // Use NamedExecContext for bulk insertion via sqlx if supported, otherwise loop (as implemented)

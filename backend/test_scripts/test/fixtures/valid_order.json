@@ -1,0 +1,14 @@
+
+{
+  "email": "test_buyer@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "phone": "+2348012345678",
+  "items": [
+    {
+      "eventId": "027554f8-d41a-4b39-985b-730983cb4c42",
+      "tierName": "General Admission",
+      "quantity": 2
+    }
+  ]
+}

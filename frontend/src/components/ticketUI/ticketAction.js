@@ -1,46 +1,69 @@
-// frontend/src/components/ticketUI/TicketActions.js
+// frontend/src/components/ticketUI/ticketActions.js
 
-import { Download, Share2, CheckCircle } from "lucide-react";
+import { generateICSFile, generateTicketPDF } from "../ticketGenerators";
 
-export default function TicketActions({
-  savedLocally,
-  onDownload,
-  onSave,
-  onShare,
-}) {
-  return (
-    <div className="grid md:grid-cols-3 gap-4 mt-4 p-5 mb-8">
-      {/* Download Button (Primary Action) */}
-      <button
-        onClick={onDownload}
-        className="flex items-center justify-center gap-2 bg-red-600 text-white px-6 py-4 rounded-xl font-medium transition-all duration-300 hover:bg-red-700 hover:scale-[1.03] shadow-lg"
-      >
-        <Download size={20} />
-        Download Ticket
-      </button>
+/**
+ * Handle ticket download action
+ */
+export const handleDownloadAction = async (ticketData) => {
+  await generateTicketPDF({
+    ...ticketData,
+    total: formatCurrency(ticketData.total),
+  });
+};
 
-      {/* Save Button (Conditional Styling) */}
-      <button
-        disabled={savedLocally}
-        onClick={onSave}
-        className={`flex items-center justify-center gap-2 px-6 py-4 rounded-xl font-medium transition-all duration-300 shadow-lg ${
-          savedLocally
-            ? "bg-green-100 text-green-700 border-2 border-green-200 cursor-default scale-100"
-            : "bg-white text-gray-700 border-2 border-gray-200 hover:border-red-200 hover:scale-[1.03]"
-        }`}
-      >
-        <CheckCircle size={20} />
-        {savedLocally ? "Ticket Saved" : "Save to Device"}
-      </button>
+/**
+ * Handle ticket share action
+ */
+export const handleShareAction = async ({
+  eventTitle,
+  reference,
+  firstName,
+  lastName,
+}) => {
+  const shareData = {
+    title: `${eventTitle} - Ticket`,
+    text: `${firstName} ${lastName}'s ticket for ${eventTitle}`,
+    url: `${window.location.origin}/tickets?ref=${reference}`,
+  };
 
-      {/* Share Button */}
-      <button
-        onClick={onShare}
-        className="flex items-center justify-center gap-2 bg-white text-gray-700 px-6 py-4 rounded-xl font-medium border-2 border-gray-200 hover:border-red-200 transition-all duration-300 hover:scale-[1.03] shadow-lg"
-      >
-        <Share2 size={20} />
-        Share Ticket
-      </button>
-    </div>
-  );
-}
+  if (navigator.share && navigator.canShare(shareData)) {
+    await navigator.share(shareData);
+  } else {
+    await navigator.clipboard.writeText(shareData.url);
+    alert("Ticket link copied!");
+  }
+};
+
+/**
+ * Handle calendar add action
+ */
+export const handleCalendarAction = async ({
+  eventTitle,
+  tierName,
+  reference,
+  location,
+  startDate,
+  endDate,
+}) => {
+  const icsContent = generateICSFile({
+    eventTitle,
+    tierName,
+    reference,
+    location,
+    startDate: startDate ? new Date(startDate) : new Date(),
+    endDate: endDate
+      ? new Date(endDate)
+      : new Date(Date.now() + 4 * 60 * 60 * 1000),
+  });
+
+  const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${eventTitle.replace(/\s+/g, "-")}.ics`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};

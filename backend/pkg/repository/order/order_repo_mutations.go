@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"github.com/jmoiron/sqlx"
 
 	"eventify/backend/pkg/models"
 
@@ -99,5 +100,16 @@ func (r *PostgresOrderRepository) IncrementWebhookAttempts(ctx context.Context, 
 		return errors.New("order reference not found during webhook attempt increment")
 	}
 
+	return nil
+}
+
+// UpdateOrderStatusTx updates the order status within an existing transaction.
+// This is used by the background worker and failure handlers.
+func (r *PostgresOrderRepository) UpdateOrderStatusTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, status models.OrderStatus) error {
+	query := `UPDATE orders SET status = $1, updated_at = $2 WHERE id = $3`
+	_, err := tx.ExecContext(ctx, query, status, time.Now().UTC(), orderID)
+	if err != nil {
+		return fmt.Errorf("failed to update order status in tx: %w", err)
+	}
 	return nil
 }

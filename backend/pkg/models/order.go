@@ -28,13 +28,14 @@ const (
 	OrderStatusFailed     OrderStatus = "failed"
 	OrderStatusRefunded   OrderStatus = "refunded"
 	OrderStatusFraud      OrderStatus = "fraud"
+	OrderStatusExpired    OrderStatus = "expired"
 )
 
 // --- Order Struct ---
 type Order struct {
 	ID                uuid.UUID      `json:"id" db:"id"`
 	UserID            *uuid.UUID     `json:"userId,omitempty" db:"user_id"`
-	GuestID           sql.NullString `json:"guestId,omitempty" db:"guest_id"` // ✅ FIXED: Changed from string to sql.NullString
+	GuestID           sql.NullString `json:"guestId,omitempty" db:"guest_id"`
 	Reference         string         `json:"reference" db:"reference"`
 	Status            OrderStatus    `json:"status" db:"status"`
 	IPAddress         sql.NullString `json:"ipAddress,omitempty" db:"ip_address"`
@@ -59,16 +60,27 @@ type Order struct {
 }
 
 // --- OrderItem Struct ---
+// backend/pkg/models/order.go
+
 type OrderItem struct {
 	ID           uuid.UUID `json:"id" db:"id"`
 	OrderID      uuid.UUID `json:"orderId" db:"order_id"`
-	EventTitle   string    `json:"eventTitle" db:"event_title"`
 	EventID      uuid.UUID `json:"eventId" db:"event_id"`
 	TicketTierID uuid.UUID `json:"ticketTierId" db:"ticket_tier_id"`
 	TierName     string    `json:"tierName" db:"tier_name"`
 	Quantity     int32     `json:"quantity" db:"quantity"`
 	UnitPrice    int64     `json:"unitPrice" db:"unit_price"`
 	Subtotal     int64     `json:"subtotal" db:"subtotal"`
+	EventTitle   string    `json:"eventTitle" db:"event_title"`
+	
+	// ADD THESE NEW FIELDS:
+	EventStartDate time.Time `json:"eventStartDate" db:"event_start_date"`
+	EventEndDate   time.Time `json:"eventEndDate" db:"event_end_date"`
+	EventCity      string    `json:"eventCity" db:"event_city"`
+	EventState     string    `json:"eventState" db:"event_state"`
+	EventVenue     string    `json:"eventVenue" db:"event_venue"`
+	EventAddress   string    `json:"eventAddress" db:"event_address"`
+	EventThumbnail string    `json:"eventThumbnail" db:"event_thumbnail"`
 }
 
 // --- Calculation Helpers ---
