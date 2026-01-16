@@ -9,7 +9,6 @@ import MyEvents from "@/components/dashboard/eventComponents/myEvents";
 import DashboardStats from "@/components/dashboard/eventComponents/dashboardStats";
 import DashboardQuickActions from "@/components/dashboard/eventComponents/dashboardQuickActions";
 import VendorsDashboard from "@/components/dashboard/vendorComponents/vendorDashboard";
-import { currencyFormat } from "@/utils/currency";
 
 export default function DashboardUI({
   isLoading,
@@ -21,7 +20,7 @@ export default function DashboardUI({
   quickActions,
   filteredEvents,
   activeView = "events",
-  onViewChange,
+  onViewChange, //this is grayed out
 }) {
   // ✅ Get user data directly from useAuth hook
   const { user } = useAuth();
@@ -136,8 +135,8 @@ export default function DashboardUI({
                         Your Events
                       </h2>
                       <p className="text-xs text-gray-600">
-                        {currencyFormat(totalEvents)}{" "}
-                        {totalEvents === 1 ? "event" : "events"} created
+                        {totalEvents} {totalEvents === 1 ? "event" : "events"}{" "}
+                        created
                       </p>
                     </div>
                     {totalEvents > 0 && (

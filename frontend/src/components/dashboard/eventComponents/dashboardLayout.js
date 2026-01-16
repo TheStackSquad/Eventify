@@ -1,7 +1,7 @@
 // frontend/src/components/dashboard/DashboardLayout.js
 "use client";
 
-import Sidebar from "../sidebar";
+import Sidebar from "@/components/dashboard/eventComponents/sidebar";
 
 // We will assume the Sidebar component is where the logout button will be visually prominent.
 export default function DashboardLayout({

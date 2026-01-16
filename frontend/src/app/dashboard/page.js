@@ -1,29 +1,29 @@
 // frontend/src/app/dashboard/page.js
-
 "use client";
 
-import React, { useCallback, useMemo, useEffect } from "react";
+import React, { useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/utils/hooks/useAuth";
+import { useAuth, useLogout } from "@/utils/hooks/useAuth";
 import { useUserEvents, eventKeys } from "@/utils/hooks/useEvents";
 
-import DashboardLayout from "@/components/dashboard/dashboardLayout";
-import MyEventsDashboard from "@/components/dashboard/myEventsDashboard";
-import VendorsDashboard from "@/components/dashboard/vendorDashboard";
+import DashboardLayout from "@/components/dashboard/eventComponents/dashboardLayout";
+import MyEventsDashboard from "@/components/dashboard/eventComponents/myEventsDashboard";
+import VendorsDashboard from "@/components/dashboard/vendorComponents/vendorDashboard";
 import DeleteModal from "@/components/modal/delete";
 import AnalyticsModal from "@/components/modal/analytics";
 
 export default function DashboardPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { mutate: logout } = useLogout();
 
   // Auth state
-  const { user, sessionChecked, logout, isAuthenticated } = useAuth();
+  const { user, sessionChecked, isAuthenticated } = useAuth();
 
-  // Events query
+  // ✅ Events query - returns flat array directly
   const {
-    data: userEvents = [],
+    data: events = [], // Always an array, never undefined
     isLoading: isEventsQueryLoading,
     error: eventsError,
   } = useUserEvents(user?.id, isAuthenticated);
@@ -42,9 +42,10 @@ export default function DashboardPage() {
   const isLoading =
     !sessionChecked || (isAuthenticated && isEventsQueryLoading);
 
+  // ✅ Simple lookup - events is already a flat array
   const currentEvent = useMemo(
-    () => userEvents?.find((e) => e.id === analyticsTargetId),
-    [userEvents, analyticsTargetId]
+    () => events.find((e) => e.id === analyticsTargetId),
+    [events, analyticsTargetId]
   );
 
   // Event handlers
@@ -70,12 +71,8 @@ export default function DashboardPage() {
 
   const handleLogout = useCallback(() => {
     logout(undefined, {
-      onSuccess: () => {
-        router.push("/account/auth/login");
-      },
-      onError: () => {
-        router.push("/account/auth/login");
-      },
+      onSuccess: () => router.push("/account/auth/login"),
+      onError: () => router.push("/account/auth/login"),
     });
   }, [logout, router]);
 
@@ -106,7 +103,7 @@ export default function DashboardPage() {
   }
 
   // Error state
-  if (eventsError && userEvents.length === 0 && activeView === "events") {
+  if (eventsError && events.length === 0 && activeView === "events") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
@@ -129,12 +126,9 @@ export default function DashboardPage() {
       </div>
     );
   }
-  // Empty state check
-  if (
-    (userEvents || []).length === 0 &&
-    isAuthenticated &&
-    activeView === "events"
-  ) {
+
+  // ✅ Simplified empty state check - events is always an array
+  if (events.length === 0 && isAuthenticated && activeView === "events") {
     return (
       <DashboardLayout
         userName={user?.name}
@@ -164,7 +158,7 @@ export default function DashboardPage() {
       >
         {activeView === "events" && (
           <MyEventsDashboard
-            events={userEvents}
+            events={events} // ✅ Always a flat array
             isLoading={isEventsQueryLoading}
             onCreateEvent={handleCreateEvent}
             openDeleteModal={openDeleteModal}
