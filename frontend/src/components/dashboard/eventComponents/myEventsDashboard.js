@@ -11,7 +11,7 @@ import {
   BarChart3,
   Ticket,
 } from "lucide-react";
-import { currencyFormat, formatNumber } from "@/utils/currency";
+import { formatCurrency, formatNumber, formatPrice } from "@/utils/currency";
 
 export default function MyEventsDashboard({
   events,
@@ -117,7 +117,7 @@ export default function MyEventsDashboard({
     return [
       {
         label: "Total Events",
-        value: formatNumber(totalEvents),
+        value: (totalEvents),
         subtext: `${liveEvents.length} live, ${upcomingEvents.length} upcoming`,
         icon: Activity,
         color: "text-indigo-600",
@@ -128,7 +128,7 @@ export default function MyEventsDashboard({
       },
       {
         label: "Potential Revenue",
-        value: currencyFormat(calculations.potentialRevenueKobo),
+        value: formatPrice(calculations.potentialRevenueKobo),
         subtext: "If all tickets sell",
         icon: Wallet,
         color: "text-emerald-600",
@@ -140,7 +140,7 @@ export default function MyEventsDashboard({
       {
         label: "Total Capacity",
         value: formatNumber(calculations.totalTicketCapacity),
-        subtext: `Avg. ${currencyFormat(
+        subtext: `Avg. ${formatCurrency(
           calculations.avgTicketPriceKobo
         )}/ticket`,
         icon: Ticket,

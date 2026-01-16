@@ -35,14 +35,6 @@ export const nairaToKobo = (naira) => {
 };
 
 // ========== SERVICE FEE CALCULATION ==========
-/**
- * Calculate service fee based on ticket price
- * Small tickets (≤₦5,000): 10% flat (VAT included)
- * Premium tickets (>₦5,000): 7% + ₦50 + VAT on fee
- *
- * @param {number} ticketPriceNaira - Ticket price in Naira
- * @returns {object} - { serviceFee, vat, totalFee }
- */
 export const calculateServiceFee = (ticketPriceNaira) => {
   const price = Number(ticketPriceNaira);
 
@@ -75,10 +67,6 @@ export const calculateServiceFee = (ticketPriceNaira) => {
   }
 };
 
-/**
- * Calculate Paystack processing fees
- * 1.5% + ₦100 on total amount charged
- */
 export const calculatePaystackFee = (totalAmountNaira) => {
   const amount = Number(totalAmountNaira);
   if (isNaN(amount) || amount <= 0) return 0;
@@ -86,12 +74,6 @@ export const calculatePaystackFee = (totalAmountNaira) => {
   return Math.round(amount * PAYSTACK_PERCENTAGE + PAYSTACK_FLAT_FEE);
 };
 
-/**
- * Calculate complete order breakdown
- * @param {number} ticketPriceNaira - Base ticket price in Naira
- * @param {number} quantity - Number of tickets (default 1)
- * @returns {object} Complete pricing breakdown
- */
 export const calculateOrderTotals = (ticketPriceNaira, quantity = 1) => {
   const price = Number(ticketPriceNaira);
   const qty = Number(quantity);
@@ -145,33 +127,11 @@ export const calculateOrderTotals = (ticketPriceNaira, quantity = 1) => {
 };
 
 // ========== FORMATTING FUNCTIONS ==========
-export const formatPrice = (priceInKobo) => {
-  // Handle edge cases
-  if (priceInKobo === 0) return "FREE";
-  if (priceInKobo === null || priceInKobo === undefined) return "Price TBD";
 
-  const koboNum = Number(priceInKobo);
-  if (isNaN(koboNum) || koboNum < 0) return "Price TBD";
-
-  // Convert to naira
-  const naira = koboToNaira(koboNum);
-
-  // Format based on value
-  if (naira >= 1000000) {
-    // For millions: ₦1.5M
-    return `₦${(naira / 1000000).toFixed(1)}M`;
-  } else if (naira >= 1000) {
-    // For thousands: ₦35K
-    return `₦${(naira / 1000).toFixed(1)}K`;
-  } else if (naira === Math.floor(naira)) {
-    // Whole numbers without .00
-    return `₦${naira.toLocaleString()}`;
-  } else {
-    // Numbers with decimals
-    return `₦${naira.toFixed(2)}`;
-  }
-};
-
+/**
+ * Format price with full currency symbol and decimals
+ * Use for detailed displays where exact amount matters
+ */
 export const formatPriceDetailed = (priceInKobo) => {
   if (priceInKobo === 0) return "FREE";
   if (priceInKobo === null || priceInKobo === undefined) return "Price TBD";
@@ -186,6 +146,10 @@ export const formatPriceDetailed = (priceInKobo) => {
   })}`;
 };
 
+/**
+ * Format currency with full decimals (for exact amounts)
+ * Detects if input is in kobo or naira
+ */
 export const formatCurrency = (amount) => {
   const amountNum = Number(amount);
   if (isNaN(amountNum)) {
@@ -205,27 +169,47 @@ export const formatCurrency = (amount) => {
   });
 };
 
+/**
+ * Format plain numbers with K/M suffix (NO currency symbol)
+ * Use for: ticket counts, attendee counts, event counts
+ */
 export const formatNumber = (num) => {
-  if (typeof num !== "number" || isNaN(num)) return "0";
-  if (num >= 1000000) {
-    return `₦${(num / 1000000).toFixed(1)}M+`;
-  } else if (num >= 1000) {
-    return `₦${(num / 1000).toFixed(0)}k+`;
+  const n = Number(num);
+  if (isNaN(n) || n === 0) return "0";
+
+  if (n >= 1000000) {
+    return `${(n / 1000000).toFixed(1).replace(/\.0$/, "")}M`;
+  } else if (n >= 1000) {
+    return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}K`;
   }
-  return num.toLocaleString();
+  return n.toLocaleString();
+};
+
+/**
+ * Format price with K/M suffix and currency symbol
+ * Use for: ticket revenue, sales figures, monetary amounts
+ * Input should be in KOBO
+ */
+export const formatPrice = (priceInKobo) => {
+  if (priceInKobo === 0) return "FREE";
+  if (!priceInKobo) return "₦0";
+
+  const naira = koboToNaira(priceInKobo);
+
+  if (naira >= 1000000) {
+    return `₦${(naira / 1000000).toFixed(1).replace(/\.0$/, "")}M`;
+  } else if (naira >= 1000) {
+    return `₦${(naira / 1000).toFixed(1).replace(/\.0$/, "")}K`;
+  }
+  return `₦${naira.toLocaleString()}`;
 };
 
 // ========== HELPER FUNCTIONS ==========
-/**
- * Get naira value from kobo
- */
+
 export const getNairaValue = (kobo) => {
   return koboToNaira(kobo);
 };
 
-/**
- * Get display-friendly price range from ticket array
- */
 export const getPriceRange = (tickets) => {
   if (!Array.isArray(tickets) || tickets.length === 0) {
     return { min: null, max: null, formatted: "Price TBD" };
@@ -254,9 +238,6 @@ export const getPriceRange = (tickets) => {
   return { min, max, formatted };
 };
 
-/**
- * Get fee tier information for display
- */
 export const getFeeTier = (ticketPriceNaira) => {
   const price = Number(ticketPriceNaira);
 
@@ -271,10 +252,6 @@ export const getFeeTier = (ticketPriceNaira) => {
   }
 };
 
-/**
- * Calculate VAT amount (for premium tickets only)
- * Small tickets have VAT included in the 10%
- */
 export const calculateVAT = (serviceFeeAmount) => {
   return Math.round(serviceFeeAmount * VAT_RATE);
 };

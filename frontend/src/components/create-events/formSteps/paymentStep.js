@@ -2,6 +2,7 @@
 import { createInputField } from "@/components/common/createInputFields";
 import PolicyModal from "../components/policyModal";
 import { TIER_THRESHOLD } from "@/utils/currency";
+import Image from "next/image";
 
 export default function PaymentStep({ formData, errors, handleInputChange }) {
   // Check if there are any paid tickets to determine if payment info is relevant
@@ -50,7 +51,7 @@ export default function PaymentStep({ formData, errors, handleInputChange }) {
       <div className="bg-gray-800/50 rounded-lg p-6 border border-gray-700">
         <div className="flex items-center justify-between mb-4">
           <h4 className="text-white font-semibold">Paystack Subaccount</h4>
-          <img
+          <Image
             src="https://paystack.com/assets/img/login/paystack-logo.png"
             alt="Paystack"
             className="h-4 opacity-70"
