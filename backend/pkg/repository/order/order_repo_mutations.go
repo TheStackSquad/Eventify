@@ -30,17 +30,17 @@ func (r *PostgresOrderRepository) SavePendingOrder(ctx context.Context, order *m
 	order.UpdatedAt = now
 
 	// ✅ FIXED: Added guest_id to the INSERT query
-	query := `
+query := `
 		INSERT INTO orders (
 			id, user_id, guest_id, reference, status, subtotal, service_fee, vat_amount, 
-			final_total, amount_paid, customer_email, customer_first_name, customer_last_name, 
-			customer_phone, ip_address, user_agent, processed_by, webhook_attempts,
-			created_at, updated_at
+			final_total, amount_paid, paystack_fee, app_profit, customer_email, 
+			customer_first_name, customer_last_name, customer_phone, ip_address, 
+			user_agent, processed_by, webhook_attempts, created_at, updated_at
 		) VALUES (
 			:id, :user_id, :guest_id, :reference, :status, :subtotal, :service_fee, :vat_amount, 
-			:final_total, :amount_paid, :customer_email, :customer_first_name, :customer_last_name, 
-			:customer_phone, :ip_address, :user_agent, :processed_by, :webhook_attempts,
-			:created_at, :updated_at
+			:final_total, :amount_paid, :paystack_fee, :app_profit, :customer_email, 
+			:customer_first_name, :customer_last_name, :customer_phone, :ip_address, 
+			:user_agent, :processed_by, :webhook_attempts, :created_at, :updated_at
 		)
 	`
 

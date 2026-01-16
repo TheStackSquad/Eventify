@@ -18,48 +18,48 @@ import (
 // UpdateOrderToPaidTx atomically updates the order status from PENDING to COMPLETED/PAID.
 // This serves as the critical idempotency check within the transaction.
 // ✅ FIXED (CLEAR)
-func (r *PostgresOrderRepository) UpdateOrderToPaidTx(
-    ctx context.Context,
-    tx *sqlx.Tx,
-    order *models.Order,
-) error {
-    // Remove confusing pre-check - let database do the work
-    
-    orderUpdateQuery := `
-        UPDATE orders SET
-            status = $1,
-            updated_at = $2,
-            payment_channel = $3,
-            paid_at = $4,
-            processed_by = $5,
-            amount_paid = $6
-        WHERE id = $7 
-          AND status = $8  -- ✅ This is the real protection
-    `
-    
-    now := time.Now().UTC()
-    
-    result, err := tx.ExecContext(ctx, orderUpdateQuery,
-        string(models.OrderStatusSuccess),
-        now,
-        order.PaymentChannel,
-        order.PaidAt,
-        order.ProcessedBy,
-        order.AmountPaid,
-        order.ID,
-        string(models.OrderStatusPending),
-    )
-    
-    if err != nil {
-        return fmt.Errorf("failed to finalize order status: %w", err)
-    }
-    
-    rowsAffected, _ := result.RowsAffected()
-    if rowsAffected == 0 {
-        return errors.New("order not found or status was not 'PENDING' (already processed)")
-    }
-    
-    return nil
+func (r *PostgresOrderRepository) UpdateOrderToPaidTx(ctx context.Context, tx *sqlx.Tx, order *models.Order) error {
+	// We include paystack_fee and app_profit in the update just in case 
+	// final values were adjusted during the verification process.
+	orderUpdateQuery := `
+		UPDATE orders SET
+			status = $1,
+			updated_at = $2,
+			payment_channel = $3,
+			paid_at = $4,
+			processed_by = $5,
+			amount_paid = $6,
+			paystack_fee = $7,
+			app_profit = $8
+		WHERE id = $9 
+		  AND status = $10
+	`
+	
+	now := time.Now().UTC()
+	
+	result, err := tx.ExecContext(ctx, orderUpdateQuery,
+		string(models.OrderStatusSuccess),
+		now,
+		order.PaymentChannel,
+		order.PaidAt,
+		order.ProcessedBy,
+		order.AmountPaid,
+		order.PaystackFee,
+		order.AppProfit,
+		order.ID,
+		string(models.OrderStatusPending),
+	)
+	
+	if err != nil {
+		return fmt.Errorf("failed to finalize order status: %w", err)
+	}
+	
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return errors.New("order not found or status was not 'pending' (already processed)")
+	}
+	
+	return nil
 }
 
 // InsertOrderItemsTx creates order item records in the database using the transaction.
