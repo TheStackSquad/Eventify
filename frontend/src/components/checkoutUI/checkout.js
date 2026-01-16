@@ -5,13 +5,13 @@ import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { CreditCard, Loader2, AlertTriangle } from "lucide-react";
 import { usePaystackIntegration } from "@/utils/hooks/usePaystackIntegration";
+import { formatCurrency } from "@/utils/currency";
 
 // The component is exported directly without memo()
 export default function PaystackCheckout({
   amountInKobo,
   email,
   totalAmount,
-  formatCurrency,
   metadata,
 }) {
   // CRITICAL DEBUG: Log what this component receives

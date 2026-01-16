@@ -14,8 +14,14 @@ type NullUUID sql.Null[uuid.UUID]
 
 // --- Financial Constants ---
 const (
-	ServiceFeeRate float64 = 0.05
-	VATRate        float64 = 0.075
+	VATRate              float64 = 0.075 // 7.5%
+	TierThreshold        int64   = 500000 // ₦5,000 in Kobo
+	SmallTicketRate      float64 = 0.10   // 10%
+	PremiumTicketRate    float64 = 0.07   // 7%
+	PremiumTicketFlatFee int64   = 5000   // ₦50 in Kobo
+	// Paystack specific constants
+    PaystackPercentage   float64 = 0.015  // 1.5%
+    PaystackFlatFee      int64   = 10000  // ₦100 in Kobo
 )
 
 // --- Order Statuses ---
@@ -46,6 +52,8 @@ type Order struct {
 	FinalTotal        int64          `json:"finalTotal" db:"final_total"`
 	AmountPaid        int64          `json:"amountPaid" db:"amount_paid"`
 	PaymentChannel    sql.NullString `json:"paymentChannel,omitempty" db:"payment_channel"`
+    PaystackFee   int64 `json:"paystackFee" db:"paystack_fee"`
+    AppProfit     int64 `json:"appProfit" db:"app_profit"`
 	PaidAt            sql.NullTime   `json:"paidAt,omitempty" db:"paid_at"`
 	ProcessedBy       sql.NullString `json:"processedBy,omitempty" db:"processed_by"`
 	WebhookAttempts   int            `json:"webhookAttempts" db:"webhook_attempts"`
@@ -73,7 +81,6 @@ type OrderItem struct {
 	Subtotal     int64     `json:"subtotal" db:"subtotal"`
 	EventTitle   string    `json:"eventTitle" db:"event_title"`
 	
-	// ADD THESE NEW FIELDS:
 	EventStartDate time.Time `json:"eventStartDate" db:"event_start_date"`
 	EventEndDate   time.Time `json:"eventEndDate" db:"event_end_date"`
 	EventCity      string    `json:"eventCity" db:"event_city"`
@@ -84,22 +91,25 @@ type OrderItem struct {
 }
 
 // --- Calculation Helpers ---
-func CalculateServiceFee(subtotal int64) int64 {
-	if subtotal <= 0 {
-		return 0
-	}
-	fee := float64(subtotal) * ServiceFeeRate
-	return int64(math.Round(fee))
+func CalculateServiceFee(subtotalKobo int64) int64 {
+    if subtotalKobo <= TierThreshold {
+        return int64(math.Round(float64(subtotalKobo) * SmallTicketRate))
+    }
+    fee := (float64(subtotalKobo) * PremiumTicketRate) + float64(PremiumTicketFlatFee)
+    return int64(math.Round(fee))
 }
 
-func CalculateVAT(taxableAmount int64) int64 {
-	if taxableAmount <= 0 {
-		return 0
-	}
-	tax := float64(taxableAmount) * VATRate
-	return int64(math.Round(tax))
+func CalculateVAT(subtotalKobo int64, serviceFeeKobo int64) int64 {
+    if subtotalKobo <= TierThreshold {
+        return 0 // Included in small ticket rate
+    }
+    return int64(math.Round(float64(serviceFeeKobo) * VATRate))
 }
 
+func CalculatePaystackFee(finalTotalKobo int64) int64 {
+    fee := (float64(finalTotalKobo) * PaystackPercentage) + float64(PaystackFlatFee)
+    return int64(math.Round(fee))
+}
 // --- sql.Null Helpers ---
 func ToNullString(s string) sql.NullString {
 	if s == "" {
