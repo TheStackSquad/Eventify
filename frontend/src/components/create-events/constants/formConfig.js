@@ -44,6 +44,7 @@ export const INITIAL_FORM_DATA = {
       tierName: "General Admission",
       price: "",
       quantity: "",
+      isFree: false,
       description: "",
     },
   ],

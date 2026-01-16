@@ -1,13 +1,21 @@
 // frontend/src/utils/currency.js
-const VAT_RATE = 0.075;
-const SERVICE_FEE = 500;
 
-const TIER_ONE_CAP = 2500;
-const TIER_TWO_CAP = 10000;
-const TIER_THREE_CAP = 50000;
+// ========== CONSTANTS ==========
+const VAT_RATE = 0.075; // 7.5% VAT on service fees only
+const PAYSTACK_PERCENTAGE = 0.015; // 1.5%
+const PAYSTACK_FLAT_FEE = 100; // ₦100
+
+// Fee tiers based on ticket price
+const TIER_THRESHOLD = 5000; // ₦5,000 threshold
+
+// Small ticket fees (≤ ₦5,000): 10% flat (VAT included)
+const SMALL_TICKET_RATE = 0.1;
+
+// Premium ticket fees (> ₦5,000): 7% + ₦50 + VAT
+const PREMIUM_TICKET_RATE = 0.07;
+const PREMIUM_TICKET_FLAT = 50;
 
 // ========== CORE CONVERSION FUNCTIONS ==========
-
 export const koboToNaira = (kobo) => {
   const koboNum = Number(kobo);
   if (isNaN(koboNum)) {
@@ -26,8 +34,117 @@ export const nairaToKobo = (naira) => {
   return Math.round(nairaNum * 100);
 };
 
-// ========== FORMATTING FUNCTIONS ==========
+// ========== SERVICE FEE CALCULATION ==========
+/**
+ * Calculate service fee based on ticket price
+ * Small tickets (≤₦5,000): 10% flat (VAT included)
+ * Premium tickets (>₦5,000): 7% + ₦50 + VAT on fee
+ *
+ * @param {number} ticketPriceNaira - Ticket price in Naira
+ * @returns {object} - { serviceFee, vat, totalFee }
+ */
+export const calculateServiceFee = (ticketPriceNaira) => {
+  const price = Number(ticketPriceNaira);
 
+  if (isNaN(price) || price <= 0) {
+    return { serviceFee: 0, vat: 0, totalFee: 0 };
+  }
+
+  if (price <= TIER_THRESHOLD) {
+    // Small tickets: 10% flat (VAT already included)
+    const totalFee = Math.round(price * SMALL_TICKET_RATE);
+    return {
+      serviceFee: totalFee,
+      vat: 0, // VAT included in the 10%
+      totalFee: totalFee,
+      tier: "small",
+    };
+  } else {
+    // Premium tickets: 7% + ₦50, then add VAT on the service fee
+    const serviceFee =
+      Math.round(price * PREMIUM_TICKET_RATE) + PREMIUM_TICKET_FLAT;
+    const vat = Math.round(serviceFee * VAT_RATE);
+    const totalFee = serviceFee + vat;
+
+    return {
+      serviceFee: serviceFee,
+      vat: vat,
+      totalFee: totalFee,
+      tier: "premium",
+    };
+  }
+};
+
+/**
+ * Calculate Paystack processing fees
+ * 1.5% + ₦100 on total amount charged
+ */
+export const calculatePaystackFee = (totalAmountNaira) => {
+  const amount = Number(totalAmountNaira);
+  if (isNaN(amount) || amount <= 0) return 0;
+
+  return Math.round(amount * PAYSTACK_PERCENTAGE + PAYSTACK_FLAT_FEE);
+};
+
+/**
+ * Calculate complete order breakdown
+ * @param {number} ticketPriceNaira - Base ticket price in Naira
+ * @param {number} quantity - Number of tickets (default 1)
+ * @returns {object} Complete pricing breakdown
+ */
+export const calculateOrderTotals = (ticketPriceNaira, quantity = 1) => {
+  const price = Number(ticketPriceNaira);
+  const qty = Number(quantity);
+
+  if (isNaN(price) || isNaN(qty) || price <= 0 || qty <= 0) {
+    return {
+      ticketPrice: 0,
+      quantity: 0,
+      subtotal: 0,
+      serviceFee: 0,
+      vat: 0,
+      totalFees: 0,
+      finalTotal: 0,
+      paystackFee: 0,
+      appProfit: 0,
+      tier: "unknown",
+    };
+  }
+
+  // Calculate per-ticket fees
+  const feeBreakdown = calculateServiceFee(price);
+
+  // Calculate totals
+  const subtotal = price * qty;
+  const totalServiceFees = feeBreakdown.serviceFee * qty;
+  const totalVAT = feeBreakdown.vat * qty;
+  const totalFees = feeBreakdown.totalFee * qty;
+  const finalTotal = subtotal + totalFees;
+
+  // Calculate Paystack fee (on final total)
+  const paystackFee = calculatePaystackFee(finalTotal);
+
+  // App profit = total fees collected - Paystack fees
+  const appProfit = totalFees - paystackFee;
+
+  return {
+    ticketPrice: price,
+    quantity: qty,
+    subtotal: subtotal,
+    serviceFee: totalServiceFees,
+    vat: totalVAT,
+    totalFees: totalFees,
+    finalTotal: finalTotal,
+    paystackFee: paystackFee,
+    appProfit: appProfit,
+    tier: feeBreakdown.tier,
+    // In kobo for API
+    subtotalKobo: nairaToKobo(subtotal),
+    finalTotalKobo: nairaToKobo(finalTotal),
+  };
+};
+
+// ========== FORMATTING FUNCTIONS ==========
 export const formatPrice = (priceInKobo) => {
   // Handle edge cases
   if (priceInKobo === 0) return "FREE";
@@ -78,7 +195,6 @@ export const formatCurrency = (amount) => {
 
   // Check if amount looks like kobo (large numbers typical for ticket prices)
   const isLikelyKobo = amountNum > 1000 && amountNum % 100 === 0;
-
   const nairaValue = isLikelyKobo ? koboToNaira(amountNum) : amountNum;
 
   return nairaValue.toLocaleString("en-NG", {
@@ -89,8 +205,17 @@ export const formatCurrency = (amount) => {
   });
 };
 
-// ========== HELPER FUNCTIONS ==========
+export const formatNumber = (num) => {
+  if (typeof num !== "number" || isNaN(num)) return "0";
+  if (num >= 1000000) {
+    return `₦${(num / 1000000).toFixed(1)}M+`;
+  } else if (num >= 1000) {
+    return `₦${(num / 1000).toFixed(0)}k+`;
+  }
+  return num.toLocaleString();
+};
 
+// ========== HELPER FUNCTIONS ==========
 /**
  * Get naira value from kobo
  */
@@ -129,65 +254,38 @@ export const getPriceRange = (tickets) => {
   return { min, max, formatted };
 };
 
-// ========== EXISTING FUNCTIONS (Keep as is) ==========
+/**
+ * Get fee tier information for display
+ */
+export const getFeeTier = (ticketPriceNaira) => {
+  const price = Number(ticketPriceNaira);
 
-export const calculateServiceFee = (subtotal) => {
-  if (subtotal <= TIER_ONE_CAP) {
-    return 200;
-  } else if (subtotal <= TIER_TWO_CAP) {
-    return Math.round(subtotal * 0.08);
-  } else if (subtotal <= TIER_THREE_CAP) {
-    return Math.round(subtotal * 0.06);
+  if (isNaN(price) || price <= 0) {
+    return "Invalid price";
+  }
+
+  if (price <= TIER_THRESHOLD) {
+    return "10% service fee (includes VAT)";
   } else {
-    return Math.round(subtotal * 0.04);
+    return "7% + ₦50 service fee + VAT";
   }
 };
 
-export const calculateVAT = (amount) => {
-  return Math.round(amount * VAT_RATE);
+/**
+ * Calculate VAT amount (for premium tickets only)
+ * Small tickets have VAT included in the 10%
+ */
+export const calculateVAT = (serviceFeeAmount) => {
+  return Math.round(serviceFeeAmount * VAT_RATE);
 };
 
-export const calculateOrderTotals = (subtotal) => {
-  const subtotalNaira = Number(subtotal);
-
-  const serviceFee = calculateServiceFee(subtotalNaira);
-  const taxableAmount = subtotalNaira + serviceFee;
-  const vatAmount = calculateVAT(taxableAmount);
-  const finalTotalNaira = subtotalNaira + serviceFee + vatAmount;
-
-  return {
-    subtotal: subtotalNaira,
-    serviceFee,
-    vatAmount,
-    finalTotal: finalTotalNaira,
-    amountInKobo: nairaToKobo(finalTotalNaira),
-  };
+// ========== EXPORT CONSTANTS ==========
+export {
+  VAT_RATE,
+  PAYSTACK_PERCENTAGE,
+  PAYSTACK_FLAT_FEE,
+  TIER_THRESHOLD,
+  SMALL_TICKET_RATE,
+  PREMIUM_TICKET_RATE,
+  PREMIUM_TICKET_FLAT,
 };
-
-export const getFeeTier = (subtotal) => {
-  if (subtotal <= TIER_ONE_CAP) {
-    return "Flat ₦200 fee";
-  } else if (subtotal <= TIER_TWO_CAP) {
-    return "8% service fee";
-  } else if (subtotal <= TIER_THREE_CAP) {
-    return "6% service fee";
-  } else {
-    return "4% service fee";
-  }
-};
-
-export const formatNumber = (num) => {
-  if (typeof num !== "number" || isNaN(num)) return "0";
-
-  if (num >= 1000000) {
-    //return (num / 1000000).toFixed(1) + "M";
-    return `₦${(num / 1000000).toFixed(1)}M+`;
-  } else if (num >= 1000) {
-    //return (num / 1000).toFixed(1) + "K";
-    return `₦${(num / 1000).toFixed(0)}k+`;
-  }
-  return num.toLocaleString();
-};
-
-// Export constants
-export { VAT_RATE, SERVICE_FEE };
