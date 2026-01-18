@@ -5,7 +5,7 @@ package event
 import (
 	"errors"
 	"time"
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 )
 
 func (s *eventService) validateEvent(event *models.Event) error {

@@ -4,7 +4,7 @@
 package feedback
 
 import (
-	servicefeedback "eventify/backend/pkg/services/feedback"
+	servicefeedback "github.com/eventify/backend/pkg/services/feedback"
 )
 
 type FeedbackHandler struct {

@@ -6,8 +6,8 @@ import (
 	"context"
 	"fmt"
 	"errors"
-	"eventify/backend/pkg/models"
-	repoevent "eventify/backend/pkg/repository/event"
+	"github.com/eventify/backend/pkg/models"
+	repoevent "github.com/eventify/backend/pkg/repository/event"
 	"github.com/rs/zerolog/log"
 )
 

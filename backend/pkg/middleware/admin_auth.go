@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/http"
 
-	repoauth "eventify/backend/pkg/repository/auth"
+	repoauth "github.com/eventify/backend/pkg/repository/auth"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

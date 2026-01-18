@@ -5,7 +5,7 @@ package like
 import (
 	"context"
 
-	repolike "eventify/backend/pkg/repository/like"
+	repolike "github.com/eventify/backend/pkg/repository/like"
 	"github.com/google/uuid"
 )
 

@@ -3,7 +3,7 @@
 package handlers
 
 import (
-	servicevendor "eventify/backend/pkg/services/vendor"
+	servicevendor "github.com/eventify/backend/pkg/services/vendor"
 )
 
 type VendorAnalyticsHandler struct {

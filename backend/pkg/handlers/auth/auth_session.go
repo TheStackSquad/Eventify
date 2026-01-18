@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"eventify/backend/pkg/models"
-	//repoauth "eventify/backend/pkg/repository/auth"
+	"github.com/eventify/backend/pkg/models"
+	//repoauth "github.com/eventify/backend/pkg/repository/auth"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

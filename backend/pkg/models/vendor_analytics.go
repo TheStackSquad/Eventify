@@ -37,7 +37,9 @@ type VendorOverview struct {
 	AverageRating        float64 `json:"averageRating"`        // 0-5 scale
 	TotalReviews         int     `json:"totalReviews"`
 	IsVerified           bool    `json:"isVerified"`           // Identity OR Business
-	IsFullyVerified      bool    `json:"isFullyVerified"`      // Identity AND Business
+	IsIdentityVerified bool    `json:"isIdentityVerified"`
+    IsBusinessVerified bool    `json:"isBusinessVerified"` 
+    IsFullyVerified    bool    `json:"isFullyVerified"`
 }
 
 // ============================================================================
@@ -118,7 +120,7 @@ type PeriodMetrics struct {
 	ResponseRate      float64 `json:"responseRate"`      // %
 	NewReviews        int     `json:"newReviews"`
 	AverageRating     float64 `json:"averageRating"`     // 0-5 scale
-	BookingsCompleted int     `json:"bookingsCompleted"` // If tracked separately
+//	BookingsCompleted int     `json:"bookingsCompleted"` // If tracked separately
 }
 
 // ============================================================================
@@ -127,13 +129,14 @@ type PeriodMetrics struct {
 
 // VendorPerformance contains account status and verification details
 type VendorPerformance struct {
-	IsIdentityVerified   bool      `json:"isIdentityVerified"`
-	IsBusinessRegistered bool      `json:"isBusinessRegistered"`
-	DaysOnPlatform       int       `json:"daysOnPlatform"`
-	LastProfileUpdate    time.Time `json:"lastProfileUpdate"`
-	AccountStatus        string    `json:"accountStatus"`    // "active", "new", "inactive"
-	ProfileCompleteness  float64   `json:"profileCompleteness"` // 0-100%
-	PVSScoreTrend        string    `json:"pvsScoreTrend"`    // "improving", "stable", "declining"
+    IsIdentityVerified   bool      `json:"isIdentityVerified"`
+    IsBusinessVerified   bool      `json:"isBusinessVerified"`
+    CACNumber            string    `json:"cacNumber"` // Show them their registered number
+    DaysOnPlatform       int       `json:"daysOnPlatform"`
+    LastProfileUpdate    time.Time `json:"lastProfileUpdate"`
+    AccountStatus        string    `json:"accountStatus"`
+    ProfileCompleteness  float64   `json:"profileCompleteness"`
+    PVSScoreTrend        string    `json:"pvsScoreTrend"`
 }
 
 // ============================================================================
@@ -156,21 +159,20 @@ type ActionableInsight struct {
 
 // VendorBasicInfo contains vendor details from vendors collection
 type VendorBasicInfo struct {
-	ID                   string
-	Name                 string
-	Category             string
-	PVSScore             int
-	ReviewCount          int
-	BookingsCompleted    int
-	IsIdentityVerified   bool
-	IsBusinessRegistered bool
-	ProfileCompletion    float32
-	InquiryCount         int
-	RespondedCount       int
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+    ID                 string    `db:"id"`
+    Name               string    `db:"name"`
+    Category           string    `db:"category"`
+    PVSScore           int       `db:"pvs_score"`
+    ReviewCount        int       `db:"review_count"`
+    IsIdentityVerified bool      `db:"is_identity_verified"`
+    CACNumber          string    `db:"cac_number"`           // NEW
+    IsBusinessVerified bool      `db:"is_business_verified"` // NEW
+    ProfileCompletion  float32   `db:"profile_completion"`
+    InquiryCount       int       `db:"inquiry_count"`
+    RespondedCount     int       `db:"responded_count"`
+    CreatedAt          time.Time `db:"created_at"`
+    UpdatedAt          time.Time `db:"updated_at"`
 }
-
 // InquiryMetricsRaw contains raw inquiry data from inquiries collection
 type InquiryMetricsRaw struct {
 	Total           int

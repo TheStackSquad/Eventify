@@ -4,7 +4,7 @@ package auth
 
 import (
 	"context"
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 	"net/http"
 	"time"
 

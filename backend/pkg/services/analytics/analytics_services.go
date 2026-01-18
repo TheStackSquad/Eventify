@@ -7,8 +7,8 @@ import (
 	"context"
 	"fmt"
 
-	"eventify/backend/pkg/analytics"
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/analytics"
+	"github.com/eventify/backend/pkg/models"
 
 	"github.com/google/uuid"
 )

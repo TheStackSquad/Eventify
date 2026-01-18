@@ -4,10 +4,10 @@ package review
 
 import (
 	"context"
-	"eventify/backend/pkg/models"
-	reporeview "eventify/backend/pkg/repository/review"
-	repovendor "eventify/backend/pkg/repository/vendor"
-	repoinquiries "eventify/backend/pkg/repository/inquiries"
+	"github.com/eventify/backend/pkg/models"
+	reporeview "github.com/eventify/backend/pkg/repository/review"
+	repovendor "github.com/eventify/backend/pkg/repository/vendor"
+	repoinquiries "github.com/eventify/backend/pkg/repository/inquiries"
 	//"github.com/google/uuid"
 )
 

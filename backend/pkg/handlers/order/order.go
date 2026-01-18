@@ -9,8 +9,8 @@ import (
 	//"os"
 	"strings"
 	
-	"eventify/backend/pkg/models"
-     serviceorder "eventify/backend/pkg/services/order"
+	"github.com/eventify/backend/pkg/models"
+     serviceorder "github.com/eventify/backend/pkg/services/order"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"

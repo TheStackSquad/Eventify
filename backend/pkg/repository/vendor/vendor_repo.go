@@ -1,6 +1,5 @@
-// backend/pkg/repository/ vendor/vendor_repo.go
-
-package  vendor
+// backend/pkg/repository/vendor/vendor_repo.go
+package vendor
 
 import (
 	"context"
@@ -10,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
@@ -32,65 +31,63 @@ type PostgresVendorRepository struct {
 }
 
 func NewPostgresVendorRepository(db *sqlx.DB) VendorRepository {
-	return &PostgresVendorRepository{
-		DB: db,
-	}
+	return &PostgresVendorRepository{DB: db}
 }
 
 func (r *PostgresVendorRepository) GetByOwnerID(ctx context.Context, ownerID uuid.UUID) (*models.Vendor, error) {
-    query := `
-        SELECT id, owner_id, name, category, image_url, status, 
-               is_identity_verified, is_business_registered,
-               state, city, phone_number, min_price, pvs_score, 
-               review_count, profile_completion, inquiry_count,
-               responded_count, bookings_completed, created_at, updated_at
-        FROM vendors 
-        WHERE owner_id = $1
-        LIMIT 1
-    `
-    
-    var vendor models.Vendor
-    err := r.DB.GetContext(ctx, &vendor, query, ownerID)
-    
-    if err == sql.ErrNoRows {
-        return nil, nil  // No vendor found (not an error)
-    }
-    
-    if err != nil {
-        return nil, fmt.Errorf("failed to get vendor by owner_id: %w", err)
-    }
-    
-    return &vendor, nil
+	query := `
+		SELECT id, owner_id, name, category, description, image_url, status,
+		       vnin, first_name, middle_name, last_name, date_of_birth, gender,
+		       is_identity_verified, state, city, phone_number, email,
+		       min_price, pvs_score, review_count, profile_completion,
+		       inquiry_count, responded_count, created_at, updated_at
+		FROM vendors
+		WHERE owner_id = $1
+		LIMIT 1`
+
+	var vendor models.Vendor
+	err := r.DB.GetContext(ctx, &vendor, query, ownerID)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vendor by owner_id: %w", err)
+	}
+	return &vendor, nil
 }
 
-func (r *PostgresVendorRepository) Create(ctx context.Context, vendor *models.Vendor) (uuid.UUID, error) {
-	if vendor == nil {
+func (r *PostgresVendorRepository) Create(ctx context.Context, v *models.Vendor) (uuid.UUID, error) {
+	if v == nil {
 		return uuid.Nil, errors.New("vendor is nil")
 	}
 
 	now := time.Now()
-	if vendor.ID == uuid.Nil {
-		vendor.ID = uuid.New()
+	if v.ID == uuid.Nil {
+		v.ID = uuid.New()
 	}
-	vendor.CreatedAt = now
-	vendor.UpdatedAt = now
+	v.CreatedAt = now
+	v.UpdatedAt = now
 
-    // 1. Updated Lean Query (Removed sub_categories and area)
+	// ADDED: cac_number, is_business_verified to ensure registration captures everything
 	query := `
 		INSERT INTO vendors (
-			id, owner_id, name, category, image_url, status, 
-			is_identity_verified, is_business_registered, state, city, 
-			phone_number, min_price, pvs_score, review_count, bookings_completed, 
-			created_at, updated_at
+			id, owner_id, name, category, description, image_url, status,
+			vnin, first_name, middle_name, last_name, date_of_birth, gender,
+			is_identity_verified, cac_number, is_business_verified, 
+			state, city, phone_number, email,
+			min_price, pvs_score, review_count, profile_completion,
+			inquiry_count, responded_count, created_at, updated_at
 		) VALUES (
-			:id, :owner_id, :name, :category, :image_url, :status, 
-			:is_identity_verified, :is_business_registered, :state, :city, 
-			:phone_number, :min_price, :pvs_score, :review_count, :bookings_completed, 
-			:created_at, :updated_at
+			:id, :owner_id, :name, :category, :description, :image_url, :status,
+			:vnin, :first_name, :middle_name, :last_name, :date_of_birth, :gender,
+			:is_identity_verified, :cac_number, :is_business_verified,
+			:state, :city, :phone_number, :email,
+			:min_price, :pvs_score, :review_count, :profile_completion,
+			:inquiry_count, :responded_count, :created_at, :updated_at
 		) RETURNING id`
 
-    // 2. Use NamedQueryContext to handle the :name mapping
-	rows, err := r.DB.NamedQueryContext(ctx, query, vendor)
+	rows, err := r.DB.NamedQueryContext(ctx, query, v)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to insert vendor: %w", err)
 	}
@@ -102,18 +99,18 @@ func (r *PostgresVendorRepository) Create(ctx context.Context, vendor *models.Ve
 			return uuid.Nil, fmt.Errorf("failed to scan returned id: %w", err)
 		}
 	}
-
 	return newID, nil
 }
 
 func (r *PostgresVendorRepository) IncrementField(ctx context.Context, id uuid.UUID, field string, delta int) error {
-	if field != "inquiry_count" && field != "responded_count" && field != "bookings_completed" {
+    // Whitelist check including review_count
+	if field != "inquiry_count" && field != "responded_count" && field != "review_count" {
 		return errors.New("invalid field for increment operation")
 	}
 
 	query := fmt.Sprintf(`
-		UPDATE vendors 
-		SET %s = %s + $1, updated_at = $2 
+		UPDATE vendors
+		SET %s = %s + $1, updated_at = $2
 		WHERE id = $3
 	`, field, field)
 
@@ -121,12 +118,11 @@ func (r *PostgresVendorRepository) IncrementField(ctx context.Context, id uuid.U
 	if err != nil {
 		return fmt.Errorf("failed to increment field %s: %w", field, err)
 	}
-
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return errors.New("vendor not found")
-	}
-
+    
+    rows, _ := result.RowsAffected()
+    if rows == 0 {
+        return errors.New("vendor not found")
+    }
 	return nil
 }
 
@@ -136,7 +132,6 @@ func (r *PostgresVendorRepository) UpdateFields(ctx context.Context, id uuid.UUI
 	}
 
 	updates["updated_at"] = time.Now()
-
 	setClauses := make([]string, 0, len(updates))
 	args := make([]interface{}, 0, len(updates)+1)
 	argCounter := 1
@@ -149,7 +144,6 @@ func (r *PostgresVendorRepository) UpdateFields(ctx context.Context, id uuid.UUI
 
 	setQuery := "SET " + strings.Join(setClauses, ", ")
 	args = append(args, id)
-
 	query := fmt.Sprintf("UPDATE vendors %s WHERE id = $%d", setQuery, argCounter)
 
 	result, err := r.DB.ExecContext(ctx, query, args...)
@@ -161,18 +155,15 @@ func (r *PostgresVendorRepository) UpdateFields(ctx context.Context, id uuid.UUI
 	if rowsAffected == 0 {
 		return errors.New("vendor not found or no changes made")
 	}
-
 	return nil
 }
 
 func (r *PostgresVendorRepository) Delete(ctx context.Context, id uuid.UUID) (int64, error) {
 	query := `DELETE FROM vendors WHERE id = $1`
-
 	result, err := r.DB.ExecContext(ctx, query, id)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete vendor: %w", err)
 	}
-
 	deletedCount, _ := result.RowsAffected()
 	return deletedCount, nil
 }
@@ -180,7 +171,6 @@ func (r *PostgresVendorRepository) Delete(ctx context.Context, id uuid.UUID) (in
 func (r *PostgresVendorRepository) GetByID(ctx context.Context, id uuid.UUID) (models.Vendor, error) {
 	var vendor models.Vendor
 	query := `SELECT * FROM vendors WHERE id = $1`
-
 	err := r.DB.GetContext(ctx, &vendor, query, id)
 
 	if err != nil {
@@ -189,26 +179,19 @@ func (r *PostgresVendorRepository) GetByID(ctx context.Context, id uuid.UUID) (m
 		}
 		return models.Vendor{}, fmt.Errorf("failed to get vendor by ID: %w", err)
 	}
-
 	return vendor, nil
 }
 
 func (r *PostgresVendorRepository) FindPublicVendors(ctx context.Context, filters map[string]string) ([]models.Vendor, error) {
 	var vendors []models.Vendor
-
-	whereClauses := []string{}
-	args := []interface{}{}
-	argCounter := 1
-
-	whereClauses = append(whereClauses, fmt.Sprintf("status = $%d", argCounter))
-	args = append(args, models.StatusActive)
-	argCounter++
+	whereClauses := []string{"status = $1"}
+	args := []interface{}{models.StatusActive}
+	argCounter := 2
 
 	for key, value := range filters {
-		if value == "" {
+		if value == "" || key == "page" || key == "limit" {
 			continue
 		}
-
 		switch key {
 		case "min_price":
 			whereClauses = append(whereClauses, fmt.Sprintf("min_price >= $%d", argCounter))
@@ -221,29 +204,55 @@ func (r *PostgresVendorRepository) FindPublicVendors(ctx context.Context, filter
 		}
 	}
 
-	query := "SELECT * FROM vendors"
-	if len(whereClauses) > 0 {
-		query += " WHERE " + strings.Join(whereClauses, " AND ")
-	}
+	query := `
+		SELECT
+			id,
+			owner_id,
+			name,
+			category,
+			COALESCE(description, '') as description,
+			COALESCE(image_url, '') as image_url,
+			status,
+			vnin,
+			first_name,
+			COALESCE(middle_name, '') as middle_name,
+			last_name,
+			date_of_birth,
+			gender,
+			is_identity_verified,
+			state,
+			city,
+			phone_number,
+			COALESCE(email, '') as email,
+			min_price,
+			pvs_score,
+			review_count,
+			profile_completion,
+			inquiry_count,
+			responded_count,
+			created_at,
+			updated_at
+		FROM vendors
+		WHERE ` + strings.Join(whereClauses, " AND ")
 
-	query += " ORDER BY is_business_registered DESC, is_identity_verified DESC, pvs_score DESC, created_at DESC"
-
+	query += " ORDER BY is_identity_verified DESC, pvs_score DESC, created_at DESC"
 	err := r.DB.SelectContext(ctx, &vendors, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find public vendors: %w", err)
 	}
-
 	return vendors, nil
 }
 
 func (r *PostgresVendorRepository) UpdateVerificationFlag(ctx context.Context, id uuid.UUID, field string, isVerified bool, reason string) error {
-	if field != "is_identity_verified" && field != "is_business_registered" {
+	// ALIGNED: Ensured whitelist matches service field names
+	if field != "is_identity_verified" && field != "is_business_verified" {
 		return errors.New("invalid field for verification update")
 	}
 
+	// We use fmt.Sprintf for the field name safely here because of the whitelist check above
 	query := fmt.Sprintf(`
-		UPDATE vendors 
-		SET %s = $1, updated_at = $2 
+		UPDATE vendors
+		SET %s = $1, updated_at = $2
 		WHERE id = $3
 	`, field)
 
@@ -254,16 +263,15 @@ func (r *PostgresVendorRepository) UpdateVerificationFlag(ctx context.Context, i
 
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
-		return errors.New("vendor not found or no change made")
+		return errors.New("vendor not found")
 	}
-
 	return nil
 }
 
 func (r *PostgresVendorRepository) UpdatePVSScore(ctx context.Context, id uuid.UUID, score int) error {
 	query := `
-		UPDATE vendors 
-		SET pvs_score = $1, updated_at = $2 
+		UPDATE vendors
+		SET pvs_score = $1, updated_at = $2
 		WHERE id = $3
 	`
 	result, err := r.DB.ExecContext(ctx, query, score, time.Now(), id)
@@ -275,31 +283,5 @@ func (r *PostgresVendorRepository) UpdatePVSScore(ctx context.Context, id uuid.U
 	if rowsAffected == 0 {
 		return errors.New("vendor not found or score already set")
 	}
-
 	return nil
-}
-
-func mapToDB(v *models.Vendor) map[string]interface{} {
-	return map[string]interface{}{
-		"id":                       v.ID,
-		"owner_id":                 v.OwnerID,
-		"name":                     v.Name,
-		"category":                 v.Category,
-		"image_url":                v.ImageURL,
-		"status":                   v.Status,
-		"is_identity_verified":     v.IsIdentityVerified,
-		"is_business_registered":   v.IsBusinessRegistered,
-		"state":                    v.State,
-		"city":                     v.City,
-		"phone_number":             v.PhoneNumber,
-		"min_price":                v.MinPrice,
-		"pvs_score":                v.PVSScore,
-		"review_count":             v.ReviewCount,
-		"profile_completion":       v.ProfileCompletion,
-		"inquiry_count":            v.InquiryCount,
-		"responded_count":          v.RespondedCount,
-		"bookings_completed":       v.BookingsCompleted,
-		"created_at":               v.CreatedAt,
-		"updated_at":               v.UpdatedAt,
-	}
 }

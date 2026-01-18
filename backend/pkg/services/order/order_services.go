@@ -16,9 +16,9 @@ import (
 	"os"
 	"strings"
 
-	"eventify/backend/pkg/models"
-	repoevent "eventify/backend/pkg/repository/event"
-	repoorder "eventify/backend/pkg/repository/order"
+	"github.com/eventify/backend/pkg/models"
+	repoevent "github.com/eventify/backend/pkg/repository/event"
+	repoorder "github.com/eventify/backend/pkg/repository/order"
 
 	"github.com/google/uuid"
 )

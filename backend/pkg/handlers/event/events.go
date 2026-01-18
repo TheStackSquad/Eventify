@@ -3,9 +3,9 @@
 package event
 
 import (
-	serviceevent "eventify/backend/pkg/services/event"
-	servicelike "eventify/backend/pkg/services/like"
-	"eventify/backend/pkg/utils"
+	serviceevent "github.com/eventify/backend/pkg/services/event"
+	servicelike "github.com/eventify/backend/pkg/services/like"
+	"github.com/eventify/backend/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )

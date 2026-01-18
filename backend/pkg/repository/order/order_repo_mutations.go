@@ -9,7 +9,7 @@ import (
 	"time"
 	"github.com/jmoiron/sqlx"
 
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"

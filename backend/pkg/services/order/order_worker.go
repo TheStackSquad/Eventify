@@ -5,7 +5,7 @@ package order
 import (
 	"context"
 	"time"
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/rs/zerolog/log"

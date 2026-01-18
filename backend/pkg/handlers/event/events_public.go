@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"time"
 
-	"eventify/backend/pkg/models"
-	repoevent "eventify/backend/pkg/repository/event"
-	//"eventify/backend/pkg/services"
-	"eventify/backend/pkg/utils"
+	"github.com/eventify/backend/pkg/models"
+	repoevent "github.com/eventify/backend/pkg/repository/event"
+	//"github.com/eventify/backend/pkg/services"
+	"github.com/eventify/backend/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

@@ -6,7 +6,7 @@ package analytics
 import (
 	"time"
 
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 )
 
 // calculateOverview builds the overview metrics
