@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 	"github.com/google/uuid"
 )
 

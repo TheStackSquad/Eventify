@@ -6,8 +6,8 @@ import (
 	"context"
 	//"database/sql"
 
-	"eventify/backend/pkg/models"
-	repofeedback "eventify/backend/pkg/repository/feedback"
+	"github.com/eventify/backend/pkg/models"
+	repofeedback "github.com/eventify/backend/pkg/repository/feedback"
 	
 	"github.com/google/uuid"
 )

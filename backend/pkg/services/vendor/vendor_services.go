@@ -5,8 +5,8 @@ package vendor
 import (
 	"context"
 
-	"eventify/backend/pkg/models"
-	repovendor "eventify/backend/pkg/repository/vendor"
+	"github.com/eventify/backend/pkg/models"
+	repovendor "github.com/eventify/backend/pkg/repository/vendor"
 	"github.com/google/uuid"
 )
 
@@ -16,7 +16,7 @@ type VendorService interface {
 	GetVendorByID(ctx context.Context, id string) (models.Vendor, error)
 	GetVendorByOwnerID(ctx context.Context, ownerID uuid.UUID) (*models.Vendor, error)
 	CreateVendor(ctx context.Context, vendor *models.Vendor) (string, error)
-	UpdateVendor(ctx context.Context, id string, updates map[string]interface{}) error
+	UpdateVendor(ctx context.Context, id string, requestorID uuid.UUID, updates map[string]interface{}) error
 	DeleteVendor(ctx context.Context, id string) error
 	CalculateAndUpdatePVS(ctx context.Context, vendorID string) error
 	UpdateVerificationStatus(ctx context.Context, vendorID string, field string, isVerified bool, reason string) error
@@ -33,3 +33,4 @@ func NewVendorService(vendorRepo repovendor.VendorRepository) *VendorServiceImpl
 		vendorRepo: vendorRepo,
 	}
 }
+

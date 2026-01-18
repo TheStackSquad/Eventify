@@ -6,7 +6,7 @@ import (
 	"context"
 	//"database/sql"
 	"fmt"
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 	"github.com/google/uuid"
 )
 

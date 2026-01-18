@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	repoauth "eventify/backend/pkg/repository/auth"
-	servicejwt "eventify/backend/pkg/services/jwt"
+	repoauth "github.com/eventify/backend/pkg/repository/auth"
+	servicejwt "github.com/eventify/backend/pkg/services/jwt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"

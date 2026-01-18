@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rs/zerolog/log"

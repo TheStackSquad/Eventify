@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
@@ -31,13 +31,38 @@ func NewVendorDataRepository(db *sqlx.DB) VendorDataRepository {
 }
 
 func (r *PostgresVendorCoreMetricsRepository) GetVendorTrustScore(ctx context.Context, vendorID uuid.UUID) (*models.VendorTrustScore, error) {
-	// Implementation needed here. Placeholder below.
-	return &models.VendorTrustScore{}, nil // Replace with actual DB logic
+	query := `
+		SELECT 
+			pvs_score as total_trust_weight,
+			review_count
+		FROM vendors 
+		WHERE id = $1`
+
+	var score models.VendorTrustScore
+	err := r.DB.GetContext(ctx, &score, query, vendorID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch vendor trust score: %w", err)
+	}
+	return &score, nil
 }
+
 func (r *PostgresVendorCoreMetricsRepository) GetVendorBasicInfo(ctx context.Context, vendorID uuid.UUID) (*models.VendorBasicInfo, error) {
-	// Implementation needed here. Placeholder below.
-    // This is the method the compiler complained was missing.
-	return &models.VendorBasicInfo{}, nil // Replace with actual DB logic
+
+	query := `
+        SELECT 
+            id, name, category, pvs_score, review_count, 
+            is_identity_verified, cac_number, is_business_verified, -- Added new columns
+            profile_completion, inquiry_count, responded_count, 
+            created_at, updated_at 
+        FROM vendors WHERE id = $1`
+
+	var info models.VendorBasicInfo
+	err := r.DB.GetContext(ctx, &info, query, vendorID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch vendor basic info: %w", err)
+	}
+
+	return &info, nil
 }
 
 func (r *PostgresVendorMetricsRepository) GetInquiryCountByPeriod(ctx context.Context, vendorID uuid.UUID, days int) (int, error) {

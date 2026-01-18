@@ -5,7 +5,7 @@ package middleware
 import (
 	"strings"
 
-	"eventify/backend/pkg/utils"
+	"github.com/eventify/backend/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"

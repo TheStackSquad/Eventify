@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	//"eventify/backend/pkg/models"
-	serviceevent "eventify/backend/pkg/services/event"
-	"eventify/backend/pkg/utils"
+	//"github.com/eventify/backend/pkg/models"
+	serviceevent "github.com/eventify/backend/pkg/services/event"
+	"github.com/eventify/backend/pkg/utils"
 
 	"github.com/gin-gonic/gin"
 	//"github.com/google/uuid"

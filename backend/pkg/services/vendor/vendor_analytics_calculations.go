@@ -4,30 +4,29 @@ package vendor
 
 import (
 	"fmt"
+//	"math"
 	"time"
 
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 )
 
-// calculateOverview uses the cached PVS score and only tracks reviews
+// calculateOverview uses the cached PVS score and tracks core KPIs
 func (s *vendorAnalyticsServiceImpl) calculateOverview(
 	vendorInfo *models.VendorBasicInfo,
 	trustScore *models.VendorTrustScore,
 ) models.VendorOverview {
-	isVerified := vendorInfo.IsIdentityVerified || vendorInfo.IsBusinessRegistered
-	isFullyVerified := vendorInfo.IsIdentityVerified && vendorInfo.IsBusinessRegistered
+	// Logic simplified: Verification is now binary based on vNIN (Identity)
+	isVerified := vendorInfo.IsIdentityVerified
 
 	return models.VendorOverview{
-		CurrentPVSScore:     int(trustScore.TotalTrustWeight),
-		TotalInquiries:      0,
-		TotalResponded:      0,
-		ResponseRate:        0.0,
-		TotalBookings:       vendorInfo.BookingsCompleted,
-		ProfileCompletion:   roundToTwoDecimals(float64(vendorInfo.ProfileCompletion)),
-		AverageRating:       0.0,
-		TotalReviews:        int(trustScore.ReviewCount),
-		IsVerified:          isVerified,
-		IsFullyVerified:     isFullyVerified,
+		CurrentPVSScore:   int(trustScore.TotalTrustWeight),
+		TotalInquiries:    vendorInfo.InquiryCount,
+		TotalResponded:    vendorInfo.RespondedCount,
+		ResponseRate:      s.calculateResponseRate(vendorInfo.InquiryCount, vendorInfo.RespondedCount),
+		ProfileCompletion: roundToTwoDecimals(float64(vendorInfo.ProfileCompletion)),
+		AverageRating:     0.0, // Populated later by calculateReviews if needed
+		TotalReviews:      int(trustScore.ReviewCount),
+		IsVerified:        isVerified,
 	}
 }
 
@@ -53,7 +52,7 @@ func (s *vendorAnalyticsServiceImpl) calculateInquiries(
 		Pending:             0,
 		Responded:           0,
 		Closed:              0,
-		ResponseRate:        0.0,
+		ResponseRate:        0.0, 
 		AverageResponseTime: "N/A",
 		RecentInquiries:     recentInquiries,
 		InquiryTrend:        trend,
@@ -97,25 +96,17 @@ func (s *vendorAnalyticsServiceImpl) calculateTrends(
 	inquiries7d, reviews7d int, avgRating7d float64,
 	inquiries30d, reviews30d int, avgRating30d float64,
 ) models.VendorTrends {
-	last7Days := models.PeriodMetrics{
-		InquiryCount:   inquiries7d,
-		RespondedCount: 0,
-		ResponseRate:   0.0,
-		NewReviews:     reviews7d,
-		AverageRating:  roundToTwoDecimals(avgRating7d),
-	}
-
-	last30Days := models.PeriodMetrics{
-		InquiryCount:   inquiries30d,
-		RespondedCount: 0,
-		ResponseRate:   0.0,
-		NewReviews:     reviews30d,
-		AverageRating:  roundToTwoDecimals(avgRating30d),
-	}
-
 	return models.VendorTrends{
-		Last7Days:  last7Days,
-		Last30Days: last30Days,
+		Last7Days: models.PeriodMetrics{
+			InquiryCount:  inquiries7d,
+			NewReviews:    reviews7d,
+			AverageRating: roundToTwoDecimals(avgRating7d),
+		},
+		Last30Days: models.PeriodMetrics{
+			InquiryCount:  inquiries30d,
+			NewReviews:    reviews30d,
+			AverageRating: roundToTwoDecimals(avgRating30d),
+		},
 	}
 }
 
@@ -142,17 +133,16 @@ func (s *vendorAnalyticsServiceImpl) calculatePerformance(
 	}
 
 	return models.VendorPerformance{
-		IsIdentityVerified:   vendorInfo.IsIdentityVerified,
-		IsBusinessRegistered: vendorInfo.IsBusinessRegistered,
-		DaysOnPlatform:       daysOnPlatform,
-		LastProfileUpdate:    vendorInfo.UpdatedAt,
-		AccountStatus:        accountStatus,
-		ProfileCompleteness:  roundToTwoDecimals(float64(vendorInfo.ProfileCompletion)),
-		PVSScoreTrend:        pvsScoreTrend,
+		IsIdentityVerified:  vendorInfo.IsIdentityVerified,
+		DaysOnPlatform:      daysOnPlatform,
+		LastProfileUpdate:   vendorInfo.UpdatedAt,
+		AccountStatus:       accountStatus,
+		ProfileCompleteness: roundToTwoDecimals(float64(vendorInfo.ProfileCompletion)),
+		PVSScoreTrend:       pvsScoreTrend,
 	}
 }
 
-// generateActionableInsights creates insights relevant to vendor analytics
+// generateActionableInsights creates insights relevant to the vNIN model
 func (s *vendorAnalyticsServiceImpl) generateActionableInsights(
 	vendorInfo *models.VendorBasicInfo,
 	reviewMetrics *models.ReviewMetricsRaw,
@@ -160,66 +150,58 @@ func (s *vendorAnalyticsServiceImpl) generateActionableInsights(
 ) []models.ActionableInsight {
 	var insights []models.ActionableInsight
 
-	// Verification insights
-	if !vendorInfo.IsIdentityVerified || !vendorInfo.IsBusinessRegistered {
-		verifyWhat := "identity and business registration"
-		if vendorInfo.IsIdentityVerified {
-			verifyWhat = "business registration"
-		} else if vendorInfo.IsBusinessRegistered {
-			verifyWhat = "identity"
-		}
+	// 1. Identity Verification (vNIN) Insight
+	if !vendorInfo.IsIdentityVerified {
 		insights = append(insights, models.ActionableInsight{
-			Type:        "tip",
-			Title:       fmt.Sprintf("Complete your %s", verifyWhat),
-			Description: "Verified vendors get up to 40% more inquiries and higher PVS scores.",
-			Action:      "Get verified",
-			Priority:    2,
-		})
-	}
-
-	// Profile completion insights
-	if vendorInfo.ProfileCompletion < 80 {
-		insights = append(insights, models.ActionableInsight{
-			Type:        "tip",
-			Title:       fmt.Sprintf("Your profile is %0.0f%% complete", vendorInfo.ProfileCompletion),
-			Description: "Complete profiles get 2x more inquiries. Add photos, descriptions, and pricing details.",
-			Action:      "Complete your profile",
-			Priority:    3,
-		})
-	}
-
-	// Positive rating insights
-	if reviewMetrics.AverageRating >= 4.5 && reviewMetrics.TotalReviews >= 5 {
-		insights = append(insights, models.ActionableInsight{
-			Type:        "success",
-			Title:       fmt.Sprintf("Excellent rating: %0.1f stars!", reviewMetrics.AverageRating),
-			Description: "Your customers love your service! Keep up the great work.",
-			Action:      "Share your reviews",
-			Priority:    3,
-		})
-	}
-
-	// Low rating warning
-	if reviewMetrics.AverageRating < 3.5 && reviewMetrics.TotalReviews >= 5 {
-		insights = append(insights, models.ActionableInsight{
-			Type:        "warning",
-			Title:       "Your rating needs attention",
-			Description: "Ratings below 3.5 stars may discourage potential customers. Focus on service quality and follow up with customers.",
-			Action:      "Improve service quality",
+			Type:        "critical",
+			Title:       "Verify your Identity",
+			Description: "Your vNIN verification is missing. Verified vendors build more trust.",
+			Action:      "Complete vNIN Check",
 			Priority:    1,
 		})
 	}
 
-	// High PVS score insights
-	if overview.CurrentPVSScore >= 80 {
+	// 2. Profile completion insights
+	if vendorInfo.ProfileCompletion < 80 {
+		insights = append(insights, models.ActionableInsight{
+			Type:        "tip",
+			Title:       fmt.Sprintf("Profile is %0.0f%% complete", vendorInfo.ProfileCompletion),
+			Description: "Profiles with photos and descriptions receive more inquiries.",
+			Action:      "Update Profile",
+			Priority:    2,
+		})
+	}
+
+	// 3. Positive rating insights
+	if reviewMetrics.AverageRating >= 4.5 && reviewMetrics.TotalReviews >= 5 {
 		insights = append(insights, models.ActionableInsight{
 			Type:        "success",
-			Title:       "High PVS Score - Keep it up!",
-			Description: fmt.Sprintf("Your PVS score of %d puts you in the top tier. You'll appear higher in search results.", overview.CurrentPVSScore),
-			Action:      "Maintain consistency",
+			Title:       fmt.Sprintf("Top Rated: %0.1f Stars", reviewMetrics.AverageRating),
+			Description: "Excellent service! Your high rating is boosting visibility.",
+			Action:      "View Reviews",
 			Priority:    3,
+		})
+	}
+
+	// 4. Response Rate Insight
+	if overview.ResponseRate < 70 && overview.TotalInquiries > 5 {
+		insights = append(insights, models.ActionableInsight{
+			Type:        "warning",
+			Title:       "Improve Response Rate",
+			Description: "Fast responses lead to more bookings.",
+			Action:      "Review Inquiries",
+			Priority:    1,
 		})
 	}
 
 	return insights
 }
+
+// Helper: Calculate response rate percentage
+func (s *vendorAnalyticsServiceImpl) calculateResponseRate(total, responded int) float64 {
+	if total == 0 {
+		return 0.0
+	}
+	return roundToTwoDecimals((float64(responded) / float64(total)) * 100)
+}
+

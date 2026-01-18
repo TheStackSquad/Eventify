@@ -6,8 +6,8 @@ import (
 	"context"
 	"time"
 
-	"eventify/backend/pkg/models"
-	repoevent "eventify/backend/pkg/repository/event"
+	"github.com/eventify/backend/pkg/models"
+	repoevent "github.com/eventify/backend/pkg/repository/event"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )

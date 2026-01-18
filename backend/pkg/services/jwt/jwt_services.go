@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	"eventify/backend/pkg/utils"
+	"github.com/eventify/backend/pkg/utils"
 
 	"github.com/golang-jwt/jwt/v5"
 	//"github.com/rs/zerolog/log"

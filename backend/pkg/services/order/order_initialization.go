@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	"eventify/backend/pkg/models"
-	"eventify/backend/pkg/utils"
+	"github.com/eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/utils"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"

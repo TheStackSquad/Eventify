@@ -5,7 +5,7 @@ package feedback
 
 import (
 	"errors"
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

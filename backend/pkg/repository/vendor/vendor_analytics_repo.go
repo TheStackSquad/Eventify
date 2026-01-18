@@ -5,7 +5,7 @@ package vendor
 import (
 	"context"
 
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 	"github.com/google/uuid"
 )
 

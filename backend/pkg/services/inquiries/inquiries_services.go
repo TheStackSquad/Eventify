@@ -6,9 +6,9 @@ import (
 	"context"
 
 
-	"eventify/backend/pkg/models"
-	repoinquiries "eventify/backend/pkg/repository/inquiries"
-	repovendor "eventify/backend/pkg/repository/vendor"
+	"github.com/eventify/backend/pkg/models"
+	repoinquiries "github.com/eventify/backend/pkg/repository/inquiries"
+	repovendor "github.com/eventify/backend/pkg/repository/vendor"
 	//"fmt"
 
 	"github.com/google/uuid"

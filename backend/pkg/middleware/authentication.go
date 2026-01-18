@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"eventify/backend/pkg/utils"
-	servicejwt "eventify/backend/pkg/services/jwt"
+	"github.com/eventify/backend/pkg/utils"
+	servicejwt "github.com/eventify/backend/pkg/services/jwt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

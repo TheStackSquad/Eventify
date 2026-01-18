@@ -5,8 +5,8 @@ package handlers
 import (
 	"net/http"
 
-	"eventify/backend/pkg/models"
-	serviceinquiries "eventify/backend/pkg/services/inquiries"
+	"github.com/eventify/backend/pkg/models"
+	serviceinquiries "github.com/eventify/backend/pkg/services/inquiries"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

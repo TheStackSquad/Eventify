@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"eventify/backend/pkg/models"
+	"github.com/eventify/backend/pkg/models"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )

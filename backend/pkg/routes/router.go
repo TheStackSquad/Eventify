@@ -5,20 +5,20 @@ import (
 	"net/http"
 	"time"
 
-	handleranalytics "eventify/backend/pkg/handlers/analytics"
-	handlerauth "eventify/backend/pkg/handlers/auth"
-	handlerevent "eventify/backend/pkg/handlers/event"
-	handlerfeedback "eventify/backend/pkg/handlers/feedback"
-	handlerinquiries "eventify/backend/pkg/handlers/inquiries"
-	handlerorder "eventify/backend/pkg/handlers/order"
-	handlerreview "eventify/backend/pkg/handlers/review"
-	handlervendor "eventify/backend/pkg/handlers/vendor"
+	handleranalytics "github.com/eventify/backend/pkg/handlers/analytics"
+	handlerauth "github.com/eventify/backend/pkg/handlers/auth"
+	handlerevent "github.com/eventify/backend/pkg/handlers/event"
+	handlerfeedback "github.com/eventify/backend/pkg/handlers/feedback"
+	handlerinquiries "github.com/eventify/backend/pkg/handlers/inquiries"
+	handlerorder "github.com/eventify/backend/pkg/handlers/order"
+	handlerreview "github.com/eventify/backend/pkg/handlers/review"
+	handlervendor "github.com/eventify/backend/pkg/handlers/vendor"
 
-	repoauth "eventify/backend/pkg/repository/auth"
-	servicejwt "eventify/backend/pkg/services/jwt"
+	repoauth "github.com/eventify/backend/pkg/repository/auth"
+	servicejwt "github.com/eventify/backend/pkg/services/jwt"
 
-	"eventify/backend/pkg/middleware"
-	"eventify/backend/pkg/utils"
+	"github.com/eventify/backend/pkg/middleware"
+	"github.com/eventify/backend/pkg/utils"
 
 	"github.com/gin-contrib/cors"
 	ginzerolog "github.com/gin-contrib/logger"
@@ -112,6 +112,7 @@ func ConfigureRouter(
 	vendorProtected.Use(middleware.AuthMiddleware(jwtService), middleware.RateLimit(utils.WriteLimiter))
 	{
 		vendorProtected.POST("/register", vendorHandler.RegisterVendor)
+		vendorProtected.PATCH("/:id", vendorHandler.UpdateVendor)
 	}
 
 	vendorAnalytics := router.Group("/api/v1/vendors/:id/analytics")

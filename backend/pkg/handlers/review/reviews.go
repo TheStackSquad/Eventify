@@ -4,8 +4,8 @@ package handlers
 
 import (
 	"net/http"
-	"eventify/backend/pkg/models"
-	 servicereview "eventify/backend/pkg/services/review"
+	"github.com/eventify/backend/pkg/models"
+	 servicereview "github.com/eventify/backend/pkg/services/review"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

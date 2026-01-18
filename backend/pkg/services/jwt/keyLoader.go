@@ -7,7 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"eventify/backend/pkg/utils"
+	"github.com/eventify/backend/pkg/utils"
 
 	"io/ioutil"
 	"os"

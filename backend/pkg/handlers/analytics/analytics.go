@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	serviceanalytics "eventify/backend/pkg/services/analytics"
+	serviceanalytics "github.com/eventify/backend/pkg/services/analytics"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
