@@ -9,6 +9,11 @@ const ContactSection = ({
   isMobile,
   handleCallNow,
 }) => {
+  // Destructure for cleaner code and to prevent long chains
+  const data = vendor?.initialData;
+
+  if (!data) return null;
+
   return (
     <>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
@@ -20,7 +25,7 @@ const ContactSection = ({
             Get in Touch
           </h2>
           <p className="text-green-700">
-            Ready to book? Contact {vendor.initialData.name} directly.
+            Ready to book? Contact {data.name} directly.
           </p>
         </div>
         <div className="mt-4 sm:mt-0">
@@ -35,11 +40,11 @@ const ContactSection = ({
       </div>
 
       <div className="space-y-4" aria-labelledby="contact-heading">
-        {vendor.initialData.email && (
+        {data.email && (
           <a
-            href={`mailto:${vendorinitialData.email}`}
+            href={`mailto:${data.email}`} // FIXED TYPO HERE
             className="flex items-center p-3 sm:p-4 bg-white rounded-xl border-2 border-green-100 hover:border-green-300 hover:shadow-md transition-all duration-300 group"
-            aria-label={`Send email to ${vendor.initialData.email}`}
+            aria-label={`Send email to ${data.email}`}
           >
             <div className="flex items-center justify-center w-10 h-10 bg-green-100 rounded-lg mr-4 group-hover:bg-green-200 transition-colors">
               <Mail size={20} className="text-green-600" aria-hidden="true" />
@@ -47,13 +52,14 @@ const ContactSection = ({
             <div>
               <div className="text-sm text-gray-500 font-medium">Email</div>
               <div className="text-green-800 font-semibold break-all">
-                {vendor.initialData.email}
+                {data.email}
               </div>
             </div>
           </a>
         )}
 
-        {vendor.phoneNumber && (
+        {/* FIXED PATH HERE: vendor.phoneNumber -> data.phoneNumber */}
+        {data.phoneNumber && (
           <div className="flex items-center p-3 sm:p-4 bg-white rounded-xl border-2 border-green-100 transition-all duration-300">
             <div className="flex items-center justify-center w-10 h-10 bg-green-100 rounded-lg mr-4">
               <Phone size={20} className="text-green-600" aria-hidden="true" />
@@ -61,7 +67,7 @@ const ContactSection = ({
             <div>
               <div className="text-sm text-gray-500 font-medium">Phone</div>
               <div className="text-green-800 font-semibold">
-                {showPhoneNumber ? vendor.initialData.phoneNumber : "••• •••• ••••"}
+                {showPhoneNumber ? data.phoneNumber : "••• •••• ••••"}
               </div>
             </div>
           </div>

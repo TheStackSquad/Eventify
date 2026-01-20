@@ -4,6 +4,7 @@ package handlers
 import (
 	"net/http"
 	"strings"
+	"database/sql"
 
 	"github.com/eventify/backend/pkg/models"
 	"github.com/gin-gonic/gin"
@@ -13,15 +14,15 @@ import (
 
 // VendorBinding captures the incoming JSON from Next.js
 type VendorBinding struct {
-	Name               string `json:"name" binding:"required"`
-	Category           string `json:"category" binding:"required"`
-	Description        string `json:"description"`
-	ImageURL           string `json:"imageURL"`
-	State              string `json:"state" binding:"required"`
-	City               string `json:"city"`
-	PhoneNumber        string `json:"phoneNumber" binding:"required"`
-	Email              string `json:"email"`
-	MinPrice           int32  `json:"minPrice"`
+	Name        string `json:"name" binding:"required"`
+	Category    string `json:"category" binding:"required"`
+	Description string `json:"description"`
+	ImageURL    string `json:"imageURL"`
+	State       string `json:"state" binding:"required"`
+	City        string `json:"city"`
+	PhoneNumber string `json:"phoneNumber" binding:"required"`
+	Email       string `json:"email"`
+	MinPrice    int32  `json:"minPrice"`
 
 	// Identity (vNIN)
 	VNIN               string `json:"vnin" binding:"required"`
@@ -69,35 +70,45 @@ func (h *VendorHandler) RegisterVendor(c *gin.Context) {
 	}
 
 	// 4. Mapping: Binding -> Model
-	vendor := models.Vendor{
-		OwnerID:            ownerID,
-		Name:               input.Name,
-		Category:           input.Category,
-		Description:        input.Description,
-		ImageURL:           input.ImageURL,
-		Status:             models.StatusActive,
-		VNIN:               input.VNIN,
-		FirstName:          input.FirstName,
-		MiddleName:         input.MiddleName,
-		LastName:           input.LastName,
-		DateOfBirth:        input.DateOfBirth,
-		Gender:             input.Gender,
-		IsIdentityVerified: input.IsIdentityVerified,
-		IsBusinessVerified: input.IsBusinessVerified,
-		CACNumber:          input.CACNumber,
-		State:              input.State,
-		City:               input.City,
-		PhoneNumber:        input.PhoneNumber,
-		Email:              input.Email,
-	}
+	// 4. Mapping: Binding -> Model
+vendor := models.Vendor{
+    OwnerID:     ownerID,
+    Name:        input.Name,
+    Category:    input.Category,
+    Status:      models.StatusActive,
+    IsIdentityVerified: input.IsIdentityVerified,
+    State:       input.State,
 
-	if input.MinPrice > 0 {
-		vendor.MinPrice = models.ToNullInt32(input.MinPrice)
-	}
+    // NEW: Using helpers for ALL nullable fields identified in your audit
+    Description: models.ToNullString(input.Description),
+    ImageURL:    models.ToNullString(input.ImageURL),
+    City:        models.ToNullString(input.City),
+    PhoneNumber: models.ToNullString(input.PhoneNumber),
+    Email:       models.ToNullString(input.Email),
+    VNIN:        models.ToNullString(input.VNIN),
+    FirstName:   models.ToNullString(input.FirstName),
+    MiddleName:  models.ToNullString(input.MiddleName),
+    LastName:    models.ToNullString(input.LastName),
+    Gender:      models.ToNullString(input.Gender),
+    CACNumber:   models.ToNullString(input.CACNumber),
+    
+    // Date specific helper
+    DateOfBirth: models.ToNullTimeFromString(input.DateOfBirth),
+    
+    // Integer helper
+    MinPrice:    models.ToNullInt32(input.MinPrice),
+
+    // Boolean helper (Custom)
+   IsBusinessVerified: sql.NullBool{
+    Bool:  input.IsBusinessVerified,
+    Valid: true,
+},
+}
 
 	// 5. Execution
 	vendorID, err := h.VendorService.CreateVendor(c.Request.Context(), &vendor)
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to create vendor")
 		if strings.Contains(err.Error(), "unique constraint") {
 			c.JSON(http.StatusConflict, gin.H{"error": "vNIN or Business Name already registered"})
 			return

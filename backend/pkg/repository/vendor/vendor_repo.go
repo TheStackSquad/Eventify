@@ -204,36 +204,36 @@ func (r *PostgresVendorRepository) FindPublicVendors(ctx context.Context, filter
 		}
 	}
 
-	query := `
-		SELECT
-			id,
-			owner_id,
-			name,
-			category,
-			COALESCE(description, '') as description,
-			COALESCE(image_url, '') as image_url,
-			status,
-			vnin,
-			first_name,
-			COALESCE(middle_name, '') as middle_name,
-			last_name,
-			date_of_birth,
-			gender,
-			is_identity_verified,
-			state,
-			city,
-			phone_number,
-			COALESCE(email, '') as email,
-			min_price,
-			pvs_score,
-			review_count,
-			profile_completion,
-			inquiry_count,
-			responded_count,
-			created_at,
-			updated_at
-		FROM vendors
-		WHERE ` + strings.Join(whereClauses, " AND ")
+query := `
+    SELECT
+        id,
+        owner_id,
+        name,
+        category,
+        COALESCE(description, '') as description,
+        COALESCE(image_url, '') as image_url,
+        status,
+        COALESCE(vnin, '') as vnin,
+        first_name,
+        middle_name,
+        last_name,
+        date_of_birth,
+        COALESCE(gender, '') as gender,
+        is_identity_verified,
+        state,
+        COALESCE(city, '') as city,
+        COALESCE(phone_number, '') as phone_number,
+        COALESCE(email, '') as email,
+        min_price,
+        pvs_score,
+        review_count,
+        profile_completion,
+        inquiry_count,
+        responded_count,
+        created_at,
+        updated_at
+    FROM vendors
+    WHERE ` + strings.Join(whereClauses, " AND ")
 
 	query += " ORDER BY is_identity_verified DESC, pvs_score DESC, created_at DESC"
 	err := r.DB.SelectContext(ctx, &vendors, query, args...)
