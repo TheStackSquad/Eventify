@@ -47,3 +47,25 @@ temp/
 # Scripts that should not be tracked if they contain sensitive commands/paths
 port-kill.sh
 test-api.sh
+# Executables
+*.exe
+backend.exe
+main.exe
+
+# Test files and directories
+test_scripts/
+testy/
+*_test.go
+coverage.out
+handlers_coverage.out
+
+# Text files
+*.txt
+cookies.txt
+login_headers.txt
+
+# Shell scripts (optional - remove if you want to track them)
+*.sh
+test-api.sh
+port-kill.sh
+

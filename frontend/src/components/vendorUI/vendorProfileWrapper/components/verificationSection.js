@@ -3,6 +3,8 @@ import React from "react";
 import { Shield, UserCheck, CheckCircle } from "lucide-react";
 
 const VerificationSection = ({ vendor }) => {
+  console.log('vendor:', vendor);
+    const data = vendor?.initialData;
   return (
     <div className="p-5 border rounded-xl bg-gradient-to-br from-indigo-50 to-white">
       <h2 className="text-lg font-bold text-indigo-800 mb-4 flex items-center">
@@ -18,7 +20,7 @@ const VerificationSection = ({ vendor }) => {
             <UserCheck
               size={20}
               className={`mr-3 ${
-                vendor.isIdentityVerified ? "text-green-500" : "text-gray-400"
+                data.isIdentityVerified ? "text-green-500" : "text-gray-400"
               }`}
               aria-hidden="true"
             />
@@ -26,13 +28,13 @@ const VerificationSection = ({ vendor }) => {
           </div>
           <span
             className={`px-3 py-1 rounded-full text-sm font-semibold ${
-              vendor.isIdentityVerified
+              data.isIdentityVerified
                 ? "bg-green-100 text-green-800"
                 : "bg-yellow-100 text-yellow-800"
             }`}
             aria-live="polite"
           >
-            {vendor.isIdentityVerified ? "Verified" : "Pending"}
+            {data.isIdentityVerified ? "Verified" : "Pending"}
           </span>
         </li>
         <li
@@ -43,7 +45,7 @@ const VerificationSection = ({ vendor }) => {
             <CheckCircle
               size={20}
               className={`mr-3 ${
-                vendor.isBusinessRegistered ? "text-green-500" : "text-gray-400"
+                data.isBusinessRegistered ? "text-green-500" : "text-gray-400"
               }`}
               aria-hidden="true"
             />
@@ -51,13 +53,13 @@ const VerificationSection = ({ vendor }) => {
           </div>
           <span
             className={`px-3 py-1 rounded-full text-sm font-semibold ${
-              vendor.isBusinessRegistered
+              data.isBusinessRegistered
                 ? "bg-green-100 text-green-800"
                 : "bg-yellow-100 text-yellow-800"
             }`}
             aria-live="polite"
           >
-            {vendor.isBusinessRegistered ? "Registered" : "Independent"}
+            {data.isBusinessRegistered ? "Registered" : "Independent"}
           </span>
         </li>
       </ul>

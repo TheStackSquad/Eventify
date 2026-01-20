@@ -10,7 +10,7 @@ import { ArrowLeft, User } from "lucide-react";
 // Components
 import PaystackCheckout from "@/components/checkoutUI/checkout";
 import CustomerForm from "@/components/checkoutUI/customerForm";
-import OrderSummary from "./components/OrderSummary";
+import OrderSummary from "@/components/checkoutUI/orderSummaryCard";
 
 // Utils
 import {
