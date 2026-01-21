@@ -2,21 +2,15 @@
 
 "use client";
 
-import { Suspense } from "react"; // ✅ Import Suspense
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/utils/hooks/useAuth";
 import useEventForm from "@/app/events/create-events/hooks/useEventForm";
 import useEventSubmission from "@/app/events/create-events/hooks/useEventSubmission";
 import CreateEventForm from "@/components/create-events/create";
 import LoadingSpinner from "@/components/common/loading/loadingSpinner";
-import toastAlert from "@/components/common/toast/toastAlert";
-import {
-  ERROR_MESSAGES,
-  SUCCESS_MESSAGES,
-  ROUTES,
-} from "@/utils/constants/globalConstants";
+import { ERROR_MESSAGES, ROUTES } from "@/utils/constants/globalConstants";
 
-// ✅ 1. Wrap the logic in a content component
 function CreateEventContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -24,20 +18,32 @@ function CreateEventContent() {
 
   const { user, sessionChecked, isAuthenticated } = useAuth();
 
+  // 1. Manage Form State & Load Existing Data
   const {
     formData,
     setFormData,
+    stableInitialData, // 🛡️ Captured the "Baseline" here
     isLoading: isFormLoading,
     error: formError,
     isError: isFormError,
     handleFormChange,
   } = useEventForm(eventId, user?.id);
 
-  const {
-    isSubmitting,
-    handleSubmit: handleFormSubmit,
-    handleImageUpload,
-  } = useEventSubmission(eventId, user?.id, setFormData, router);
+  // 2. Manage Submission & Validation Logic
+  const { isSubmitting, handleSubmit: handleFormSubmit } = useEventSubmission(
+    eventId,
+    user?.id,
+    setFormData,
+    router,
+    stableInitialData, // 🔗 Linked the snapshot to the submission logic
+  );
+
+  // 3. Auth Redirect Guard
+  useEffect(() => {
+    if (sessionChecked && !isAuthenticated) {
+      router.push(ROUTES.LOGIN);
+    }
+  }, [sessionChecked, isAuthenticated, router]);
 
   if (!sessionChecked || (eventId && isFormLoading)) {
     return (
@@ -53,13 +59,8 @@ function CreateEventContent() {
     );
   }
 
-  if (!isAuthenticated || !user) {
-    // Note: It's better to do this in a useEffect to avoid side-effects during render
-    return null;
-  }
+  if (!isAuthenticated || !user) return null;
 
-  const handleBack = () => router.back();
-  const handleCancel = () => router.push(ROUTES.MY_EVENTS);
   const isEditMode = !!eventId;
 
   return (
@@ -77,8 +78,8 @@ function CreateEventContent() {
         formData={formData}
         onFormChange={handleFormChange}
         onSubmit={handleFormSubmit}
-        onBack={handleBack}
-        onCancel={handleCancel}
+        onBack={() => router.back()}
+        onCancel={() => router.push(ROUTES.MY_EVENTS)}
         isSubmitting={isSubmitting}
         mode={isEditMode ? "edit" : "create"}
         isEditMode={isEditMode}
@@ -87,7 +88,6 @@ function CreateEventContent() {
   );
 }
 
-// 2. The Default Export now handles the Suspense Boundary
 export default function CreateEventsPage() {
   return (
     <Suspense

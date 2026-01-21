@@ -20,8 +20,7 @@ type OrderInitializationRequest struct {
 
 type OrderInitializationItem struct {
 	EventID      uuid.UUID `json:"eventId" binding:"required"`
-//	TicketTierID uuid.UUID `json:"ticketTierId" binding:"required"`
-	TierName     string    `json:"tierName" binding:"required"`
+	TicketTierID uuid.UUID `json:"ticketTierId" binding:"required"`
 	Quantity     int32     `json:"quantity" binding:"required,min=1"`
 }
 
@@ -39,16 +38,13 @@ func (r *OrderInitializationRequest) Validate() error {
 		return errors.New("at least one item is required")
 	}
 
-	for i, item := range r.Items {
+for i, item := range r.Items {
 		if item.EventID == uuid.Nil {
 			return fmt.Errorf("item %d: eventId is required", i)
 		}
-		// if item.TicketTierID == uuid.Nil {
-		// 	return fmt.Errorf("item %d: ticketTierId is required", i)
-		// }
-		 if item.TierName == "" {
-            return fmt.Errorf("item %d: tierName is required", i)
-        }
+		if item.TicketTierID == uuid.Nil {
+			return fmt.Errorf("item %d: ticketTierId is required", i)
+		}
 		if item.Quantity <= 0 {
 			return fmt.Errorf("item %d: quantity must be positive", i)
 		}

@@ -4,32 +4,36 @@ package event
 
 import (
 	"context"
-	"errors"
 	"fmt"
+
 	"github.com/google/uuid"
 )
 
-func (s *eventService) CheckTicketAvailability(ctx context.Context, eventID uuid.UUID, tierName string, quantity int) error {
-	available, err := s.eventRepo.CheckTicketAvailability(ctx, eventID, tierName, quantity)
-	if err != nil {
-		return err
-	}
-	if !available {
-		return errors.New("insufficient tickets available")
-	}
-	return nil
+// CheckTicketAvailability checks if a specific tier has enough inventory
+func (s *eventService) CheckTicketAvailability(
+	ctx context.Context,
+	tierID uuid.UUID,
+	quantity int32,
+) (bool, error) {
+	return s.eventRepo.CheckTicketAvailability(ctx, tierID, quantity)
 }
 
-func (s *eventService) ReserveTickets(ctx context.Context, eventID uuid.UUID, tierName string, quantity int) error {
+// ReserveTickets handles the transactional decrement of stock
+func (s *eventService) ReserveTickets(
+	ctx context.Context,
+	tierID uuid.UUID,
+	quantity int32,
+) error {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	err = s.eventRepo.DecrementTicketStockTx(ctx, tx, eventID, tierName, int32(quantity))
+	// Decrement stock using tier ID
+	err = s.eventRepo.DecrementTicketStockTx(ctx, tx, tierID, quantity)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to reserve tickets: %w", err)
 	}
 
 	return tx.Commit()

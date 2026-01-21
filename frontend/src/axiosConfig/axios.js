@@ -7,13 +7,44 @@ import {
   setBackendInstanceRef,
 } from "./tokenService";
 
-// Configuration
+// --- Configuration ---
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
-console.log("Axios Base URL:", API_BASE_URL);
+const IS_DEV = process.env.NODE_ENV === "development";
+
+if (IS_DEV) console.log("Axios Base URL:", API_BASE_URL);
+
+/**
+ * SHARED UTILS & INTERCEPTORS
+ */
+
+// Function to attach Bearer token to requests
+const attachAuthToken = (config) => {
+  const accessToken = getAccessTokenFromCookies();
+  if (accessToken && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  if (IS_DEV) {
+    console.log(`${config.baseURL ? "Backend" : "Frontend"} Request:`, {
+      method: config.method?.toUpperCase(),
+      url: config.url,
+      hasAuth: !!config.headers.Authorization,
+    });
+  }
+  return config;
+};
+
+// Copy static methods from original axios to an instance
+const injectStaticMethods = (instance) => {
+  instance.isCancel = axios.isCancel;
+  instance.CancelToken = axios.CancelToken;
+  instance.isAxiosError = axios.isAxiosError;
+  return instance;
+};
 
 /**
  * BACKEND API INSTANCE
- * For communication with the backend server
+ * Communicates with the Go Gin server
  */
 export const backendInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -23,113 +54,68 @@ export const backendInstance = axios.create({
   },
   withCredentials: true,
 });
-
-// 🔧 FIX: Copy static methods from original axios to the instance
-backendInstance.isCancel = axios.isCancel;
-backendInstance.CancelToken = axios.CancelToken;
-backendInstance.isAxiosError = axios.isAxiosError;
+injectStaticMethods(backendInstance);
 
 /**
  * FRONTEND API INSTANCE
- * For frontend-only API calls (e.g., local Next.js API routes)
+ * Communicates with local Next.js API routes (e.g., Vercel Blob)
  */
 export const frontendInstance = axios.create({
-  baseURL: "", // Empty baseURL for same-origin requests
-  timeout: 30000,
+  baseURL: "", // Empty for same-origin Next.js routes
+  timeout: 60000, // Higher timeout for image uploads (60s)
+  headers: {
+    "Content-Type": "application/json",
+  },
   withCredentials: true,
 });
+injectStaticMethods(frontendInstance);
 
-// 🔧 FIX: Also copy static methods to frontend instance
-frontendInstance.isCancel = axios.isCancel;
-frontendInstance.CancelToken = axios.CancelToken;
-frontendInstance.isAxiosError = axios.isAxiosError;
+// --- APPLY INTERCEPTORS ---
 
-// === BACKEND INTERCEPTORS ===
-// Request interceptor for logging and auth header
-backendInstance.interceptors.request.use(
-  (config) => {
-    const accessToken = getAccessTokenFromCookies();
-    if (accessToken && !config.headers.Authorization) {
-      config.headers.Authorization = `Bearer ${accessToken}`;
-    }
-
-    console.log("Backend Request:", {
-      method: config.method?.toUpperCase(),
-      url: config.url,
-      fullURL: `${config.baseURL}${config.url}`,
-      hasAuth: !!config.headers.Authorization,
-    });
-
-    if (config.data) {
-      console.log("Request Payload:", {
-        dataType: typeof config.data,
-        dataKeys: Object.keys(config.data || {}),
-      });
-    }
-
-    return config;
-  },
-  (error) => Promise.reject(error)
+// 1. Request Interceptors (Both instances get Auth Headers)
+backendInstance.interceptors.request.use(attachAuthToken, (err) =>
+  Promise.reject(err),
+);
+frontendInstance.interceptors.request.use(attachAuthToken, (err) =>
+  Promise.reject(err),
 );
 
-// Response interceptor - using external service
-backendInstance.interceptors.response.use(
-  (response) => {
+// 2. Backend Response Interceptor (Handles token refreshes)
+backendInstance.interceptors.response.use((response) => {
+  if (IS_DEV) {
     console.log("Backend Success:", {
       status: response.status,
       url: response.config.url,
-      method: response.config.method?.toUpperCase(),
     });
+  }
+  /* Note: Proactive refresh scheduling is handled in tokenService via scheduleTokenRefresh */
+  return response;
+}, createResponseInterceptor(backendInstance));
 
-    // Schedule refresh after successful login or refresh
-    if (
-      response.config.url === API_ENDPOINTS.AUTH.REFRESH ||
-      response.config.url === API_ENDPOINTS.AUTH.LOGIN
-    ) {
-      // This will be handled by tokenService
-    }
-
-    return response;
-  },
-  createResponseInterceptor(backendInstance) // Externalized interceptor
-);
-
-// === FRONTEND INTERCEPTORS ===
-// Basic logging interceptors only
-frontendInstance.interceptors.request.use(
-  (config) => {
-    console.log("Frontend Request:", {
-      method: config.method?.toUpperCase(),
-      url: config.url,
-    });
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
+// 3. Frontend Response Interceptor (Basic error handling)
 frontendInstance.interceptors.response.use(
   (response) => {
-    console.log("Frontend Success:", {
-      status: response.status,
-      url: response.config.url,
-      method: response.config.method?.toUpperCase(),
-    });
+    if (IS_DEV) {
+      console.log("Frontend Success:", {
+        status: response.status,
+        url: response.config.url,
+      });
+    }
     return response;
   },
   (error) => {
-    console.error("Frontend Error:", {
+    console.error("Frontend API Error:", {
       status: error.response?.status,
       url: error.config?.url,
-      method: error.config?.method?.toUpperCase(),
+      message: error.response?.data?.error || error.message,
     });
     return Promise.reject(error);
-  }
+  },
 );
 
-// Set backend instance reference for token service
+// Set reference for tokenService to use backendInstance for refreshes
 setBackendInstanceRef(backendInstance);
 
-// Exports
+// --- EXPORTS ---
 export default backendInstance;
-//export { frontendInstance };
 export const ENDPOINTS = { ...API_ENDPOINTS };

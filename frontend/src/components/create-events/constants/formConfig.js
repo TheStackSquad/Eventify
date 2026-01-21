@@ -1,16 +1,9 @@
-//frontend/src/components/create-events/constants/formConfig.js
+// frontend/src/components/create-events/constants/formConfig.js
 
 export const CATEGORIES = [
-  "Music",
-  "Sports",
-  "Arts & Culture",
-  "Technology",
-  "Business",
-  "Food & Drink",
-  "Networking",
-  "Education",
-  "Entertainment",
-  "Other",
+  "Music", "Sports", "Arts & Culture", "Technology",
+  "Business", "Food & Drink", "Networking", "Education",
+  "Entertainment", "Other",
 ];
 
 export const INITIAL_FORM_DATA = {
@@ -27,23 +20,25 @@ export const INITIAL_FORM_DATA = {
   endTime: "",
   timezone: "Africa/Lagos",
 
-  // Location (for physical events)
+  // Location
   venueName: "",
   venueAddress: "",
   city: "",
   state: "",
   country: "Nigeria",
 
-  // Virtual Event Details (for online events)
+  // Virtual
   virtualPlatform: "",
   meetingLink: "",
 
-  // Ticketing
+  // Ticketing (Updated for Integrity Logic)
   tickets: [
     {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
       tierName: "General Admission",
-      price: "",
-      quantity: "",
+      price: 0,
+      quantity: 10,
+      soldCount: 0,
       isFree: false,
       description: "",
     },
