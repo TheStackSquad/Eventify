@@ -36,15 +36,14 @@ func (s *PricingServiceImpl) CalculateAuthoritativeOrder(
 	var orderItems []models.OrderItem
 	subtotalKobo := int64(0)
 	for _, clientItem := range req.Items {
-		// 1. Fetch live tier data to prevent price manipulation
-		tierDetails, err := s.EventRepo.GetTierDetails(ctx, clientItem.EventID, clientItem.TierName)
+		// 1. Fetch live tier data using the UUID (TicketTierID)
+		tierDetails, err := s.EventRepo.GetTierDetailsByID(ctx, clientItem.TicketTierID)
 		if err != nil {
-			log.Error().Err(err).Str("event_id", clientItem.EventID.String()).Msg("Failed to fetch tier details")
-			return nil, fmt.Errorf("failed to fetch pricing for event %s tier %s: %w", clientItem.EventID.String(), clientItem.TierName, err)
+			return nil, fmt.Errorf("failed to fetch pricing for tier %s: %w", clientItem.TicketTierID, err)
 		}
 		// 2. Validate stock availability
 		if clientItem.Quantity > tierDetails.Available {
-			return nil, fmt.Errorf("insufficient stock for %s - %s: requested %d, only %d available", tierDetails.EventTitle, tierDetails.TierName, clientItem.Quantity, tierDetails.Available)
+			return nil, fmt.Errorf("insufficient stock for %s: requested %d, only %d available", tierDetails.TierName, clientItem.Quantity, tierDetails.Available)
 		}
 		// 3. Calculate Item Subtotals
 		unitPrice := int64(tierDetails.PriceKobo)
@@ -53,11 +52,11 @@ func (s *PricingServiceImpl) CalculateAuthoritativeOrder(
 		if itemSubtotal < 0 {
 			return nil, errors.New("price calculation overflow error")
 		}
-		orderItem := models.OrderItem{
+	orderItem := models.OrderItem{
 			TicketTierID: tierDetails.TicketTierID,
-			EventID:      clientItem.EventID,
+			EventID:      tierDetails.EventID,
 			EventTitle:   tierDetails.EventTitle,
-			TierName:     clientItem.TierName,
+			TierName:     tierDetails.TierName,
 			Quantity:     clientItem.Quantity,
 			UnitPrice:    unitPrice,
 			Subtotal:     itemSubtotal,

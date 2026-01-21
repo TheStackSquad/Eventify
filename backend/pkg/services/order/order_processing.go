@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/eventify/backend/pkg/models"
-	repoorder "github.com/eventify/backend/pkg/repository/order"
+//	repoorder "github.com/eventify/backend/pkg/repository/order"
 	"github.com/eventify/backend/pkg/utils"
 
 	"github.com/google/uuid"
@@ -415,47 +415,40 @@ Groups reductions by ticket tier to minimize database calls.
 Critical for preventing over-selling (ensures stock consistency).
 */
 func (s *OrderServiceImpl) applyStockReductionsTx(
-	ctx context.Context,
-	tx *sqlx.Tx,
-	order *models.Order,
+    ctx context.Context,
+    tx *sqlx.Tx,
+    order *models.Order,
 ) error {
-	// Group reductions by ticket tier ID
-	reductions := make(map[uuid.UUID]repoorder.StockReduction)
+    // Group reductions by ticket tier ID
+    reductions := make(map[uuid.UUID]int32)
 
-	for _, item := range order.Items {
-		key := item.TicketTierID
+    for _, item := range order.Items {
+        // Aggregate multiple items of same tier into the map
+        reductions[item.TicketTierID] += item.Quantity
+    }
 
-		if r, ok := reductions[key]; ok {
-			// Aggregate multiple items of same tier
-			r.Quantity += item.Quantity
-			reductions[key] = r
-			continue
-		}
+    // Apply each reduction
+    for tierID, quantity := range reductions {
+        // HARDENED CALL: (ctx, tx, tierID, quantity)
+        // We no longer pass EventID or TierName because the TierID is a Global Unique Primary Key
+        err := s.EventRepo.DecrementTicketStockTx(
+            ctx,
+            tx,
+            tierID,
+            quantity,
+        )
+        if err != nil {
+            log.Error().
+                Err(err).
+                Str("tier_id", tierID.String()).
+                Int32("quantity", quantity).
+                Msg("OrderService: Failed to decrement stock during order processing")
+            
+            return fmt.Errorf("stock reduction failed for tier %s: %w", tierID, err)
+        }
+    }
 
-		// First reduction for this tier
-		reductions[key] = repoorder.StockReduction{
-			EventID:      item.EventID,
-			TicketTierID: item.TicketTierID,
-			TierName:     item.TierName,
-			Quantity:     item.Quantity,
-		}
-	}
-
-	// Apply each reduction
-	for _, r := range reductions {
-		err := s.EventRepo.DecrementTicketStockTx(
-			ctx,
-			tx,
-			r.EventID,
-			r.TierName,
-			r.Quantity,
-		)
-		if err != nil {
-			return fmt.Errorf("stock reduction failed for tier %s: %w", r.TierName, err)
-		}
-	}
-
-	return nil
+    return nil
 }
 
 /*
@@ -494,18 +487,27 @@ type StockExhaustionError struct {
 	Available int32
 }
 
-func (e *StockExhaustionError) Error() string {
-	return fmt.Sprintf("insufficient stock for %s: requested %d, only %d available",
-		e.TierName, e.Requested, e.Available)
-}
-
 func (s *OrderServiceImpl) releaseReservedStockTx(ctx context.Context, tx *sqlx.Tx, order *models.Order) error {
     for _, item := range order.Items {
-        // We use an INCREMENT query in the repository
-        err := s.EventRepo.IncrementTicketStockTx(ctx, tx, item.EventID, item.TierName, item.Quantity)
+        // HARDENED ALIGNMENT: 
+        // 1. We only need the TicketTierID (the UUID).
+        // 2. This matches the IncrementTicketStockTx(ctx, tx, uuid, qty) signature.
+        err := s.EventRepo.IncrementTicketStockTx(ctx, tx, item.TicketTierID, item.Quantity)
         if err != nil {
-            return err
+            log.Error().
+                Err(err).
+                Str("tier_id", item.TicketTierID.String()).
+                Int32("qty", item.Quantity).
+                Msg("Failed to restore stock for abandoned/failed order")
+            
+            return fmt.Errorf("failed to restore stock for tier %s: %w", item.TicketTierID, err)
         }
     }
+    
+    log.Info().
+        Str("order_ref", order.Reference).
+        Int("items_restored", len(order.Items)).
+        Msg("Inventory successfully restored for failed/expired order")
+        
     return nil
 }

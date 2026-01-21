@@ -1,10 +1,13 @@
 // frontend/src/app/events/create-events/hooks/useEventSubmission.js
-
 import { useState, useCallback } from "react";
 import { useCreateEvent, useUpdateEvent } from "@/utils/hooks/useEvents";
 import { prepareEventPayload } from "../utils/eventTransformers";
-import { handleImageUpload } from "../services/eventServices";
-import toastAlert from "@/components/common/toast/toastAlert";
+import {
+  handleImageUpload,
+  deleteImage,
+  validateEventForm,
+} from "../services/eventServices";
+import  toastAlert from "@/components/common/toast/toastAlert";
 import {
   ERROR_MESSAGES,
   SUCCESS_MESSAGES,
@@ -16,7 +19,8 @@ export default function useEventSubmission(
   eventId,
   userId,
   setFormData,
-  router
+  router,
+  initialData = null, // This is our 'stableInitialData' from useEventForm
 ) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -26,125 +30,80 @@ export default function useEventSubmission(
 
   const handleSubmit = useCallback(
     async (finalFormData) => {
-      console.group("🔄 Event Submission");
-      console.log("📋 Form data:", finalFormData);
-      console.log("👤 User ID:", userId);
-      console.log("🎯 Event ID:", eventId || "New event");
-
       setSubmitError(null);
 
-      // Authentication check
       if (!userId) {
-        console.error("❌ No user ID - Authentication required");
-        console.groupEnd();
         toastAlert.error(ERROR_MESSAGES.AUTH_REQUIRED);
-        setSubmitError(new Error(ERROR_MESSAGES.AUTH_REQUIRED));
         return;
       }
 
-      // Form data validation
-      if (typeof finalFormData !== "object" || Array.isArray(finalFormData)) {
-        console.error("❌ Invalid form data structure:", {
-          type: typeof finalFormData,
-          isArray: Array.isArray(finalFormData),
-        });
-        console.groupEnd();
-        toastAlert.error("Invalid form data received");
-        setSubmitError(new Error("Invalid form data structure"));
+      // 1. Integrity Validation
+      const { isValid, errors } = validateEventForm(finalFormData, initialData);
+
+      if (!isValid) {
+        errors.forEach((err) => toastAlert.error(err));
         return;
       }
 
       setIsSubmitting(true);
+      let newImageUrl = null;
+      let shouldRollbackImage = false;
 
       try {
-        // Handle image upload
-        let imageUrl = null;
-
-        if (
-          finalFormData.eventImage &&
-          typeof finalFormData.eventImage !== "string"
-        ) {
-          console.log("📤 Uploading new image...");
-          const uploadStartTime = Date.now();
-
-          imageUrl = await handleImageUpload(finalFormData.eventImage);
-
-          console.log(`✅ Image uploaded in ${Date.now() - uploadStartTime}ms`);
-          console.log("📸 Image URL:", imageUrl);
-        } else if (finalFormData.eventImage) {
-          imageUrl = finalFormData.eventImage;
-          console.log("📝 Using existing image URL");
+        const imageValue = finalFormData.eventImage;
+        const isNewFile = imageValue instanceof File || (imageValue && typeof imageValue !== "string");
+        
+        // 2. Image Asset Management
+        if (isNewFile) {
+          // Upload new image
+          newImageUrl = await handleImageUpload(imageValue, eventId || "new");
+          shouldRollbackImage = true;
+        } else {
+          newImageUrl = imageValue; // Use existing URL
         }
 
-        // Prepare payload (no userId sent to backend)
-        console.log("📦 Preparing payload...");
-        const finalPayload = prepareEventPayload(finalFormData, imageUrl);
+        // 3. Payload Preparation
+        const finalPayload = prepareEventPayload(finalFormData, newImageUrl);
 
-        console.log("📤 Payload:", JSON.stringify(finalPayload, null, 2));
+        // 4. Persistence
+        if (eventId) {
+          const oldImageUrl = initialData?.eventImage;
 
-        // Execute mutation
-        const isUpdate = !!eventId;
-        const mutationStartTime = Date.now();
-
-        if (isUpdate) {
-          console.log("🔄 Updating event...");
           await updateEventMutation.mutateAsync({
             eventId,
             updates: finalPayload,
           });
-          console.log(`✅ Updated in ${Date.now() - mutationStartTime}ms`);
+
+          // 5. Post-Update Cleanup
+          // Only delete if we actually uploaded a new one and the old one was a blob
+          if (isNewFile && oldImageUrl && oldImageUrl !== newImageUrl && oldImageUrl.includes("blob.vercel-storage.com")) {
+            deleteImage(oldImageUrl).catch(err => console.warn("Old image cleanup failed:", err));
+          }
+          
           toastAlert.success(SUCCESS_MESSAGES.EVENT_UPDATED);
         } else {
-          console.log("🆕 Creating event...");
           await createEventMutation.mutateAsync(finalPayload);
-          console.log(`✅ Created in ${Date.now() - mutationStartTime}ms`);
           toastAlert.success(SUCCESS_MESSAGES.EVENT_CREATED);
           setFormData(INITIAL_FORM_DATA);
         }
 
-        console.log("🏁 Submission successful");
-        console.groupEnd();
         router.push(ROUTES.MY_EVENTS);
       } catch (error) {
-        console.group("❌ Submission Error");
-        console.error("Error:", error);
-
-        let errorMessage = error.message || "Unknown error occurred";
-
-        if (error.response) {
-          console.error("Status:", error.response.status);
-          console.error("Data:", error.response.data);
-          errorMessage = error.response.data?.message || errorMessage;
-        } else if (error.request) {
-          console.error("No response received");
-          errorMessage = "No response from server. Check your connection.";
+        // 6. Transactional Rollback
+        if (shouldRollbackImage && newImageUrl) {
+          console.log("🔄 Rolling back image upload due to DB failure...");
+          await deleteImage(newImageUrl).catch(console.error);
         }
 
-        console.groupEnd();
-        toastAlert.error(errorMessage);
+        const msg = error.response?.data?.message || error.message || "Submission failed";
+        toastAlert.error(msg);
         setSubmitError(error);
       } finally {
         setIsSubmitting(false);
-        console.groupEnd();
       }
     },
-    [
-      userId,
-      eventId,
-      createEventMutation,
-      updateEventMutation,
-      router,
-      setFormData,
-    ]
+    [userId, eventId, initialData, createEventMutation, updateEventMutation, router, setFormData]
   );
 
-  return {
-    isSubmitting,
-    submitError,
-    handleSubmit,
-    mutationStatus: {
-      create: createEventMutation,
-      update: updateEventMutation,
-    },
-  };
+  return { isSubmitting, submitError, handleSubmit };
 }

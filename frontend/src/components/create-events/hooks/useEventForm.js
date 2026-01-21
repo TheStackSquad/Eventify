@@ -34,28 +34,36 @@ export const useEventForm = (formData, onFormChange, onSubmit) => {
     });
   };
 
-  const addTicketTier = () => {
-    onFormChange({
-      ...formData,
-      tickets: [
-        ...formData.tickets,
-        {
-          tierName: "",
-          price: "",
-          quantity: "",
-          description: "",
-        },
-      ],
-    });
-  };
+const addTicketTier = () => {
+  onFormChange({
+    ...formData,
+    tickets: [
+      ...formData.tickets,
+      {
+        // Temporary ID prefixed to distinguish from DB UUIDs
+        id: `temp-${Date.now()}`,
+        tierName: "",
+        price: 0,
+        quantity: 1,
+        soldCount: 0, // New tickets always have 0 sold
+        description: "",
+      },
+    ],
+  });
+};
 
-  const removeTicketTier = (index) => {
-    if (formData.tickets.length <= 1) return;
-    onFormChange({
-      ...formData,
-      tickets: formData.tickets.filter((_, i) => i !== index),
-    });
-  };
+const removeTicketTier = (index) => {
+  const ticket = formData.tickets[index];
+  // HARDENING: Prevent UI from removing a tier that has already sold tickets
+  if (ticket.soldCount > 0) {
+    alert("Cannot remove a ticket tier that has already sold tickets.");
+    return;
+  }
+  onFormChange({
+    ...formData,
+    tickets: formData.tickets.filter((_, i) => i !== index),
+  });
+};
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];

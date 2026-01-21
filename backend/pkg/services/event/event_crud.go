@@ -10,11 +10,12 @@ import (
 
 	"github.com/eventify/backend/pkg/models"
 	repoevent "github.com/eventify/backend/pkg/repository/event"
+	"github.com/eventify/backend/pkg/utils"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
-
+// CreateEvent creates a new event with associated ticket tiers
 func (s *eventService) CreateEvent(
 	ctx context.Context,
 	event *models.Event,
@@ -25,93 +26,63 @@ func (s *eventService) CreateEvent(
 		Msg("Service: Starting CreateEvent process")
 
 	if err := s.validateEvent(event); err != nil {
-		log.Error().Err(err).Msg("Service: Event validation failed")
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
+	// Generate slug from title
+	event.EventSlug = models.ToNullString(utils.GenerateSlug(event.EventTitle))
+
 	if len(tiers) == 0 {
-		log.Error().Msg("Service: No ticket tiers provided")
 		return errors.New("at least one ticket tier is required")
 	}
 
-	// 1. START TRANSACTION
+	// Begin transaction
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
-		log.Error().Err(err).Msg("Service: Failed to start transaction")
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
-	// The defer statement MUST be executed if the function exits early
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error().Interface("panic", r).Msg("Service: PANIC during transaction. Attempting rollback.")
-		}
-		// Rollback is safe to call even if the transaction was committed; tx.Commit() closes the transaction handle.
-		if err := tx.Rollback(); err != nil && err.Error() != "sql: no transaction to rollback" {
-			log.Error().Err(err).Msg("Service: Failed to rollback transaction")
-		} else {
-			log.Info().Msg("Service: Rollback executed successfully (or transaction already closed)")
+			log.Error().Interface("panic", r).Msg("Service: PANIC. Rolling back.")
+			tx.Rollback()
 		}
 	}()
 
-	// Generate IDs and set timestamps
+	// Prepare event data
 	now := time.Now()
-	event.ID = uuid.New() // Generate ID at service layer
+	event.ID = uuid.New()
 	event.CreatedAt = now
 	event.UpdatedAt = now
-	event.IsDeleted = false
-	
-	log.Debug().
-		Str("new_event_id", event.ID.String()).
-		Msg("Service: Generated new Event ID and timestamps")
 
-    // --- OLD LOGIC REMOVED ---
-    // The previous loop that assigned event.ID to tiers is now WRONG because 
-    // it used the unconfirmed ID. We move this assignment step.
-
-	// 2. INSERT EVENT (AND GET CONFIRMED ID)
-	// ============================================================================
-	log.Info().Str("event_id", event.ID.String()).Msg("Service: Inserting main event record...")
-    
-    // 🔥 FIX: Capture the confirmed ID returned by the repository
-	confirmedEventID, err := s.eventRepo.CreateEvent(ctx, tx, event) 
-    
+	// Create event
+	confirmedEventID, err := s.eventRepo.CreateEvent(ctx, tx, event)
 	if err != nil {
-		log.Error().Err(err).Str("event_id", event.ID.String()).Msg("Service: FAILED to insert main event. Rolling back.")
-		return fmt.Errorf("failed to insert event: %w", err) 
+		tx.Rollback()
+		return fmt.Errorf("failed to insert event: %w", err)
 	}
-	log.Info().Str("event_id", confirmedEventID.String()).Msg("Service: Main event insertion SUCCESS.")
-    
-    // CRITICAL NEW STEP: Use the confirmed ID for ALL ticket tiers
-    for i := range tiers {
-        tiers[i].EventID = confirmedEventID // Use the database-confirmed ID
-        tiers[i].ID = uuid.New()
-        tiers[i].CreatedAt = now
-        tiers[i].UpdatedAt = now
-    }
-    log.Debug().
-        Str("confirmed_event_id", confirmedEventID.String()).
-        Msg("Service: Assigned confirmed Event ID to all ticket tiers")
 
-
-	// 3. INSERT TICKET TIERS
-	// ============================================================================
-	log.Info().Int("tiers_count", len(tiers)).Msg("Service: Inserting ticket tiers...")
-	if err := s.eventRepo.CreateTicketTiers(ctx, tx, tiers); err != nil {
-        log.Error().Err(err).Str("event_id", confirmedEventID.String()).Msg("Service: FAILED to insert tiers. Rolling back.")
-		return fmt.Errorf("failed to insert tiers: %w", err) 
+	// Prepare ticket tiers
+	for i := range tiers {
+		tiers[i].PriceKobo = tiers[i].PriceKobo * 100 // Convert to Kobo
+		tiers[i].EventID = confirmedEventID
+		tiers[i].ID = uuid.New()
+		tiers[i].Sold = 0
+		tiers[i].Available = tiers[i].Capacity
+		tiers[i].CreatedAt = now
+		tiers[i].UpdatedAt = now
 	}
-	log.Info().Int("tiers_count", len(tiers)).Msg("Service: Ticket tier insertion SUCCESS.")
 
+	// Create ticket tiers
+	if err := s.eventRepo.CreateTicketTiers(ctx, tx, confirmedEventID, tiers); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("failed to insert tiers: %w", err)
+	}
 
-	// 4. COMMIT TRANSACTION
-	// ============================================================================
+	// Commit transaction
 	if err = tx.Commit(); err != nil {
-		log.Error().Err(err).Msg("Service: FAILED to commit transaction.")
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
-	log.Info().Str("event_id", confirmedEventID.String()).Msg("Service: Transaction committed successfully.")
-	
+
 	return nil
 }
 
@@ -144,11 +115,9 @@ func (s *eventService) GetEventsByOrganizer(
 		IsDeleted:   includeDeleted,
 		Limit:       100,
 	}
-
 	return s.eventRepo.GetEvents(ctx, filters)
 }
 
-// UpdateEvent updates an existing event
 func (s *eventService) UpdateEvent(
 	ctx context.Context,
 	eventID, organizerID uuid.UUID,
@@ -160,151 +129,130 @@ func (s *eventService) UpdateEvent(
 	}
 
 	if existing.OrganizerID != organizerID {
-		return nil, errors.New("unauthorized: you don't own this event")
+		return nil, errors.New("unauthorized: you do not own this event")
 	}
 
 	if existing.IsDeleted {
-		return nil, errors.New("cannot update deleted event")
+		return nil, errors.New("cannot update a deleted event")
 	}
 
-	query := `UPDATE events SET updated_at = $1`
-	args := []interface{}{time.Now()}
-	paramIndex := 2
-
-	if updates.EventTitle != nil {
-		query += fmt.Sprintf(", event_title = $%d", paramIndex)
-		args = append(args, *updates.EventTitle)
-		paramIndex++
-	}
-
-	if updates.EventDescription != nil {
-		query += fmt.Sprintf(", event_description = $%d", paramIndex)
-		args = append(args, *updates.EventDescription)
-		paramIndex++
-	}
-
-	if updates.Category != nil {
-		query += fmt.Sprintf(", category = $%d", paramIndex)
-		args = append(args, *updates.Category)
-		paramIndex++
-	}
-
-	if updates.EventType != nil {
-		query += fmt.Sprintf(", event_type = $%d", paramIndex)
-		args = append(args, *updates.EventType)
-		paramIndex++
-	}
-
-	if updates.EventImageURL != nil {
-		query += fmt.Sprintf(", event_image_url = $%d", paramIndex)
-		args = append(args, *updates.EventImageURL)
-		paramIndex++
-	}
-
-	if updates.VenueName != nil {
-		query += fmt.Sprintf(", venue_name = $%d", paramIndex)
-		args = append(args, *updates.VenueName)
-		paramIndex++
-	}
-
-	if updates.VenueAddress != nil {
-		query += fmt.Sprintf(", venue_address = $%d", paramIndex)
-		args = append(args, *updates.VenueAddress)
-		paramIndex++
-	}
-
-	if updates.City != nil {
-		query += fmt.Sprintf(", city = $%d", paramIndex)
-		args = append(args, *updates.City)
-		paramIndex++
-	}
-
-	if updates.State != nil {
-		query += fmt.Sprintf(", state = $%d", paramIndex)
-		args = append(args, *updates.State)
-		paramIndex++
-	}
-
-	if updates.Country != nil {
-		query += fmt.Sprintf(", country = $%d", paramIndex)
-		args = append(args, *updates.Country)
-		paramIndex++
-	}
-
-	if updates.VirtualPlatform != nil {
-		query += fmt.Sprintf(", virtual_platform = $%d", paramIndex)
-		args = append(args, *updates.VirtualPlatform)
-		paramIndex++
-	}
-
-	if updates.MeetingLink != nil {
-		query += fmt.Sprintf(", meeting_link = $%d", paramIndex)
-		args = append(args, *updates.MeetingLink)
-		paramIndex++
-	}
-
-	if updates.StartDate != nil {
-		query += fmt.Sprintf(", start_date = $%d", paramIndex)
-		args = append(args, *updates.StartDate)
-		paramIndex++
-	}
-
-	if updates.EndDate != nil {
-		query += fmt.Sprintf(", end_date = $%d", paramIndex)
-		args = append(args, *updates.EndDate)
-		paramIndex++
-	}
-
-	if updates.MaxAttendees != nil {
-		query += fmt.Sprintf(", max_attendees = $%d", paramIndex)
-		args = append(args, *updates.MaxAttendees)
-		paramIndex++
-	}
-
-	if updates.Tags != nil {
-		query += fmt.Sprintf(", tags = $%d", paramIndex)
-		args = append(args, *updates.Tags)
-		paramIndex++
-	}
-
-	query += fmt.Sprintf(" WHERE id = $%d AND organizer_id = $%d AND is_deleted = false", paramIndex, paramIndex+1)
-	args = append(args, eventID, organizerID)
-
-	result, err := s.db.ExecContext(ctx, query, args...)
+	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("update failed: %w", err)
+		return nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Business Rule: Guard against modification of tiers with existing sales
+	if updates.Tickets != nil {
+		for _, updatedTier := range updates.Tickets {
+			for _, existingTier := range existing.TicketTiers {
+				// If IDs match and sales exist, check if sensitive fields are being changed
+				if updatedTier.ID == existingTier.ID && existingTier.Sold > 0 {
+					if updatedTier.PriceKobo != existingTier.PriceKobo || updatedTier.Name != existingTier.Name {
+						return nil, errors.New("cannot change price or name of a ticket tier that has already started selling")
+					}
+				}
+			}
+		}
 	}
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return nil, errors.New("event not found or unauthorized")
+	// 2. Apply updates (Slug generation happens inside applyUpdatesToModel)
+	updatedModel := s.applyUpdatesToModel(existing, updates)
+	updatedModel.UpdatedAt = time.Now()
+
+	if err := s.eventRepo.UpdateEvent(ctx, tx, updatedModel); err != nil {
+		return nil, fmt.Errorf("failed to update event record: %w", err)
+	}
+
+	// 3. Sync Tiers (Note: We removed the *100 loop because it's now in the handler/DTO mapping)
+	if updates.Tickets != nil {
+		if err := s.eventRepo.SyncTicketTiers(ctx, tx, eventID, updates.Tickets); err != nil {
+			return nil, fmt.Errorf("failed to sync ticket tiers: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit update: %w", err)
 	}
 
 	return s.eventRepo.GetEventByID(ctx, eventID, nil)
 }
 
-// SoftDeleteEvent marks an event as deleted
+// SoftDeleteEvent marks an event as deleted if no tickets have been sold
 func (s *eventService) SoftDeleteEvent(
 	ctx context.Context,
 	eventID, organizerID uuid.UUID,
 ) error {
-	query := `
-		UPDATE events 
-		SET is_deleted = true, deleted_at = $1, updated_at = $1
-		WHERE id = $2 
-		  AND organizer_id = $3 
-		  AND is_deleted = false
-	`
-
-	result, err := s.db.ExecContext(ctx, query, time.Now(), eventID, organizerID)
+	// Get existing event with tiers
+	existing, err := s.eventRepo.GetEventByID(ctx, eventID, nil)
 	if err != nil {
-		return fmt.Errorf("delete failed: %w", err)
+		return fmt.Errorf("event not found: %w", err)
 	}
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return errors.New("event not found or unauthorized")
+	// Validate ownership
+	if existing.OrganizerID != organizerID {
+		return errors.New("unauthorized: you do not own this event")
 	}
 
+	// Check if already deleted
+	if existing.IsDeleted {
+		return nil // Already deleted, no action needed
+	}
+
+	// Check for active ticket sales
+	for _, tier := range existing.TicketTiers {
+		if tier.Sold > 0 {
+			log.Warn().
+				Str("event_id", eventID.String()).
+				Int32("sold_count", tier.Sold).
+				Msg("Service: Blocked deletion of event with active sales")
+			return errors.New("cannot delete event: tickets have already been sold. Please contact support for cancellations")
+		}
+	}
+
+	// Delegate deletion to repository
+	if err := s.eventRepo.SoftDeleteEvent(ctx, eventID); err != nil {
+		return fmt.Errorf("failed to delete event: %w", err)
+	}
+
+	log.Info().Str("event_id", eventID.String()).Msg("Service: Event soft-deleted successfully")
 	return nil
+}
+
+// applyUpdatesToModel maps DTO patches to the Event model
+func (s *eventService) applyUpdatesToModel(m *models.Event, u *EventUpdateDTO) *models.Event {
+    // 1. Logic for Fields that trigger Side Effects
+    if u.EventTitle != nil {
+        m.EventTitle = *u.EventTitle
+        // Slugs use NullString in DB, so we use your helper
+        m.EventSlug = models.ToNullString(utils.GenerateSlug(*u.EventTitle))
+    }
+
+    // 2. Logic for Standard Pointers (Direct Assignment)
+    if u.EventDescription != nil { m.EventDescription = *u.EventDescription }
+    if u.Category != nil { m.Category = *u.Category }
+    if u.EventType != nil { m.EventType = *u.EventType }
+    if u.EventImageURL != nil { m.EventImageURL = *u.EventImageURL }
+    
+    // These match the *string type in your models.Event
+    if u.VenueName != nil { m.VenueName = u.VenueName }
+    if u.VenueAddress != nil { m.VenueAddress = u.VenueAddress }
+    if u.City != nil { m.City = u.City }
+    if u.State != nil { m.State = u.State }
+    if u.Country != nil { m.Country = u.Country }
+    
+    if u.VirtualPlatform != nil { m.VirtualPlatform = u.VirtualPlatform }
+    if u.MeetingLink != nil { m.MeetingLink = u.MeetingLink }
+
+    // 3. Logic for Value Types
+    if u.StartDate != nil { m.StartDate = *u.StartDate }
+    if u.EndDate != nil { m.EndDate = *u.EndDate }
+    if u.MaxAttendees != nil { m.MaxAttendees = u.MaxAttendees }
+
+    // 4. Logic for Slices (Dereferencing the DTO pointer)
+    if u.Tags != nil {
+        m.Tags = *u.Tags
+    }
+
+    return m
 }

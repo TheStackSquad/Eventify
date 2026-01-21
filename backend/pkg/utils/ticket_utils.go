@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"regexp"
 	"fmt"
 	"os"
 	"strings"
@@ -66,4 +67,13 @@ func GenerateUniqueTransactionReference() string {
 		return fmt.Sprintf("TIX_%d_ERR", timestamp)
 	}
 	return fmt.Sprintf("TIX_%d_%s", timestamp, hex.EncodeToString(randomBytes))
+}
+
+func GenerateSlug(title string) string {
+	slug := strings.ToLower(title)
+	// Replace non-alphanumeric with hyphens
+	reg := regexp.MustCompile("[^a-z0-9]+")
+	slug = reg.ReplaceAllString(slug, "-")
+	// Trim hyphens from ends
+	return strings.Trim(slug, "-")
 }

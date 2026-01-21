@@ -109,21 +109,16 @@ type OrderItem struct {
 	ID             uuid.UUID `json:"id" db:"id"`
 	OrderID        uuid.UUID `json:"orderId" db:"order_id"`
 	EventID        uuid.UUID `json:"eventId" db:"event_id"`
-	TicketTierID   uuid.UUID `json:"ticketTierId" db:"ticket_tier_id"`
+	TicketTierID   uuid.UUID `json:"ticketTierId" db:"ticket_tier_id"` 
 	TierName       string    `json:"tierName" db:"tier_name"`
 	Quantity       int32     `json:"quantity" db:"quantity"`
 	UnitPrice      int64     `json:"unitPrice" db:"unit_price"`
 	Subtotal       int64     `json:"subtotal" db:"subtotal"`
+	
+	// Snapshot data (for receipts/history)
 	EventTitle     string    `json:"eventTitle" db:"event_title"`
-	EventStartDate time.Time `json:"eventStartDate" db:"event_start_date"`
-	EventEndDate   time.Time `json:"eventEndDate" db:"event_end_date"`
-	EventCity      string    `json:"eventCity" db:"event_city"`
-	EventState     string    `json:"eventState" db:"event_state"`
-	EventVenue     string    `json:"eventVenue" db:"event_venue"`
-	EventAddress   string    `json:"eventAddress" db:"event_address"`
 	EventThumbnail string    `json:"eventThumbnail" db:"event_thumbnail"`
 }
-
 
 func CalculateServiceFee(subtotalKobo int64) int64 {
 	if subtotalKobo <= TierThreshold {
@@ -144,6 +139,3 @@ func CalculatePaystackFee(finalTotalKobo int64) int64 {
 	fee := (float64(finalTotalKobo) * PaystackPercentage) + float64(PaystackFlatFee)
 	return int64(math.Round(fee))
 }
-
-// NOTE: ToNullString, ToNullTime, ToNullUUID, and NullUUID have been 
-// moved to helpers.go and are removed from here to prevent redeclaration errors.

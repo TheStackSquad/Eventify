@@ -1,15 +1,17 @@
 // frontend/src/app/events/create-events/hooks/useEventForm.js
-
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useEvent } from "@/utils/hooks/useEvents";
 import { transformEventToFormData } from "../utils/eventTransformers";
 import { INITIAL_FORM_DATA } from "@/components/create-events/constants/formConfig";
 
 export default function useEventForm(eventId, userId) {
-  // ========== STATE MANAGEMENT ==========
+  // ========== 1. STATE MANAGEMENT ==========
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
 
-  // ========== REACT QUERY HOOKS ==========
+  // Ref to track if the form has been initialized to prevent overwrite loops
+  const isInitialized = useRef(false);
+
+  // ========== 2. REACT QUERY HOOKS ==========
   const {
     data: eventData,
     isLoading: isLoadingEvent,
@@ -17,48 +19,49 @@ export default function useEventForm(eventId, userId) {
     isError,
   } = useEvent(eventId);
 
-  // ========== POPULATE FORM DATA FOR EDIT MODE ==========
-  useEffect(() => {
+  // ========== 3. STABLE SNAPSHOT (The "Integrity Guard") ==========
+  // We memoize the transformed server data. This acts as our "baseline"
+  // for the validation logic to compare against.
+  const stableInitialData = useMemo(() => {
     if (eventId && eventData) {
-      console.debug("🔄 Transforming and setting form data:", eventData);
-      const transformedData = transformEventToFormData(eventData);
-      setFormData(transformedData);
-      console.debug("✅ Form data updated:", transformedData);
-    } else if (!eventId) {
-      // Reset form for create mode
-      setFormData(INITIAL_FORM_DATA);
+      return transformEventToFormData(eventData);
     }
+    return INITIAL_FORM_DATA;
   }, [eventData, eventId]);
 
-  // ========== FORM CHANGE HANDLER ==========
+  // ========== 4. POPULATE / RESET LOGIC ==========
+  useEffect(() => {
+    if (eventId && eventData) {
+      // If we have an ID and Data, populate the form
+      setFormData(stableInitialData);
+      isInitialized.current = true;
+    } else if (!eventId) {
+      // If we are in "Create" mode, reset the form
+      setFormData(INITIAL_FORM_DATA);
+      isInitialized.current = false;
+    }
+  }, [stableInitialData, eventId, eventData]);
+
+  // ========== 5. FORM CHANGE HANDLER ==========
   const handleFormChange = useCallback((updatedFormData) => {
-    console.debug("📝 Form data changed:", updatedFormData);
     setFormData(updatedFormData);
   }, []);
 
-  // ========== MEMOIZED VALUES ==========
-  const debugState = useMemo(
-    () => ({
-      eventId,
-      hasEventData: !!eventData,
-      formDataTitle: formData.eventTitle,
-      isLoadingEvent,
-      isError,
-    }),
-    [eventId, eventData, formData.eventTitle, isLoadingEvent, isError]
-  );
-
-  useEffect(() => {
-    console.debug("🎯 Form Hook State:", debugState);
-  }, [debugState]);
+  // ========== 6. SELECTIVE RESET ==========
+  // Useful if the user wants to discard changes without reloading the page
+  const resetForm = useCallback(() => {
+    setFormData(stableInitialData);
+  }, [stableInitialData]);
 
   return {
     formData,
     setFormData,
+    stableInitialData, // 🛡️ CRITICAL: Pass this to your submission/validation logic
     isLoading: isLoadingEvent,
     error: eventError,
     isError,
     handleFormChange,
-    eventData,
+    resetForm,
+    isEditMode: !!eventId,
   };
 }
