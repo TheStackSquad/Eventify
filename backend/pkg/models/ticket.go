@@ -23,8 +23,7 @@ type Ticket struct {
 	OrderID      uuid.UUID           `json:"orderId" db:"order_id"`
 	EventID      uuid.UUID           `json:"eventId" db:"event_id"`
 	TicketTierID uuid.UUID           `json:"ticketTierId" db:"ticket_tier_id"`
-	//UserID       NullUUID `json:"userId,omitempty" db:"user_id"`
-	UserID 	  *uuid.UUID 		  `json:"userId,omitempty" db:"user_id"`
+	UserID 	  *uuid.UUID 		  	 `json:"userId,omitempty" db:"user_id"`
 	Status       TicketStatus        `json:"status" db:"status"`
 	IsUsed       bool                `json:"isUsed" db:"is_used"`
 	UsedAt       sql.NullTime        `json:"usedAt,omitempty" db:"used_at"`

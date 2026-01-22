@@ -148,6 +148,16 @@ func ConfigureRouter(
 		protectedEvents.GET("/:eventId/analytics", analyticsHandler.FetchEventAnalytics)
 	}
 
+	// --- TICKET GATE ROUTES ---
+    // Protected routes for event staff/organizers to check in attendees
+    gateRoutes := router.Group("/api/v1/gate")
+    gateRoutes.Use(middleware.AuthMiddleware(jwtService), middleware.RateLimit(utils.WriteLimiter))
+    {
+        // POST /api/v1/gate/check-in
+        // Body: { "code": "REF-001-SIGNATURE" }
+        gateRoutes.POST("/check-in", eventHandler.CheckIn) 
+    }
+
 	setupAdminRoutes(router, authHandler, eventHandler, vendorHandler, reviewHandler, inquiryHandler, feedbackHandler, authRepo, jwtService)
 
 	utils.LogSuccess(serviceName, "configure", "Router configuration completed")

@@ -14,23 +14,34 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// GetOrderByReference retrieves an order by its payment reference
+// GetOrderByReference retrieves an order by its payment reference with joined info for email processing
 func (r *PostgresOrderRepository) GetOrderByReference(ctx context.Context, reference string) (*models.Order, error) {
 	var order models.Order
-	query := `SELECT * FROM orders WHERE reference = $1`
+	
+	// We use COALESCE for the name to handle Guest checkouts smoothly
+	// and JOIN order_items to grab the cached EventTitle
+	query := `
+		SELECT 
+			o.*, 
+			(o.customer_first_name || ' ' || o.customer_last_name) as user_name,
+			o.customer_email as user_email,
+			COALESCE(oi.event_title, 'Event') as event_title
+		FROM orders o
+		LEFT JOIN order_items oi ON o.id = oi.order_id
+		WHERE o.reference = $1
+		LIMIT 1`
 
 	err := r.DB.GetContext(ctx, &order, query, reference)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("database error: %w", err)
+		return nil, fmt.Errorf("database error fetching order %s: %w", reference, err)
 	}
 
-	// Optionally load related items and payments
+	// Load related items (tiers, quantities, etc.)
 	if err := r.loadOrderRelations(ctx, &order); err != nil {
 		log.Warn().Err(err).Str("order_id", order.ID.String()).Msg("Failed to load order relations")
-		// Don't fail the request, just log the warning
 	}
 
 	return &order, nil
@@ -58,7 +69,6 @@ func (r *PostgresOrderRepository) GetByID(ctx context.Context, id uuid.UUID) (*m
 }
 
 // loadOrderRelations loads order items and payment records for an order
-// backend/pkg/repository/postgres/postgres_order_repository.go
 
 func (r *PostgresOrderRepository) loadOrderRelations(ctx context.Context, order *models.Order) error {
 	itemsQuery := `

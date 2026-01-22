@@ -5,6 +5,7 @@ package event
 import (
 	"context"
 	"time"
+	"fmt"
 
 	"github.com/eventify/backend/pkg/models"
 	"github.com/google/uuid"
@@ -69,6 +70,8 @@ type EventRepository interface {
 	CreateTicketTiers(ctx context.Context, tx *sqlx.Tx, eventID uuid.UUID, tiers []models.TicketTier) error
 	SyncTicketTiers(ctx context.Context, tx *sqlx.Tx, eventID uuid.UUID, incomingTiers []models.TicketTier) error
 
+	MarkTicketAsUsed(ctx context.Context, code string) error
+
 	// Stock Management
 	CheckTicketAvailability(ctx context.Context, tierID uuid.UUID, quantity int32) (bool, error) 
     DecrementTicketStockTx(ctx context.Context, tx *sqlx.Tx, tierID uuid.UUID, qty int32) error
@@ -90,3 +93,26 @@ func NewPostgresEventRepository(db *sqlx.DB) EventRepository {
 	return &postgresEventRepository{db: db}
 }
 
+
+func (r *postgresEventRepository) MarkTicketAsUsed(ctx context.Context, code string) error {
+    query := `
+        UPDATE tickets 
+        SET is_used = true, 
+            status = 'used', 
+            updated_at = NOW() 
+        WHERE code = $1 
+          AND is_used = false 
+          AND status = 'active'
+    `
+    result, err := r.db.ExecContext(ctx, query, code)
+    if err != nil {
+        return err
+    }
+
+    rows, _ := result.RowsAffected()
+    if rows == 0 {
+        // This is the safety catch for double-entry
+        return fmt.Errorf("ticket cannot be used: either already scanned or not active")
+    }
+    return nil
+}
