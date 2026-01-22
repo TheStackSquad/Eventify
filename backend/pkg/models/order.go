@@ -69,19 +69,29 @@ type Order struct {
 	Items []OrderItem `json:"items,omitempty" db:"-"`
 }
 
-// --- OrderItem Struct ---
+// models/order_item.go
+
 type OrderItem struct {
-	ID             uuid.UUID `json:"id" db:"id"`
-	OrderID        uuid.UUID `json:"orderId" db:"order_id"`
-	EventID        uuid.UUID `json:"eventId" db:"event_id"`
-	TicketTierID   uuid.UUID `json:"ticketTierId" db:"ticket_tier_id"`
-	TierName       string    `json:"tierName" db:"tier_name"`
-	Quantity       int32     `json:"quantity" db:"quantity"`
-	UnitPrice      int64     `json:"unitPrice" db:"unit_price"`
-	Subtotal       int64     `json:"subtotal" db:"subtotal"`
-	EventTitle     string    `json:"eventTitle" db:"event_title"`
-	EventThumbnail string    `json:"eventThumbnail" db:"event_thumbnail"`
-	CreatedAt      time.Time `json:"createdAt" db:"created_at"`
+    ID             uuid.UUID `json:"id" db:"id"`
+    OrderID        uuid.UUID `json:"orderId" db:"order_id"`
+    EventID        uuid.UUID `json:"eventId" db:"event_id"`
+    TicketTierID   uuid.UUID `json:"ticketTierId" db:"ticket_tier_id"`
+    TierName       string    `json:"tierName" db:"tier_name"`
+    Quantity       int32     `json:"quantity" db:"quantity"`
+    UnitPrice      int64     `json:"unitPrice" db:"unit_price"`
+    Subtotal       int64     `json:"subtotal" db:"subtotal"`
+    EventTitle     string    `json:"eventTitle" db:"event_title"`
+    EventThumbnail string    `json:"eventThumbnail" db:"event_thumbnail"`
+    
+    // Catch the COALESCE and JOIN fields from itemsQuery
+    EventStartDate time.Time `json:"eventStartDate" db:"event_start_date"`
+    EventEndDate   time.Time `json:"eventEndDate" db:"event_end_date"`
+    EventCity      string    `json:"eventCity" db:"event_city"`
+    EventState     string    `json:"eventState" db:"event_state"`
+    EventVenue     string    `json:"eventVenue" db:"event_venue"`
+    EventAddress   string    `json:"eventAddress" db:"event_address"`
+    
+    CreatedAt      time.Time `json:"createdAt" db:"created_at"`
 }
 
 // --- Financial Logic ---

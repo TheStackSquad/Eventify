@@ -36,6 +36,7 @@ type OrderRepository interface {
 	InsertOrderItemsTx(ctx context.Context, tx *sqlx.Tx, order *models.Order) error
 	InsertTicketsTx(ctx context.Context, tx *sqlx.Tx, order *models.Order, tickets []models.Ticket) error
 	QueueEmailTx(ctx context.Context, tx *sqlx.Tx, outbox *models.EmailOutbox) error
+	LoadOrderRelations(ctx context.Context, order *models.Order) error
 }
 
 type PostgresOrderRepository struct {

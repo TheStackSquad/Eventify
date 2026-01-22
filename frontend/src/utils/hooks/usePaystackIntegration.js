@@ -54,17 +54,16 @@ export function usePaystackIntegration({ email, metadata }) {
     try {
       // PAYLOAD: Build backend-compatible order initialization data
       const payload = {
-        Email: email,
-        FirstName: metadata?.customer_info?.firstName || "",
-        LastName: metadata?.customer_info?.lastName || "",
-        Phone: metadata?.customer_info?.phone || "",
-        Items: items.map((item) => ({
-          EventID: item.eventId,
-          TierName: item.tierName,
-          Quantity: item.quantity,
+        email: email, // lowercase 'e'
+        firstName: metadata?.customer_info?.firstName || "",
+        lastName: metadata?.customer_info?.lastName || "",
+        phone: metadata?.customer_info?.phone || "",
+        items: items.map((item) => ({
+          eventId: item.eventId,
+          ticketTierId: item.tierId,
+          quantity: item.quantity,
         })),
       };
-
       // BACKEND CALL: Initialize order and get Paystack session
       const response = await backendInstance.post(
         ENDPOINTS.ORDERS.INITIALIZE,

@@ -40,7 +40,7 @@ func (r *PostgresOrderRepository) GetOrderByReference(ctx context.Context, refer
 	}
 
 	// Load related items (tiers, quantities, etc.)
-	if err := r.loadOrderRelations(ctx, &order); err != nil {
+	if err := r.LoadOrderRelations(ctx, &order); err != nil {
 		log.Warn().Err(err).Str("order_id", order.ID.String()).Msg("Failed to load order relations")
 	}
 
@@ -61,7 +61,7 @@ func (r *PostgresOrderRepository) GetByID(ctx context.Context, id uuid.UUID) (*m
 	}
 
 	// Optionally load related items and payments
-	if err := r.loadOrderRelations(ctx, &order); err != nil {
+	if err := r.LoadOrderRelations(ctx, &order); err != nil {
 		log.Warn().Err(err).Str("order_id", order.ID.String()).Msg("Failed to load order relations")
 	}
 
@@ -70,7 +70,7 @@ func (r *PostgresOrderRepository) GetByID(ctx context.Context, id uuid.UUID) (*m
 
 // loadOrderRelations loads order items and payment records for an order
 
-func (r *PostgresOrderRepository) loadOrderRelations(ctx context.Context, order *models.Order) error {
+func (r *PostgresOrderRepository) LoadOrderRelations(ctx context.Context, order *models.Order) error {
 	itemsQuery := `
 		SELECT 
 			oi.id, 

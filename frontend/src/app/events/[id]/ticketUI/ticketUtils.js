@@ -4,24 +4,26 @@ import { useState, useCallback } from "react";
 import { koboToNaira, formatCurrency } from "@/utils/currency";
 
 export const useTicketPurchase = ({ event, addItem, router }) => {
+  // FIX 1: Default to the ticket's UUID (.id), not the name string
   const [selectedTierId, setSelectedTierId] = useState(
-    event.tickets[0]?.tierName || null
+    event.tickets[0]?.id || null,
   );
+
   const [quantity, setQuantity] = useState(1);
   const [isAdded, setIsAdded] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const handleAddToCart = useCallback(() => {
-    const selectedTier = event.tickets.find(
-      (t) => t.tierName === selectedTierId
-    );
+    // FIX 2: Find the tier by comparing UUIDs (.id)
+    const selectedTier = event.tickets.find((t) => t.id === selectedTierId);
+
     if (!selectedTier || quantity < 1 || !event) return;
 
     const itemToAdd = {
       eventId: event.id,
-      tierId: selectedTier.tierName,
+      tierId: selectedTier.id, // FIX 3: This is now a 36-char UUID! (Approved by Server)
       eventTitle: event.eventTitle,
-      tierName: selectedTier.tierName,
+      tierName: selectedTier.tierName, // Keep name for UI display in cart
       price: selectedTier.price,
       eventImage: event.eventImage,
       maxQuantity: selectedTier.quantity,
@@ -33,27 +35,26 @@ export const useTicketPurchase = ({ event, addItem, router }) => {
   }, [selectedTierId, quantity, event, addItem]);
 
   const handleCheckoutNow = useCallback(() => {
-    handleAddToCart();
     router.push("/cart");
   }, [handleAddToCart, router]);
 
   const handleQuantityChange = useCallback(
     (newQuantity) => {
-      const selectedTier = event.tickets.find(
-        (t) => t.tierName === selectedTierId
-      );
+      // FIX 4: Update lookup to use .id
+      const selectedTier = event.tickets.find((t) => t.id === selectedTierId);
       if (!selectedTier) return;
       const validQuantity = Math.max(
         1,
-        Math.min(newQuantity, selectedTier.quantity)
+        Math.min(newQuantity, selectedTier.quantity),
       );
       setQuantity(validQuantity);
     },
-    [event.tickets, selectedTierId]
+    [event.tickets, selectedTierId],
   );
 
   const handleTierSelect = useCallback((tier) => {
-    setSelectedTierId(tier.tierName);
+    // FIX 5: Set state to the UUID
+    setSelectedTierId(tier.id);
     setIsDropdownOpen(false);
     setQuantity(1);
   }, []);
@@ -73,6 +74,6 @@ export const useTicketPurchase = ({ event, addItem, router }) => {
     handleTierSelect,
   };
 };
+
 export default useTicketPurchase;
-// Re-export currency utilities for convenience
 export { koboToNaira, formatCurrency };

@@ -1,6 +1,6 @@
 // frontend/src/app/events/[id]/ticketPurchaseSection.js
 "use client";
-import { useState, useMemo, useCallback } from "react";
+import { useMemo } from "react";
 import { useCart } from "@/context/cartContext";
 import { useRouter } from "next/navigation";
 import TicketHeader from "./components/ticketHeader";
@@ -12,15 +12,12 @@ import { useTicketPurchase } from "@/app/events/[id]/ticketUI/ticketUtils";
 
 const TicketPurchaseSection = ({ event }) => {
   const router = useRouter();
-  const { addItem } = useCart();
+  const { addItem, items } = useCart();
 
   const {
     selectedTierId,
-    setSelectedTierId,
     quantity,
-    setQuantity,
     isAdded,
-    setIsAdded,
     isDropdownOpen,
     setIsDropdownOpen,
     handleAddToCart,
@@ -29,19 +26,22 @@ const TicketPurchaseSection = ({ event }) => {
     handleTierSelect,
   } = useTicketPurchase({ event, addItem, router });
 
+  // 2. Lookup using UUID (Sync with our previous fix)
   const selectedTier = useMemo(
-    () => event.tickets.find((t) => t.tierName === selectedTierId),
-    [event.tickets, selectedTierId]
+    () => event.tickets.find((t) => t.id === selectedTierId),
+    [event.tickets, selectedTierId],
   );
+  // 3. Logic for the Checkout Button state
+  const hasItemsInCart = useMemo(() => items && items.length > 0, [items]);
 
   const isSoldOut = useMemo(
     () => selectedTier && selectedTier.quantity < 1,
-    [selectedTier]
+    [selectedTier],
   );
 
   const totalPrice = useMemo(
     () => (selectedTier ? selectedTier.price * quantity : 0),
-    [selectedTier, quantity]
+    [selectedTier, quantity],
   );
 
   if (!event.tickets?.length) {
@@ -94,7 +94,7 @@ const TicketPurchaseSection = ({ event }) => {
         <OrderSummary
           selectedTier={selectedTier}
           quantity={quantity}
-          totalPrice={totalPrice}
+          totalPrice={selectedTier ? selectedTier.price * quantity : 0}
         />
       </div>
 
@@ -103,9 +103,10 @@ const TicketPurchaseSection = ({ event }) => {
         handleCheckoutNow={handleCheckoutNow}
         isSoldOut={isSoldOut}
         isAdded={isAdded}
+        canCheckout={hasItemsInCart}
       />
     </section>
   );
-};
+};;;;
 
 export default TicketPurchaseSection;

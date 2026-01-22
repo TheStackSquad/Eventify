@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
+	//"strings"
 	"sync"
 	"time"
 	"encoding/json"
@@ -227,136 +227,140 @@ finalizeOrder atomically processes a verified payment.
 
 This is the core business logic that:
 1. Validates transaction data matches order
-2. Updates order status to "success"
-3. Finalizes the ticket generation using HMAC-signed codes
-4. Queues a ticket delivery email in the Transactional Outbox
-5. Executes all DB operations in a single transaction
+2. Hydrates the Order model with rich event/item data (Dates, Venues)
+3. Updates order status to "success"
+4. Finalizes the ticket generation using HMAC-signed codes
+5. Queues a ticket delivery email in the Transactional Outbox
+6. Executes all DB operations in a single transaction
 
 Hardened Architecture:
-- Atomicity: Uses a DB transaction to ensure we don't reduce stock without tickets, 
-  or generate tickets without queuing the email.
-- Idempotency: Protects against the "Double-Webhook" or "Webhook-vs-Verification" race.
-- Performance: Decouples email sending via the Outbox pattern to keep response times fast 
-  during high-demand ticket drops.
+- Atomicity: Uses a DB transaction via RunInTransaction to ensure "All-or-Nothing" 
+  integrity between ticket generation, order updates, and email queuing.
+- Data Integrity: Hydrates order relations prior to finalization to ensure 
+  the Transactional Outbox contains the "Rich" metadata (Venue, Dates) 
+  required for accurate ticket delivery.
+- Idempotency: Protects against the "Double-Webhook" race or Webhook-vs-Verification 
+  clashes by verifying status before execution.
 */
 func (s *OrderServiceImpl) finalizeOrder(
-	ctx context.Context,
-	order *models.Order,
-	data *models.PaystackData,
-	processedBy string,
+    ctx context.Context,
+    order *models.Order,
+    data *models.PaystackData,
+    processedBy string,
 ) (*models.Order, error) {
-	// 1. STATUS VALIDATION (idempotency guard)
-	if order.Status != models.OrderStatusPending {
-		log.Info().
-			Str("ref", order.Reference).
-			Str("status", string(order.Status)).
-			Str("attempted_by", processedBy).
-			Msg("Order not in pending status")
-		return order, ErrAlreadyProcessed
-	}
+    // 1. STATUS VALIDATION (idempotency guard)
+    if order.Status != models.OrderStatusPending {
+        log.Info().
+            Str("ref", order.Reference).
+            Str("status", string(order.Status)).
+            Str("attempted_by", processedBy).
+            Msg("Order already processed; skipping finalization.")
+        return order, ErrAlreadyProcessed
+    }
 
-	// 2. PAYMENT STATUS CHECK
-	if data.Status != "success" {
-		log.Warn().Str("ref", order.Reference).Msg("Transaction failed upstream.")
-		
-		_ = s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
-			_ = s.OrderRepo.UpdateOrderStatusTx(ctx, tx, order.ID, models.OrderStatusFailed)
-			return s.releaseReservedStockTx(ctx, tx, order) 
-		})
-		
-		return order, errors.New("transaction verification failed")
-	}
+    // 2. LOAD RELATIONS (CRITICAL FIX)
+    // We fetch the Items (Venues, Dates, Titles) now so we can use them for the email payload.
+    // This call uses the updated OrderItem struct with all 17 database columns.
+    if err := s.OrderRepo.LoadOrderRelations(ctx, order); err != nil {
+        log.Error().Err(err).Str("ref", order.Reference).Msg("Failed to hydrate order relations")
+        return order, fmt.Errorf("failed to load order details: %w", err)
+    }
 
-	// 3. AMOUNT VALIDATION (fraud detection)
-	if int64(data.Amount) != order.FinalTotal {
-		log.Warn().
-			Int64("expected", order.FinalTotal).
-			Int64("received", int64(data.Amount)).
-			Str("reference", order.Reference).
-			Msg("Amount mismatch detected.")
-		_ = s.OrderRepo.UpdateOrderStatus(ctx, order.ID, models.OrderStatusFraud)
-		return order, fmt.Errorf("AmountMismatch: expected %d, received %d", order.FinalTotal, data.Amount)
-	}
+    // 3. PAYMENT STATUS CHECK
+    if data.Status != "success" {
+        log.Warn().Str("ref", order.Reference).Msg("Transaction failed upstream.")
+        _ = s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
+            _ = s.OrderRepo.UpdateOrderStatusTx(ctx, tx, order.ID, models.OrderStatusFailed)
+            return s.releaseReservedStockTx(ctx, tx, order) 
+        })
+        return order, errors.New("transaction verification failed")
+    }
 
-	// 4. PREPARE ORDER DATA
-	order.AmountPaid = int64(data.Amount)
-	order.ServiceFee = int64(data.Fees)
-	order.PaymentChannel = models.ToNullString(data.Channel)
+    // 4. AMOUNT VALIDATION (fraud detection)
+    if int64(data.Amount) != order.FinalTotal {
+        log.Warn().
+            Int64("expected", order.FinalTotal).
+            Int64("received", int64(data.Amount)).
+            Str("reference", order.Reference).
+            Msg("Amount mismatch detected.")
+        _ = s.OrderRepo.UpdateOrderStatus(ctx, order.ID, models.OrderStatusFraud)
+        return order, fmt.Errorf("AmountMismatch: expected %d, received %d", order.FinalTotal, data.Amount)
+    }
 
-	// (Timing logic kept the same for brevity...)
-	var paidAt time.Time
-	if data.PaidAt != "" {
-		t, err := time.Parse("2006-01-02T15:04:05.000Z", data.PaidAt)
-		if err != nil {
-			t, _ = time.Parse(time.RFC3339, data.PaidAt)
-			paidAt = t
-		} else {
-			paidAt = t
-		}
-	}
-	if !paidAt.IsZero() {
-		order.PaidAt = models.ToNullTime(&paidAt)
-	}
+    // 5. PREPARE ORDER DATA
+    order.AmountPaid = int64(data.Amount)
+    order.ServiceFee = int64(data.Fees)
+    order.PaymentChannel = models.ToNullString(data.Channel)
 
-	order.Status = models.OrderStatusSuccess
-	order.ProcessedBy = models.ToNullString(processedBy)
-	order.UpdatedAt = time.Now().UTC()
+    var paidAt time.Time
+    if data.PaidAt != "" {
+        if t, err := time.Parse("2006-01-02T15:04:05.000Z", data.PaidAt); err == nil {
+            paidAt = t
+        } else {
+            paidAt, _ = time.Parse(time.RFC3339, data.PaidAt)
+        }
+    }
+    if !paidAt.IsZero() {
+        order.PaidAt = models.ToNullTime(&paidAt)
+    }
 
-	// 5. GENERATE TICKETS (HMAC-signed codes)
-	tickets, err := s.generateTicketsForOrder(ctx, order)
-	if err != nil {
-		return order, fmt.Errorf("failed to generate tickets: %w", err)
-	}
+    order.Status = models.OrderStatusSuccess
+    order.ProcessedBy = models.ToNullString(processedBy)
+    order.UpdatedAt = time.Now().UTC()
 
-	// 6. ATOMIC TRANSACTION (Tickets + Order + Email Outbox)
-	err = s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
-		// 6a. Update order to SUCCESS
-		if err := s.OrderRepo.UpdateOrderToPaidTx(ctx, tx, order); err != nil {
-			return err
-		}
+    // 6. GENERATE TICKETS
+    tickets, err := s.generateTicketsForOrder(ctx, order)
+    if err != nil {
+        return order, fmt.Errorf("failed to generate tickets: %w", err)
+    }
 
-		// 6b. Insert generated tickets
-		if err := s.OrderRepo.InsertTicketsTx(ctx, tx, order, tickets); err != nil {
-			return err
-		}
+    // 7. ATOMIC TRANSACTION (Tickets + Order + Email Outbox)
+    err = s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
+        if err := s.OrderRepo.UpdateOrderToPaidTx(ctx, tx, order); err != nil {
+            return err
+        }
 
-		// 6c. QUEUE EMAIL IN OUTBOX
-		// Extract ticket codes for the email payload
-		ticketCodes := make([]string, len(tickets))
-		for i, t := range tickets {
-			ticketCodes[i] = t.Code
-		}
+        if err := s.OrderRepo.InsertTicketsTx(ctx, tx, order, tickets); err != nil {
+            return err
+        }
 
-		payload := map[string]interface{}{
-			"user_name":    order.UserName,
-			"event_title":  order.EventTitle,
-			"order_ref":    order.Reference,
-			"ticket_codes": ticketCodes,
-		}
-		
-		payloadBytes, _ := json.Marshal(payload)
+        // 7a. BUILD RICH PAYLOAD
+        // Now that relations are loaded, order.Items[0] contains the Venue and Date!
+        ticketCodes := make([]string, len(tickets))
+        for i, t := range tickets {
+            ticketCodes[i] = t.Code
+        }
 
-		outboxEntry := &models.EmailOutbox{
-			RecipientEmail: order.UserEmail,
-			Subject:        fmt.Sprintf("Your Tickets: %s", order.EventTitle),
-			TemplateType:   "TICKET_DELIVERY",
-			Payload:        payloadBytes,
-			Status:         "pending",
-		}
+        firstItem := order.Items[0]
+        payload := map[string]interface{}{
+            "user_name":    order.CustomerFirstName,
+            "event_title":  firstItem.EventTitle,
+            "event_venue":  firstItem.EventVenue,
+            "event_date":   firstItem.EventStartDate.Format("Monday, Jan 02, 2006"),
+            "order_ref":    order.Reference,
+            "total_amount": order.FinalTotal,
+            "ticket_codes": ticketCodes,
+        }
+        
+        payloadBytes, _ := json.Marshal(payload)
 
-		return s.OrderRepo.QueueEmailTx(ctx, tx, outboxEntry)
-	})
+        outboxEntry := &models.EmailOutbox{
+            RecipientEmail: order.CustomerEmail,
+            Subject:        fmt.Sprintf("Your Tickets: %s", firstItem.EventTitle),
+            TemplateType:   "TICKET_DELIVERY",
+            Payload:        payloadBytes,
+            Status:         "pending",
+        }
 
-	// 7. HANDLE TRANSACTION RESULT
-	if err != nil {
-		if strings.Contains(err.Error(), "status was not 'pending'") {
-			return order, ErrAlreadyProcessed
-		}
-		return order, fmt.Errorf("atomic finalization failed: %w", err)
-	}
+        return s.OrderRepo.QueueEmailTx(ctx, tx, outboxEntry)
+    })
 
-	log.Info().Str("ref", order.Reference).Msg("Order and Email successfully queued")
-	return order, nil
+    if err != nil {
+        return order, fmt.Errorf("atomic finalization failed: %w", err)
+    }
+
+    log.Info().Str("ref", order.Reference).Msg("Order and Email successfully queued")
+    return order, nil
 }
 /*
 generateTicketsForOrder creates ticket records for each purchased item.
