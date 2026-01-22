@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/eventify/backend/pkg/utils"
 )
 
 // CheckTicketAvailability checks if a specific tier has enough inventory
@@ -37,4 +38,26 @@ func (s *eventService) ReserveTickets(
 	}
 
 	return tx.Commit()
+}
+
+// ValidateAndCheckInTicket handles the industry-grade "Gate Check"
+func (s *eventService) ValidateAndCheckInTicket(
+    ctx context.Context, 
+    ticketCode string,
+) error {
+    // 1. FAST PATH: Cryptographic Signature Verification
+    // This catches fake tickets immediately without a DB hit.
+    if !utils.VerifyTicketOffline(ticketCode) {
+        return fmt.Errorf("security alert: invalid ticket signature for code %s", ticketCode)
+    }
+
+    // 2. DATABASE PATH: Mark as used
+    // This uses the atomic update we discussed: it only works if is_used = false.
+    err := s.eventRepo.MarkTicketAsUsed(ctx, ticketCode)
+    if err != nil {
+        // Here we handle "Already Used", "Not Found", or "Canceled"
+        return fmt.Errorf("gate check failed: %w", err)
+    }
+
+    return nil
 }

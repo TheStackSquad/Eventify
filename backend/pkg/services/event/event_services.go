@@ -25,6 +25,7 @@ type EventService interface {
 	// FIXED: Signature changed to use TierID and match implementation return types
 	CheckTicketAvailability(ctx context.Context, tierID uuid.UUID, quantity int32) (bool, error)
 	ReserveTickets(ctx context.Context, tierID uuid.UUID, quantity int32) error
+	ValidateAndCheckInTicket(ctx context.Context, ticketCode string) error
 }
 
 type eventService struct {

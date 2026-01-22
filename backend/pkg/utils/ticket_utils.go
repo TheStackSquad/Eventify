@@ -46,17 +46,26 @@ func GenerateUniqueTicketCode(baseRef string, index int) string {
 
 // VerifyTicketOffline allows a scanner to verify a ticket without DB access.
 func VerifyTicketOffline(code string) bool {
+	// Format: [RefSuffix]-[Index]-[HMAC_Signature]
 	parts := strings.Split(code, "-")
 	if len(parts) != 3 {
 		return false
 	}
 
-	// Re-generate the signature from the first two parts
-	expectedCode := GenerateUniqueTicketCode(parts[0], 0) // Simplified logic check
-	// Note: In a real scenario, you'd re-sign parts[0]+parts[1] and compare with parts[2]
-	
-	// Constant time comparison to prevent timing attacks
-	return hmac.Equal([]byte(code), []byte(expectedCode))
+	payload := fmt.Sprintf("%s-%s", parts[0], parts[1])
+
+	secret := os.Getenv("TICKET_SIGNING_SECRET")
+	if secret == "" {
+		secret = "local-dev-secret-key-12345"
+	}
+
+	// Re-calculate the HMAC for the extracted payload
+	h := hmac.New(sha256.New, []byte(secret))
+	h.Write([]byte(payload))
+	expectedSignature := hex.EncodeToString(h.Sum(nil))[:8]
+
+	// Constant-time comparison to prevent timing attacks
+	return hmac.Equal([]byte(parts[2]), []byte(expectedSignature))
 }
 
 // GenerateUniqueTransactionReference remains largely the same but cleaned up

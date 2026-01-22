@@ -1,4 +1,4 @@
-// backend/pkg/utils/email.go (Create this file)
+// backend/pkg/utils/email.go
 
 package utils
 
@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/smtp"
 	"os"
+	"time"
+	"github.com/rs/zerolog/log"
 )
 
 func SendPasswordResetEmail(to, name, resetLink string) error {
@@ -54,4 +56,28 @@ func SendPasswordResetEmail(to, name, resetLink string) error {
 	)
 	
 	return err
+}
+
+func MockSendEmail(to string, subject string, body string) error {
+	// 1. Log to console for immediate visibility
+	log.Info().
+		Str("to", to).
+		Str("subject", subject).
+		Msg("📧 [MOCK EMAIL SENT]")
+
+	// 2. Write to a local file (email_debug.log) so you can review the content
+	content := fmt.Sprintf("\n--- %s ---\nTo: %s\nSubject: %s\nBody: %s\n-------------------\n", 
+		time.Now().Format(time.RFC822), to, subject, body)
+
+	f, err := os.OpenFile("email_debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(content); err != nil {
+		return err
+	}
+
+	return nil
 }
