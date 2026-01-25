@@ -2,16 +2,20 @@
 "use client";
 
 import React from "react";
-import { useAuth } from "@/utils/hooks/useAuth";
 import LoadingSpinner from "@/components/common/loading/loadingSpinner";
 import VendorRegistrationView from "@/components/vendorUI/components/form/vendorRegistrationView";
 import VendorAnalyticsDashboard from "./vendorAnalytics/vendorAnalyticsDashboard";
 
-export default function VendorManagementView({ activeView }) {
-  const { user, sessionChecked } = useAuth();
+// Accept 'user' and 'sessionChecked' as props from DashboardContent
+export default function VendorManagementView({
+  activeView,
+  user,
+  sessionChecked,
+}) {
+  // Debug to ensure the data is "pouring" down correctly
+  console.log("🚀 VendorDashboard received user:", user?.id);
 
-  console.log("VendorDashboard user:", user);
-
+  // 1. Logic Guard: If the parent hasn't finished checking the session
   if (!sessionChecked) {
     return (
       <LoadingSpinner
@@ -25,12 +29,23 @@ export default function VendorManagementView({ activeView }) {
     );
   }
 
+  // 2. View Switching: Pass the userId down to the specific features
   switch (activeView) {
     case "vendor":
-      return <VendorAnalyticsDashboard userId={user?.id} />;
+      return (
+        <VendorAnalyticsDashboard userId={user?.id} userEmail={user?.email} />
+      );
 
     case "vendor-register":
-      return <VendorRegistrationView userId={user?.id} />;
+      return (
+        <VendorRegistrationView
+          userId={user?.id}
+          initialData={{
+            email: user?.email,
+            fullName: user?.name,
+          }}
+        />
+      );
 
     default:
       return <VendorAnalyticsDashboard userId={user?.id} />;

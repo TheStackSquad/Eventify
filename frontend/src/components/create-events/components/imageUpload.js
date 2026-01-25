@@ -1,4 +1,7 @@
-//frontend/src/components/create-events/components/imageUpload.js
+// frontend/src/components/create-events/components/imageUpload.js
+"use client";
+
+import { useRef } from "react";
 import Image from "next/image";
 
 export default function ImageUpload({
@@ -6,6 +9,35 @@ export default function ImageUpload({
   onImageUpload,
   onRemoveImage,
 }) {
+  const fileInputRef = useRef(null);
+
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate function exists before calling
+    if (typeof onImageUpload !== "function") {
+      console.error("ImageUpload: onImageUpload prop must be a function");
+      return;
+    }
+
+    // Create preview URL
+    const previewUrl = URL.createObjectURL(file);
+
+    // Pass both file and preview URL to parent
+    onImageUpload(file, previewUrl);
+  };
+
+  const handleClickUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleRemove = () => {
+    if (typeof onRemoveImage === "function") {
+      onRemoveImage();
+    }
+  };
+
   return (
     <div>
       <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -21,12 +53,12 @@ export default function ImageUpload({
                 width={400}
                 height={192}
                 className="object-contain max-h-48"
-                unoptimized={true} // Required for blob URLs
+                unoptimized={true}
               />
             </div>
             <button
               type="button"
-              onClick={onRemoveImage}
+              onClick={handleRemove}
               className="mt-2 text-red-400 hover:text-red-300 text-sm"
             >
               Remove Image
@@ -48,22 +80,26 @@ export default function ImageUpload({
               />
             </svg>
             <input
+              ref={fileInputRef}
               type="file"
               accept="image/*"
-              onChange={onImageUpload}
+              onChange={handleFileChange}
               className="hidden"
               id="event-image"
             />
             <label
               htmlFor="event-image"
               className="cursor-pointer text-green-400 hover:text-green-300"
+              onClick={handleClickUpload}
             >
               Click to upload image
             </label>
+            <p className="text-gray-500 text-sm mt-2">
+              JPG, PNG, or GIF. Max 5MB.
+            </p>
           </div>
         )}
       </div>
     </div>
   );
 }
-

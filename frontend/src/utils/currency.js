@@ -157,16 +157,22 @@ export const formatCurrency = (amount) => {
     return "₦0";
   }
 
-  // Check if amount looks like kobo (large numbers typical for ticket prices)
   const isLikelyKobo = amountNum > 1000 && amountNum % 100 === 0;
   const nairaValue = isLikelyKobo ? koboToNaira(amountNum) : amountNum;
 
-  return nairaValue.toLocaleString("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  // 🎯 DEFENSIVE: Wrap toLocaleString in try-catch
+  try {
+    return nairaValue.toLocaleString("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  } catch (error) {
+    // Fallback for browsers without Intl support
+    console.warn("[currency] toLocaleString failed, using fallback");
+    return `₦${nairaValue.toFixed(2)}`;
+  }
 };
 
 /**

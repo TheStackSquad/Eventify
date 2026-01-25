@@ -1,4 +1,4 @@
-// src/components/events/hero/EventsHero.jsx
+// src/components/events/hero/eventsHero.js
 "use client";
 
 import { Search } from "lucide-react";

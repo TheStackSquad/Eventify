@@ -34,18 +34,8 @@ export default function Home() {
     return <LoadingSpinner message="Loading events..." />;
   }
 
-  if (isError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-black text-white p-4">
-        <div>
-          <h2 className="text-2xl font-bold mb-2">Error Loading Events</h2>
-          <p className="text-gray-400">{error?.message}</p>
-        </div>
-      </div>
-    );
-  }
 
-  const hasLoadedData = !isLoading && !isError;
+   const hasLoadedData = !isLoading;
 
   return (
     <main className="min-h-screen bg-black">

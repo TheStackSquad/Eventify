@@ -7,6 +7,7 @@ import ToastProvider from "@/components/common/toast/toastProvider";
 import ReactQueryProvider from "@/provider/reactQueryProvider";
 import SessionProvider from "@/provider/sessionProvider";
 import PaystackScriptProvider from "@/provider/paystackScriptProvider";
+import ErrorBoundaryProvider from "@/provider/errorBoundaryProvider";
 import "./globals.css";
 
 // Font configurations
@@ -118,20 +119,22 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body>
-        <ReactQueryProvider>
-          <ReactQueryDevtools initialIsOpen={false} />
-          <SessionProvider>
-            <CartProvider>
-              <PaystackScriptProvider>
-                <Header />
-                <main id="main-content" className="min-h-screen">
-                  {children}
-                </main>
-                <ToastProvider />
-              </PaystackScriptProvider>
-            </CartProvider>
-          </SessionProvider>
-        </ReactQueryProvider>
+        <ErrorBoundaryProvider>
+          <ReactQueryProvider>
+            <ReactQueryDevtools initialIsOpen={false} />
+            <SessionProvider>
+              <CartProvider>
+                <PaystackScriptProvider>
+                  <Header />
+                  <main id="main-content" className="min-h-screen">
+                    {children}
+                  </main>
+                  <ToastProvider />
+                </PaystackScriptProvider>
+              </CartProvider>
+            </SessionProvider>
+          </ReactQueryProvider>
+        </ErrorBoundaryProvider>
       </body>
     </html>
   );

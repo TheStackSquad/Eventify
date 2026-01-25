@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ShieldCheck,
   CheckCircle,
@@ -15,6 +15,14 @@ import {
 import { frontendInstance } from "@/axiosConfig/axios";
 import toastAlert from "@/components/common/toast/toastAlert";
 
+const IS_DEV = process.env.NODE_ENV === "development";
+
+// Debug logging
+const debugLog = (message, data = {}) => {
+  if (!IS_DEV) return;
+  console.log(`🛡️ [vNIN] ${message}`, Object.keys(data).length ? data : "");
+};
+
 const VNINVerificationField = ({
   formData,
   formErrors,
@@ -25,17 +33,21 @@ const VNINVerificationField = ({
   const [vninError, setVninError] = useState("");
   const [showInfoModal, setShowInfoModal] = useState(false);
 
-  // Track what we've already successfully verified to prevent redundant paid API hits
+  // Track what we've already successfully verified
   const [lastVerifiedVnin, setLastVerifiedVnin] = useState("");
+
+  // Use ref to track verification in progress (doesn't cause re-renders)
+  const verificationInProgress = useRef(false);
 
   const MERCHANT_CODE = "715461";
 
-  // --- Logic: Verification Bridge ---
+  // 1. Wrap the verification logic in useCallback
   const performVerification = useCallback(
     async (vninValue) => {
-      // 1. Prevent calling if already verified or if currently in progress
-      if (vninValue === lastVerifiedVnin || isVerifying) return;
+      if (verificationInProgress.current) return;
+      if (vninValue === lastVerifiedVnin) return;
 
+      verificationInProgress.current = true;
       setIsVerifying(true);
       setVninError("");
 
@@ -44,52 +56,71 @@ const VNINVerificationField = ({
           vnin: vninValue,
         });
 
-        if (res.data.verified) {
+        const responseData = res.data.data || res.data;
+        const isVerified = responseData.verified || res.data.verified;
+
+        if (isVerified) {
           setLastVerifiedVnin(vninValue);
-          // "Pour" data into the main form state
           onVninVerified({
-            firstName: res.data.firstName,
-            middleName: res.data.middleName || "",
-            lastName: res.data.lastName,
-            phoneNumber: res.data.phoneNumber,
+            firstName: responseData.firstName,
+            middleName: responseData.middleName || "",
+            lastName: responseData.lastName,
+            phoneNumber: responseData.phoneNumber || "",
             isIdentityVerified: true,
           });
           toastAlert.success("Identity Verified via NIMC");
+        } else {
+          throw new Error("Verification returned false");
         }
       } catch (err) {
         const msg =
           err.response?.data?.message ||
           "Verification failed. Check your vNIN.";
         setVninError(msg);
-        // Reset verified status in parent if it was previously true
         onVninVerified({ isIdentityVerified: false });
       } finally {
         setIsVerifying(false);
+        verificationInProgress.current = false;
       }
     },
-    [isVerifying, lastVerifiedVnin, onVninVerified],
-  );
+    [lastVerifiedVnin, onVninVerified],
+  ); // Dependencies for useCallback
 
-  // --- Effect: Debounced Auto-Trigger ---
+  // 2. Updated useEffect with full dependency array
   useEffect(() => {
     const cleanedVnin = formData.vnin?.replace(/[^A-Z0-9]/gi, "") || "";
 
-    // Only trigger if format is exactly 16 characters
+    if (
+      formData.isIdentityVerified ||
+      cleanedVnin === lastVerifiedVnin ||
+      verificationInProgress.current
+    ) {
+      return;
+    }
+
+    if (cleanedVnin.length < 16 && vninError) {
+      setVninError("");
+    }
+
     if (cleanedVnin.length === 16) {
       const timeoutId = setTimeout(() => {
         performVerification(cleanedVnin);
-      }, 600); // 600ms debounce
-      return () => clearTimeout(timeoutId);
-    } else {
-      // Clear error if user is still typing/fixing
-      if (vninError) setVninError("");
-    }
-  }, [formData.vnin, performVerification, vninError]);
+      }, 600);
 
+      return () => clearTimeout(timeoutId);
+    }
+  }, [
+    formData.vnin,
+    formData.isIdentityVerified,
+    lastVerifiedVnin,
+    performVerification, // Now stable thanks to useCallback
+    vninError, // Added to satisfy linter
+  ]);
   // --- Helper: Format vNIN Display ---
   const handleVninChange = (e) => {
     const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
     let formatted = val;
+
     if (val.length > 2 && val.length <= 14) {
       formatted = `${val.slice(0, 2)}-${val.slice(2)}`;
     } else if (val.length > 14) {
@@ -264,6 +295,6 @@ const VNINVerificationField = ({
       )}
     </>
   );
-};
+};;
 
 export default VNINVerificationField;

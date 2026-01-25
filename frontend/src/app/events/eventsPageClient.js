@@ -1,9 +1,15 @@
 // src/app/events/eventsPageClient.js
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
-
-// Import components (same as before)
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  useCallback,
+  useTransition,
+  useDeferredValue,
+} from "react";
 import EventsHero from "@/components/events/hero/eventsHero";
 import CategoryPills from "@/components/events/hero/categoryPills";
 import FilterBar from "@/components/events/filters/filterBar";
@@ -13,7 +19,9 @@ import EventsFooter from "@/components/events/eventsFooter";
 
 const EVENTS_PER_LOAD = 8;
 
-// Normalize events data (same function as before)
+/**
+ * Normalize raw event data into consistent format for UI
+ */
 const normalizeEvents = (rawEvents) => {
   if (!rawEvents || !Array.isArray(rawEvents)) return [];
 
@@ -36,7 +44,6 @@ const normalizeEvents = (rawEvents) => {
       });
     };
 
-    // Use nullish coalescing for safety
     const startingPrice = event.tickets?.[0]?.price ?? 0;
 
     let tag = "New";
@@ -46,36 +53,37 @@ const normalizeEvents = (rawEvents) => {
       tag = "Trending";
     }
 
-const isLikedByUser = event.isLiked || false;
-const likeCount = event.likesCount || 0;
+    const isLikedByUser = event.isLiked || false;
+    const likeCount = event.likesCount || 0;
 
-return {
-  id: event.id,
-  title: event.eventTitle,
-  category: event.category,
-  image: event.eventImage,
-  price: startingPrice,
-  isFree: startingPrice === 0,
-  tag: tag,
-  isLikedByUser: isLikedByUser,
-  likeCount: likeCount,
-  date: formatDate(event.startDate),
-  time: formatTime(event.startDate),
-  location: `${event.venueName || "Venue N/A"}, ${event.city || "N/A"}`,
-  filterTitle: event.eventTitle.toLowerCase(),
-  filterCity: event.city?.trim() || "N/A",
-  startDate: event.startDate, // Keep for sorting
-};
+    return {
+      id: event.id,
+      title: event.eventTitle,
+      category: event.category,
+      image: event.eventImage,
+      price: startingPrice,
+      isFree: startingPrice === 0,
+      tag: tag,
+      isLikedByUser: isLikedByUser,
+      likeCount: likeCount,
+      date: formatDate(event.startDate),
+      time: formatTime(event.startDate),
+      location: `${event.venueName || "Venue N/A"}, ${event.city || "N/A"}`,
+      filterTitle: event.eventTitle.toLowerCase(),
+      filterCity: event.city?.trim() || "N/A",
+      startDate: event.startDate, // Keep for sorting
+    };
   });
 };
 
-// Client Component - Receives pre-fetched events as prop
 export default function EventsPageClient({ initialEvents }) {
-  // Refs for sticky behavior
+  // Refs
   const heroRef = useRef(null);
 
-  // Local state for UI interactions
+  // State
   const [searchTerm, setSearchTerm] = useState("");
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const [isPending, startTransition] = useTransition();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedLocation, setSelectedLocation] = useState("All Locations");
   const [sortBy, setSortBy] = useState("date-asc");
@@ -84,40 +92,37 @@ export default function EventsPageClient({ initialEvents }) {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isFilterSticky, setIsFilterSticky] = useState(false);
 
-  // --- Memoized Data ---
-
-  // Normalized events (using prop instead of Redux)
+  // Memoized Data
   const EVENTS_DATA_SOURCE = useMemo(
     () => normalizeEvents(initialEvents),
-    [initialEvents]
+    [initialEvents],
   );
 
-  // Derive filter options
   const allCategories = useMemo(
     () => [
       "All",
       ...new Set(
-        EVENTS_DATA_SOURCE.map((event) => event.category).filter(Boolean)
+        EVENTS_DATA_SOURCE.map((event) => event.category).filter(Boolean),
       ),
     ],
-    [EVENTS_DATA_SOURCE]
+    [EVENTS_DATA_SOURCE],
   );
 
   const locations = useMemo(
     () => [
       "All Locations",
       ...new Set(
-        EVENTS_DATA_SOURCE.map((event) => event.filterCity).filter(Boolean)
+        EVENTS_DATA_SOURCE.map((event) => event.filterCity).filter(Boolean),
       ),
     ],
-    [EVENTS_DATA_SOURCE]
+    [EVENTS_DATA_SOURCE],
   );
 
-  // Filtering logic
+  // Filtering and Sorting
   const filteredEvents = useMemo(() => {
     let result = EVENTS_DATA_SOURCE.filter((event) => {
       const matchesSearch = event.filterTitle.includes(
-        searchTerm.toLowerCase()
+        deferredSearchTerm.toLowerCase(),
       );
       const matchesCategory =
         selectedCategory === "All" || event.category === selectedCategory;
@@ -128,16 +133,15 @@ export default function EventsPageClient({ initialEvents }) {
       return matchesSearch && matchesCategory && matchesLocation;
     });
 
-    // Apply sorting (create a mutable copy before sorting)
     const sortedResult = [...result];
 
     if (sortBy === "date-asc") {
       sortedResult.sort(
-        (a, b) => new Date(a.startDate) - new Date(b.startDate)
+        (a, b) => new Date(a.startDate) - new Date(b.startDate),
       );
     } else if (sortBy === "date-desc") {
       sortedResult.sort(
-        (a, b) => new Date(b.startDate) - new Date(a.startDate)
+        (a, b) => new Date(b.startDate) - new Date(a.startDate),
       );
     } else if (sortBy === "price-asc") {
       sortedResult.sort((a, b) => a.price - b.price);
@@ -150,20 +154,43 @@ export default function EventsPageClient({ initialEvents }) {
     return sortedResult;
   }, [
     EVENTS_DATA_SOURCE,
-    searchTerm,
+    deferredSearchTerm,
     selectedCategory,
     selectedLocation,
     sortBy,
   ]);
 
-  // Displayed events (pagination)
-  const displayedEvents = useMemo(() => {
-    return filteredEvents.slice(0, displayedEventsCount);
-  }, [filteredEvents, displayedEventsCount]);
+  // Pagination
+  const displayedEvents = useMemo(
+    () => filteredEvents.slice(0, displayedEventsCount),
+    [filteredEvents, displayedEventsCount],
+  );
 
   const hasMore = displayedEventsCount < filteredEvents.length;
+  const hasActiveFilters =
+    searchTerm !== "" ||
+    selectedCategory !== "All" ||
+    selectedLocation !== "All Locations" ||
+    sortBy !== "date-asc";
 
-  // --- Handlers (Memoized with useCallback for performance) ---
+  // Event Handlers
+  const handleCategoryChange = useCallback((category) => {
+    startTransition(() => {
+      setSelectedCategory(category);
+    });
+  }, []);
+
+  const handleLocationChange = useCallback((location) => {
+    startTransition(() => {
+      setSelectedLocation(location);
+    });
+  }, []);
+
+  const handleSortChange = useCallback((sort) => {
+    startTransition(() => {
+      setSortBy(sort);
+    });
+  }, []);
 
   const handleLoadMore = useCallback(() => {
     if (hasMore && !isLoadingMore) {
@@ -175,7 +202,6 @@ export default function EventsPageClient({ initialEvents }) {
     }
   }, [hasMore, isLoadingMore]);
 
-  // Clear all filters
   const handleClearFilters = useCallback(() => {
     setSearchTerm("");
     setSelectedCategory("All");
@@ -183,14 +209,11 @@ export default function EventsPageClient({ initialEvents }) {
     setSortBy("date-asc");
   }, []);
 
-  // --- Effects ---
-
-  // Reset display count on filter change
+  // Effects
   useEffect(() => {
     setDisplayedEventsCount(EVENTS_PER_LOAD);
   }, [searchTerm, selectedCategory, selectedLocation, sortBy]);
 
-  // Sticky filter bar behavior
   useEffect(() => {
     const currentHeroRef = heroRef.current;
 
@@ -198,30 +221,17 @@ export default function EventsPageClient({ initialEvents }) {
       ([entry]) => {
         setIsFilterSticky(!entry.isIntersecting);
       },
-      { threshold: 0, rootMargin: "-80px 0px 0px 0px" }
+      { threshold: 0, rootMargin: "-80px 0px 0px 0px" },
     );
 
-    if (currentHeroRef) {
-      observer.observe(currentHeroRef);
-    }
+    if (currentHeroRef) observer.observe(currentHeroRef);
 
     return () => {
-      if (currentHeroRef) {
-        observer.unobserve(currentHeroRef);
-      }
+      if (currentHeroRef) observer.unobserve(currentHeroRef);
     };
   }, []);
 
-  // --- Derived State for UI ---
-  const hasActiveFilters =
-    searchTerm !== "" ||
-    selectedCategory !== "All" ||
-    selectedLocation !== "All Locations" ||
-    sortBy !== "date-asc";
-
-  // --- Render ---
-
-  // Handle empty state (no events from server)
+  // Empty State
   if (!initialEvents || initialEvents.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 py-10 px-4 sm:px-6 lg:px-8">
@@ -247,18 +257,18 @@ export default function EventsPageClient({ initialEvents }) {
           <CategoryPills
             categories={allCategories}
             selectedCategory={selectedCategory}
-            onCategoryChange={setSelectedCategory}
+            onCategoryChange={handleCategoryChange}
           />
         </div>
       </div>
 
-      {/* Filter Bar (Sticky) */}
+      {/* Filter Bar */}
       <FilterBar
         location={selectedLocation}
-        onLocationChange={setSelectedLocation}
+        onLocationChange={handleLocationChange}
         locations={locations}
         sortBy={sortBy}
-        onSortChange={setSortBy}
+        onSortChange={handleSortChange}
         resultsCount={filteredEvents.length}
         isSticky={isFilterSticky}
       />
@@ -280,8 +290,19 @@ export default function EventsPageClient({ initialEvents }) {
           />
         )}
 
-        {/* Events Grid */}
-        <EventsUI events={displayedEvents} />
+        {/* Transition Feedback */}
+        <div
+          style={{ opacity: isPending ? 0.6 : 1, transition: "opacity 200ms" }}
+        >
+          {searchTerm !== deferredSearchTerm && (
+            <div className="mb-4 p-2 bg-blue-50 rounded text-sm text-blue-700">
+              Updating results...
+            </div>
+          )}
+
+          {/* Events Grid */}
+          <EventsUI events={displayedEvents} />
+        </div>
 
         {/* Load More Footer */}
         <EventsFooter

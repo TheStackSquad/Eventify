@@ -7,7 +7,7 @@ import {
   deleteImage,
   validateEventForm,
 } from "../services/eventServices";
-import  toastAlert from "@/components/common/toast/toastAlert";
+import toastAlert from "@/components/common/toast/toastAlert";
 import {
   ERROR_MESSAGES,
   SUCCESS_MESSAGES,
@@ -19,53 +19,76 @@ export default function useEventSubmission(
   eventId,
   userId,
   setFormData,
+  setErrors,
   router,
-  initialData = null, // This is our 'stableInitialData' from useEventForm
+  initialData = null,
 ) {
+  // State Management
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [currentStep, setCurrentStep] = useState("");
 
+  // Hooks
   const createEventMutation = useCreateEvent(userId);
   const updateEventMutation = useUpdateEvent(userId);
 
+  // Main Submission Handler
   const handleSubmit = useCallback(
     async (finalFormData) => {
+      // Reset state
       setSubmitError(null);
+      if (setErrors) setErrors({});
 
+      // Authentication check
       if (!userId) {
         toastAlert.error(ERROR_MESSAGES.AUTH_REQUIRED);
         return;
       }
 
-      // 1. Integrity Validation
-      const { isValid, errors } = validateEventForm(finalFormData, initialData);
+      // 1. Form Validation
+      const {
+        isValid,
+        errors: validationErrors,
+        errorMap,
+      } = validateEventForm(finalFormData, initialData);
 
       if (!isValid) {
-        errors.forEach((err) => toastAlert.error(err));
+        if (setErrors && errorMap) {
+          setErrors(errorMap);
+        }
+        validationErrors.forEach((err) => toastAlert.error(err));
         return;
       }
 
+      // Start submission flow
       setIsSubmitting(true);
       let newImageUrl = null;
       let shouldRollbackImage = false;
 
       try {
-        const imageValue = finalFormData.eventImage;
-        const isNewFile = imageValue instanceof File || (imageValue && typeof imageValue !== "string");
-        
-        // 2. Image Asset Management
+        const imageValue =
+          finalFormData.eventImageFile || finalFormData.eventImage;
+        const isNewFile =
+          imageValue instanceof File ||
+          (imageValue && typeof imageValue !== "string");
+
+        // 2. Image Upload (if needed)
         if (isNewFile) {
-          // Upload new image
+          setCurrentStep("Uploading image...");
+          setUploadProgress(30);
           newImageUrl = await handleImageUpload(imageValue, eventId || "new");
           shouldRollbackImage = true;
+          setUploadProgress(60);
         } else {
-          newImageUrl = imageValue; // Use existing URL
+          newImageUrl = imageValue;
         }
 
-        // 3. Payload Preparation
+        // 3. Prepare API payload
         const finalPayload = prepareEventPayload(finalFormData, newImageUrl);
+        setCurrentStep(eventId ? "Updating event..." : "Creating event...");
 
-        // 4. Persistence
+        // 4. Database Operation
         if (eventId) {
           const oldImageUrl = initialData?.eventImage;
 
@@ -74,12 +97,21 @@ export default function useEventSubmission(
             updates: finalPayload,
           });
 
-          // 5. Post-Update Cleanup
-          // Only delete if we actually uploaded a new one and the old one was a blob
-          if (isNewFile && oldImageUrl && oldImageUrl !== newImageUrl && oldImageUrl.includes("blob.vercel-storage.com")) {
-            deleteImage(oldImageUrl).catch(err => console.warn("Old image cleanup failed:", err));
+          setUploadProgress(100);
+          setCurrentStep("Success!");
+
+          // 5. Clean up old image
+          if (
+            isNewFile &&
+            oldImageUrl &&
+            oldImageUrl !== newImageUrl &&
+            oldImageUrl.includes("blob.vercel-storage.com")
+          ) {
+            deleteImage(oldImageUrl).catch((err) =>
+              console.warn("Old image cleanup failed:", err),
+            );
           }
-          
+
           toastAlert.success(SUCCESS_MESSAGES.EVENT_UPDATED);
         } else {
           await createEventMutation.mutateAsync(finalPayload);
@@ -87,23 +119,44 @@ export default function useEventSubmission(
           setFormData(INITIAL_FORM_DATA);
         }
 
-        router.push(ROUTES.MY_EVENTS);
+        // 6. Navigation
+        router.push(ROUTES.BASE);
       } catch (error) {
-        // 6. Transactional Rollback
+        // 7. Transaction Rollback
         if (shouldRollbackImage && newImageUrl) {
-          console.log("🔄 Rolling back image upload due to DB failure...");
+          console.log("Rolling back image upload due to DB failure...");
           await deleteImage(newImageUrl).catch(console.error);
         }
 
-        const msg = error.response?.data?.message || error.message || "Submission failed";
+        const msg =
+          error.response?.data?.message || error.message || "Submission failed";
         toastAlert.error(msg);
         setSubmitError(error);
       } finally {
+        // Cleanup
         setIsSubmitting(false);
+        setUploadProgress(0);
+        setCurrentStep("");
       }
     },
-    [userId, eventId, initialData, createEventMutation, updateEventMutation, router, setFormData]
+    [
+      userId,
+      eventId,
+      initialData,
+      createEventMutation,
+      updateEventMutation,
+      router,
+      setFormData,
+      setErrors,
+    ],
   );
 
-  return { isSubmitting, submitError, handleSubmit };
+  // Return hook interface
+  return {
+    handleSubmit,
+    isSubmitting,
+    submitError,
+    uploadProgress,
+    currentStep,
+  };
 }

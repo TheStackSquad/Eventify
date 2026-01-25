@@ -1,76 +1,215 @@
 // frontend/src/components/ticketUI/components/ticketCard.js
-
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useState, useCallback, useMemo } from "react";
 import TicketHeader from "./ticketPageHeader";
 import TicketContent from "./ticketContent";
 import TicketActions from "./ticketActions";
 import TicketExpandableDetails from "./ticketExpandableDetails";
 import { formatCurrency } from "../ticketUtils";
+import TicketActionBoundary from "@/components/errorBoundary/ticketActionBoundary";
+import toastAlert from "@/components/common/toast/toastAlert";
 
-// Action handlers (moved inline to avoid import issues)
-const handleDownloadAction = async (ticketData) => {
-  const { generateTicketPDF } = await import("../ticketGenerators");
-  await generateTicketPDF({
-    ...ticketData,
-    total: formatCurrency(ticketData.total),
-  });
-};
-
-const handleShareAction = async ({
-  eventTitle,
-  reference,
-  firstName,
-  lastName,
-}) => {
-  const shareData = {
-    title: `${eventTitle} - Ticket`,
-    text: `${firstName} ${lastName}'s ticket for ${eventTitle}`,
-    url: `${window.location.origin}/tickets?ref=${reference}`,
-  };
-
-  if (navigator.share && navigator.canShare(shareData)) {
-    await navigator.share(shareData);
-  } else {
-    await navigator.clipboard.writeText(shareData.url);
-    alert("Ticket link copied!");
-  }
-};
-
-const handleCalendarAction = async ({
-  eventTitle,
-  tierName,
-  reference,
-  location,
-  startDate,
-  endDate,
-}) => {
-  const { generateICSFile } = await import("../ticketGenerators");
-  const icsContent = generateICSFile({
+/**
+ * SAFE action handlers with comprehensive error handling
+ * Each handler is isolated so failures don't cascade
+ */
+const createActionHandlers = (ticketData) => {
+  const {
     eventTitle,
     tierName,
     reference,
+    firstName,
+    lastName,
     location,
-    startDate: startDate ? new Date(startDate) : new Date(),
-    endDate: endDate
-      ? new Date(endDate)
-      : new Date(Date.now() + 4 * 60 * 60 * 1000),
-  });
+    startDate,
+    endDate,
+    total,
+  } = ticketData;
 
-  const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${eventTitle.replace(/\s+/g, "-")}.ics`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  /**
+   * Download Handler
+   * Safely imports PDF generator and handles failures
+   */
+  const handleDownload = async () => {
+    try {
+      // Dynamic import with error handling
+      const { generateTicketPDF } = await import("../ticketGenerators").catch(
+        (importError) => {
+          console.error("Failed to load PDF generator:", importError);
+          throw new Error("PDF_IMPORT_FAILED: Unable to load PDF generator");
+        },
+      );
+
+      // Generate PDF
+      await generateTicketPDF({
+        eventTitle,
+        tierName,
+        quantity: ticketData.quantity,
+        reference,
+        customer: `${firstName} ${lastName}`,
+        email: ticketData.email,
+        total: formatCurrency(total),
+        eventDate: startDate,
+        venue: location,
+      });
+
+      toastAlert.success("Ticket downloaded successfully!");
+      return true;
+    } catch (error) {
+      console.error("❌ Download failed:", {
+        error: error.message,
+        reference,
+        eventTitle,
+      });
+
+      // User-friendly error messages
+      if (error.message?.includes("IMPORT_FAILED")) {
+        toastAlert.error("Failed to load PDF generator. Please try again.");
+      } else if (error.message?.includes("GENERATION_FAILED")) {
+        toastAlert.error("Failed to create PDF. Please contact support.");
+      } else {
+        toastAlert.error("Download failed. Please try again.");
+      }
+
+      // Re-throw for boundary to catch
+      throw error;
+    }
+  };
+
+  /**
+   * Share Handler
+   * Uses Web Share API with fallback to clipboard
+   */
+  const handleShare = async () => {
+    try {
+      const shareData = {
+        title: `${eventTitle} - Ticket`,
+        text: `${firstName} ${lastName}'s ticket for ${eventTitle}`,
+        url: `${window.location.origin}/tickets?ref=${reference}`,
+      };
+
+      // Check if Web Share API is available
+      if (navigator.share && navigator.canShare?.(shareData)) {
+        await navigator.share(shareData);
+        toastAlert.success("Shared successfully!");
+      } else {
+        // Fallback to clipboard
+        await navigator.clipboard.writeText(shareData.url);
+        toastAlert.success("Ticket link copied to clipboard!");
+      }
+
+      return true;
+    } catch (error) {
+      // User cancelled share dialog (not an error)
+      if (error.name === "AbortError") {
+        return false;
+      }
+
+      console.error("❌ Share failed:", {
+        error: error.message,
+        reference,
+      });
+
+      toastAlert.error(
+        "Failed to share. Please try copying the link manually.",
+      );
+      throw error;
+    }
+  };
+
+  /**
+   * Calendar Handler
+   * Generates ICS file for calendar apps
+   */
+  const handleAddToCalendar = async () => {
+    try {
+      // Dynamic import with error handling
+      const { generateICSFile } = await import("../ticketGenerators").catch(
+        (importError) => {
+          console.error("Failed to load calendar generator:", importError);
+          throw new Error(
+            "ICS_IMPORT_FAILED: Unable to load calendar generator",
+          );
+        },
+      );
+
+      // Parse dates safely
+      const eventStartDate = startDate ? new Date(startDate) : new Date();
+      const eventEndDate = endDate
+        ? new Date(endDate)
+        : new Date(eventStartDate.getTime() + 4 * 60 * 60 * 1000); // +4 hours default
+
+      // Validate dates
+      if (isNaN(eventStartDate.getTime())) {
+        throw new Error("INVALID_START_DATE: Event date is invalid");
+      }
+
+      // Generate ICS content
+      const icsContent = generateICSFile({
+        eventTitle,
+        tierName,
+        reference,
+        location,
+        startDate: eventStartDate,
+        endDate: eventEndDate,
+      });
+
+      // Create and download file
+      const blob = new Blob([icsContent], {
+        type: "text/calendar;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${eventTitle.replace(/\s+/g, "-")}-${reference}.ics`;
+
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+
+      // Cleanup
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toastAlert.success("Event added to calendar!");
+      return true;
+    } catch (error) {
+      console.error("❌ Calendar add failed:", {
+        error: error.message,
+        reference,
+        eventTitle,
+      });
+
+      // User-friendly error messages
+      if (error.message?.includes("IMPORT_FAILED")) {
+        toastAlert.error(
+          "Failed to load calendar generator. Please try again.",
+        );
+      } else if (error.message?.includes("INVALID_DATE")) {
+        toastAlert.error("Event date is invalid. Please contact support.");
+      } else {
+        toastAlert.error("Failed to add to calendar. Please try again.");
+      }
+
+      throw error;
+    }
+  };
+
+  return {
+    handleDownload,
+    handleShare,
+    handleAddToCalendar,
+  };
 };
 
 /**
- * Redesigned Ticket Card - Boarding Pass Style
+ * TicketCard Component
+ * Displays individual ticket with error-resilient actions
+ */
+/**
+ * TicketCard Component
+ * Displays individual ticket with error-resilient actions
  */
 const TicketCard = memo(
   ({ ticketItem, customer, reference, ticketIndex = 0, totalTickets = 1 }) => {
@@ -81,119 +220,136 @@ const TicketCard = memo(
       calendar: false,
     });
 
-    if (!ticketItem || !customer) return null;
-
+    // 1. EXTRACT DATA FIRST (Don't return early before hooks)
     const {
-      eventTitle,
-      tierName,
-      quantity,
-      unitPrice,
-      eventId,
-      eventStartDate,
-      eventEndDate,
-      eventCity,
-      eventState,
-      eventVenue,
-    } = ticketItem;
+      eventTitle = "",
+      tierName = "",
+      quantity = 0,
+      unitPrice = 0,
+      eventId = "",
+      eventStartDate = null,
+      eventEndDate = null,
+      eventCity = "",
+      eventState = "",
+      eventVenue = "",
+    } = ticketItem || {};
 
-    const { firstName, lastName, email, phone } = customer;
+    const { firstName = "", lastName = "", email = "", phone = "" } = customer || {};
 
-    const uniqueTicketId = `${reference}-${eventId}-${ticketIndex + 1}`;
-    const ticketTotal = unitPrice * quantity;
+    // 2. DEFINE ALL HOOKS AT THE TOP LEVEL
+    const uniqueTicketId = useMemo(
+      () => `${reference}-${eventId}-${ticketIndex + 1}`,
+      [reference, eventId, ticketIndex],
+    );
 
-    // Format dates
-    const eventDate = eventStartDate
-      ? new Date(eventStartDate).toLocaleDateString("en-US", {
+    const ticketTotal = useMemo(
+      () => unitPrice * quantity,
+      [unitPrice, quantity],
+    );
+
+    const location = useMemo(
+      () => eventVenue || `${eventCity}, ${eventState}`,
+      [eventVenue, eventCity, eventState],
+    );
+
+    const eventDate = useMemo(() => {
+      if (!eventStartDate) return "TBA";
+      try {
+        return new Date(eventStartDate).toLocaleDateString("en-US", {
           month: "2-digit",
           day: "2-digit",
           year: "numeric",
-        })
-      : "TBA";
+        });
+      } catch {
+        return "TBA";
+      }
+    }, [eventStartDate]);
 
-    const eventTime = eventStartDate
-      ? new Date(eventStartDate).toLocaleTimeString("en-US", {
+    const eventTime = useMemo(() => {
+      if (!eventStartDate) return "TBA";
+      try {
+        return new Date(eventStartDate).toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
-        })
-      : "TBA";
+        });
+      } catch {
+        return "TBA";
+      }
+    }, [eventStartDate]);
 
-    // Action handlers
-    const actionHandlers = {
-      handleDownload: async () => {
-        try {
-          setActionStatus((prev) => ({ ...prev, download: true }));
-          const ticketData = {
-            eventTitle,
-            tierName,
-            quantity,
-            reference: uniqueTicketId,
-            customer: `${firstName} ${lastName}`,
-            email,
-            total: ticketTotal / 100,
-            eventDate: eventStartDate,
-            venue: eventVenue || `${eventCity}, ${eventState}`,
-          };
-          await handleDownloadAction(ticketData);
-          setTimeout(
-            () => setActionStatus((prev) => ({ ...prev, download: false })),
-            2000
-          );
-        } catch (error) {
-          console.error("Download failed:", error);
+    const baseHandlers = useMemo(
+      () =>
+        createActionHandlers({
+          eventTitle,
+          tierName,
+          reference: uniqueTicketId,
+          firstName,
+          lastName,
+          location,
+          startDate: eventStartDate,
+          endDate: eventEndDate,
+          total: ticketTotal,
+          quantity,
+          email,
+        }),
+      [eventTitle, tierName, uniqueTicketId, firstName, lastName, location, eventStartDate, eventEndDate, ticketTotal, quantity, email],
+    );
+
+    // FIX: Define useCallbacks at the top level, not inside a useMemo
+    const handleDownload = useCallback(async () => {
+      setActionStatus((prev) => ({ ...prev, download: true }));
+      try {
+        await baseHandlers.handleDownload();
+      } finally {
+        setTimeout(() => {
           setActionStatus((prev) => ({ ...prev, download: false }));
-        }
-      },
-      handleShare: async () => {
-        try {
-          setActionStatus((prev) => ({ ...prev, share: true }));
-          await handleShareAction({
-            eventTitle,
-            reference,
-            firstName,
-            lastName,
-          });
-          setTimeout(
-            () => setActionStatus((prev) => ({ ...prev, share: false })),
-            2000
-          );
-        } catch (error) {
-          console.error("Share failed:", error);
+        }, 2000);
+      }
+    }, [baseHandlers]);
+
+    const handleShare = useCallback(async () => {
+      setActionStatus((prev) => ({ ...prev, share: true }));
+      try {
+        await baseHandlers.handleShare();
+      } finally {
+        setTimeout(() => {
           setActionStatus((prev) => ({ ...prev, share: false }));
-        }
-      },
-      handleAddToCalendar: async () => {
-        try {
-          setActionStatus((prev) => ({ ...prev, calendar: true }));
-          await handleCalendarAction({
-            eventTitle,
-            tierName,
-            reference: uniqueTicketId,
-            location: eventVenue || `${eventCity}, ${eventState}`,
-            startDate: eventStartDate,
-            endDate: eventEndDate,
-          });
-          setTimeout(
-            () => setActionStatus((prev) => ({ ...prev, calendar: false })),
-            2000
-          );
-        } catch (error) {
-          console.error("Calendar add failed:", error);
+        }, 2000);
+      }
+    }, [baseHandlers]);
+
+    const handleAddToCalendar = useCallback(async () => {
+      setActionStatus((prev) => ({ ...prev, calendar: true }));
+      try {
+        await baseHandlers.handleAddToCalendar();
+      } finally {
+        setTimeout(() => {
           setActionStatus((prev) => ({ ...prev, calendar: false }));
-        }
-      },
-    };
+        }, 2000);
+      }
+    }, [baseHandlers]);
+
+    // Grouping them for the child component
+    const actionHandlers = useMemo(() => ({
+      handleDownload,
+      handleShare,
+      handleAddToCalendar
+    }), [handleDownload, handleShare, handleAddToCalendar]);
+
+    // 3. CONDITIONAL RENDER AT THE END
+    if (!ticketItem || !customer) {
+      return null;
+    }
 
     return (
       <article className="group perspective-1000">
         <div className="relative bg-white rounded-2xl shadow-2xl overflow-hidden transition-all duration-500 hover:shadow-3xl hover:-translate-y-1">
-          {/* Header Section */}
           <TicketHeader
             eventDate={eventDate}
             ticketIndex={ticketIndex}
             totalTickets={totalTickets}
           />
 
-          {/* Main Content */}
           <TicketContent
             eventTitle={eventTitle}
             eventVenue={eventVenue}
@@ -208,14 +364,14 @@ const TicketCard = memo(
             lastName={lastName}
           />
 
-          {/* Actions Section */}
-          <TicketActions
-            uniqueTicketId={uniqueTicketId}
-            actionHandlers={actionHandlers}
-            actionStatus={actionStatus}
-          />
+          <TicketActionBoundary ticketId={uniqueTicketId}>
+            <TicketActions
+              uniqueTicketId={uniqueTicketId}
+              actionHandlers={actionHandlers}
+              actionStatus={actionStatus}
+            />
+          </TicketActionBoundary>
 
-          {/* Expandable Details */}
           <TicketExpandableDetails
             isExpanded={isExpanded}
             setIsExpanded={setIsExpanded}
@@ -231,9 +387,17 @@ const TicketCard = memo(
         </div>
       </article>
     );
-  }
+  },
+  // Custom comparison remains same
+  (prevProps, nextProps) => {
+    return (
+      prevProps.ticketItem?.eventId === nextProps.ticketItem?.eventId &&
+      prevProps.reference === nextProps.reference &&
+      prevProps.ticketIndex === nextProps.ticketIndex &&
+      prevProps.customer?.email === nextProps.customer?.email
+    );
+  },
 );
-
 TicketCard.displayName = "TicketCard";
 
 export default TicketCard;

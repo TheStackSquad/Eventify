@@ -28,7 +28,7 @@ import {
   FORM_PLACEHOLDERS,
 } from "@/data/vendorData";
 
-const VendorForm = ({ vendorId, onSubmissionSuccess }) => {
+const VendorForm = ({ userId, onSubmissionSuccess }) => {
   const {
     formData,
     formErrors,
@@ -43,7 +43,7 @@ const VendorForm = ({ vendorId, onSubmissionSuccess }) => {
     handleVninVerified, // Integrated from handler
     isEditMode,
   } = useVendorFormHandler({
-    vendorId,
+    userId,
     onSuccess: onSubmissionSuccess,
   });
 

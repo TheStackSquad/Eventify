@@ -1,15 +1,31 @@
-// frontend/next.config.js
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Disable caching in development
-  experimental: {
-    staleTimes: {
-      dynamic: 0, // Always fresh for dynamic content
-      static: 0, // Always fresh for static content
-    },
+  // 1. Performance: Modern Image Formats
+  images: {
+    formats: ["image/avif", "image/webp"],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    qualities: [25, 50, 75, 85, 100],
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "kphwpin3r1kcmjsx.public.blob.vercel-storage.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "api.qrserver.com",
+        pathname: "/v1/create-qr-code/**",
+      },
+      // ✅ ADDED: Paystack domain for logo
+      {
+        protocol: "https",
+        hostname: "paystack.com",
+        pathname: "/assets/**",
+      },
+    ],
   },
-  // Add headers to prevent caching
+  // 2. Caching & Security Headers
   async headers() {
     return [
       {
@@ -19,35 +35,28 @@ const nextConfig = {
             key: "Cache-Control",
             value: "no-store, no-cache, must-revalidate, proxy-revalidate",
           },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          {
+            key: "X-Frame-Options",
+            value: "DENY",
+          },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
         ],
       },
     ];
   },
-  images: {
-    // Configure allowed qualities for Next.js 16+
-    qualities: [25, 50, 75, 85, 100],
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "kphwpin3r1kcmjsx.public.blob.vercel-storage.com",
-        port: "",
-        pathname: "/**",
-      },
-      {
-        protocol: "https",
-        hostname: "kphwpin3r1kcmjsx.public.blob.vercel-storage.com",
-        port: "",
-        pathname: "/vendor-images/**",
-      },
-      // ADD THIS: Allow QR code service
-      {
-        protocol: "https",
-        hostname: "api.qrserver.com",
-        port: "",
-        pathname: "/v1/create-qr-code/**",
-      },
-    ],
+  // 3. Development/Stale Time Config
+  experimental: {
+    staleTimes: {
+      dynamic: 0,
+      static: 0,
+    },
   },
 };
-
 export default nextConfig;
