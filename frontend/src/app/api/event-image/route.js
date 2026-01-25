@@ -2,27 +2,36 @@
 
 import { put, del } from "@vercel/blob";
 import { NextResponse } from "next/server";
-import { jwtVerify } from "jose";
+import { jwtVerify, importSPKI } from "jose";
 
-// Configuration & Constraints
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_ACCESS_SECRET);
 
 async function getAuthenticatedUser(request) {
+  // 1. Check if middleware already verified and passed the user ID
+  const userIdFromHeader = request.headers.get("x-user-id");
+  
+  if (userIdFromHeader) {
+    console.log("✅ Auth Success via Middleware header:", userIdFromHeader);
+    return { user_id: userIdFromHeader };
+  }
+
+  // 2. Fallback: If for some reason header is missing, try standard verification
   try {
     const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
-
+    if (!authHeader) return null;
+    
     const token = authHeader.split(" ")[1];
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    return payload; // Returns the claims (userId, etc.)
+    const publicKeyPem = process.env.JWT_PUBLIC_KEY;
+    const ecPublicKey = await importSPKI(publicKeyPem, "RS256");
+    const { payload } = await jwtVerify(token, ecPublicKey);
+    
+    return payload;
   } catch (error) {
-    console.error("Auth verification failed:", error.message);
+    console.error("❌ Route verification fallback failed:", error.message);
     return null;
   }
 }
-
 export async function POST(request) {
   try {
     // 1. Authenticate User

@@ -1,7 +1,6 @@
 // frontend/src/app/events/create-events/services/eventServices.js
 import { frontendInstance } from "@/axiosConfig/axios";
 
-
 export const handleImageUpload = async (imageFile, eventId = null) => {
   // Validate input
   if (!imageFile || !(imageFile instanceof File)) {
@@ -15,15 +14,23 @@ export const handleImageUpload = async (imageFile, eventId = null) => {
   }
 
   // Validate file type
-  const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+  const ALLOWED_TYPES = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+  ];
   if (!ALLOWED_TYPES.includes(imageFile.type)) {
-    throw new Error("Invalid image format. Only JPEG, PNG, WebP, and GIF are allowed");
+    throw new Error(
+      "Invalid image format. Only JPEG, PNG, WebP, and GIF are allowed",
+    );
   }
 
   try {
     const formData = new FormData();
     formData.append("file", imageFile);
-    
+
     if (eventId) {
       formData.append("eventId", eventId);
     }
@@ -61,7 +68,9 @@ export const handleImageUpload = async (imageFile, eventId = null) => {
 
     // Provide user-friendly error messages
     if (error.code === "ECONNABORTED") {
-      throw new Error("Upload timed out. Please try again with a smaller image.");
+      throw new Error(
+        "Upload timed out. Please try again with a smaller image.",
+      );
     }
 
     const errorMessage =
@@ -119,21 +128,41 @@ export const isVercelBlobUrl = (url) => {
 
 export const validateEventForm = (formData, initialData = null) => {
   const errors = [];
+  const errorMap = {}; // NEW: Map errors to specific fields for UI
   const now = new Date();
-  // 30-minute grace period for "Today" events
   const bufferTime = new Date(now.getTime() - 30 * 60000);
   const isEditMode = !!initialData;
 
+  // Helper to add both error message and field mapping
+  const addError = (message, field = null) => {
+    errors.push(message);
+    if (field) {
+      errorMap[field] = message;
+    }
+  };
+
   // --- 1. BASIC FIELD VALIDATION ---
-  if (!formData.eventTitle?.trim()) errors.push("Event title is required");
-  if (!formData.eventDescription?.trim())
-    errors.push("Event description is required");
-  if (!formData.category?.trim())
-    errors.push("Please select an event category");
-  if (!formData.eventType)
-    errors.push("Please select if the event is Physical or Virtual");
+  if (!formData.eventTitle?.trim()) {
+    addError("Event title is required", "eventTitle");
+  }
+  if (!formData.eventDescription?.trim()) {
+    addError("Event description is required", "eventDescription");
+  }
+  if (!formData.category?.trim()) {
+    addError("Please select an event category", "category");
+  }
+  if (!formData.eventType) {
+    addError("Please select if the event is Physical or Virtual", "eventType");
+  }
 
   // --- 2. TEMPORAL INTEGRITY (Dates & Times) ---
+  if (!formData.startDate) {
+    addError("Start date is required", "startDate");
+  }
+  if (!formData.startTime) {
+    addError("Start time is required", "startTime");
+  }
+
   if (formData.startDate && formData.endDate) {
     const start = new Date(
       `${formData.startDate}T${formData.startTime || "00:00"}:00`,
@@ -143,27 +172,24 @@ export const validateEventForm = (formData, initialData = null) => {
     );
 
     if (start > end) {
-      errors.push("The event cannot end before it starts.");
+      addError("The event cannot end before it starts.", "endDate");
     }
 
     if (start < bufferTime) {
-      errors.push("The selected start time has already passed.");
+      addError("The selected start time has already passed.", "startDate");
     }
 
-    // Fairness Rule: Prevent last-minute date changes if tickets are sold
     if (isEditMode && initialData.soldCount > 0) {
       const originalStart = new Date(initialData.startDate);
       if (start.getTime() !== originalStart.getTime()) {
-        errors.push(
-          "Date cannot be changed once tickets are sold. Please contact support or notify attendees.",
-        );
+        addError("Date cannot be changed once tickets are sold.", "startDate");
       }
     }
   }
 
   // --- 3. TICKETING & FINANCIAL FAIRNESS ---
   if (!formData.tickets || formData.tickets.length === 0) {
-    errors.push("You must add at least one ticket tier.");
+    addError("You must add at least one ticket tier.", "tickets");
   } else {
     formData.tickets.forEach((ticket, index) => {
       const label = ticket.tierName || `Ticket #${index + 1}`;
@@ -172,42 +198,48 @@ export const validateEventForm = (formData, initialData = null) => {
       );
       const ticketsSoldForThisTier = initialTicket?.soldCount || 0;
 
-      // Basic Tier Checks
-      if (!ticket.tierName?.trim()) errors.push(`${label}: Name is required.`);
-
-      // Price Fairness: Reject negative, allow 0 (Free)
-      if (ticket.price < 0) {
-        errors.push(`${label}: Price cannot be negative.`);
+      if (!ticket.tierName?.trim()) {
+        addError(`${label}: Name is required.`, `ticket_${index}_tierName`);
       }
 
-      // INTEGRITY: Price Lock if sold
+      if (ticket.price < 0) {
+        addError(
+          `${label}: Price cannot be negative.`,
+          `ticket_${index}_price`,
+        );
+      }
+
       if (isEditMode && ticketsSoldForThisTier > 0) {
         if (Number(ticket.price) !== Number(initialTicket.price)) {
-          errors.push(
-            `${label}: Price cannot be changed because tickets have already been sold at the original price.`,
+          addError(
+            `${label}: Price cannot be changed after tickets are sold.`,
+            `ticket_${index}_price`,
           );
         }
       }
 
-      // INTEGRITY: Capacity Floor
       if (ticket.quantity < ticketsSoldForThisTier) {
-        errors.push(
-          `${label}: Capacity cannot be less than the ${ticketsSoldForThisTier} tickets already sold.`,
+        addError(
+          `${label}: Capacity cannot be less than ${ticketsSoldForThisTier} tickets sold.`,
+          `ticket_${index}_quantity`,
         );
       } else if (ticket.quantity <= 0) {
-        errors.push(`${label}: Total capacity must be at least 1.`);
+        addError(
+          `${label}: Total capacity must be at least 1.`,
+          `ticket_${index}_quantity`,
+        );
       }
     });
 
-    // Check for Tier Deletion Integrity
-    if (isEditMode) {
+    if (isEditMode && initialData?.tickets) {
       initialData.tickets.forEach((initialTicket) => {
         const stillExists = formData.tickets.some(
           (t) => t.id === initialTicket.id,
         );
         if (!stillExists && initialTicket.soldCount > 0) {
-          errors.push(
-            `Cannot delete '${initialTicket.tierName}' because attendees have already purchased tickets from this tier.`,
+          addError(
+            `Cannot delete '${initialTicket.tierName}' - tickets already sold.`,
+            "tickets",
           );
         }
       });
@@ -216,8 +248,12 @@ export const validateEventForm = (formData, initialData = null) => {
 
   // --- 4. LOGISTICS & DISCOVERY ---
   if (formData.eventType === "physical") {
-    if (!formData.venueName?.trim()) errors.push("Venue name is required.");
-    if (!formData.city?.trim()) errors.push("Please specify the city.");
+    if (!formData.venueName?.trim()) {
+      addError("Venue name is required.", "venueName");
+    }
+    if (!formData.city?.trim()) {
+      addError("Please specify the city.", "city");
+    }
   }
 
   if (formData.eventType === "virtual") {
@@ -225,18 +261,27 @@ export const validateEventForm = (formData, initialData = null) => {
       !formData.meetingLink?.trim() ||
       !formData.meetingLink.startsWith("http")
     ) {
-      errors.push(
+      addError(
         "A valid virtual meeting link (starting with http/https) is required.",
+        "meetingLink",
       );
     }
   }
 
-  if (!formData.eventImage) {
-    errors.push("An event cover image is required for a professional look.");
+  // --- 5. IMAGE VALIDATION (FIXED: Check both preview and file) ---
+  // Allow either uploaded file OR existing image URL
+  const hasImage =
+    formData.eventImageFile ||
+    formData.eventImage ||
+    formData.eventImagePreview;
+
+  if (!hasImage) {
+    addError("An event cover image is required.", "eventImage");
   }
 
   return {
     isValid: errors.length === 0,
     errors,
+    errorMap, // NEW: Return field-specific error mapping
   };
 };

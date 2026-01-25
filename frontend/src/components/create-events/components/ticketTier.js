@@ -3,6 +3,7 @@
 import { createInputField } from "@/components/common/createInputFields";
 
 export default function TicketTier({
+  
   index,
   ticket,
   errors,
@@ -10,6 +11,7 @@ export default function TicketTier({
   onRemove,
   showRemove,
 }) {
+  if (!ticket) return null;
   return (
     <div className="p-6 bg-gray-800 rounded-lg border border-gray-700 relative">
       {showRemove && (

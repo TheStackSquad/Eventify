@@ -1,4 +1,4 @@
-//frontend/src/components/create-events/formSteps/basicFormSteps
+// frontend/src/components/create-events/formSteps/basicFormStep.js
 
 import { createInputField } from "@/components/common/createInputFields";
 import { CATEGORIES } from "@/components/create-events/constants/formConfig";
@@ -98,8 +98,11 @@ export default function BasicInfoStep({
 
       <ImageUpload
         imagePreview={formData.eventImagePreview}
-        onImageUpload={handleImageUpload}
-        onRemoveImage={() => handleInputChange("eventImagePreview", "")}
+        onImageUpload={handleImageUpload} // Pass it through correctly
+        onRemoveImage={() => {
+          handleInputChange("eventImagePreview", "");
+          handleInputChange("eventImageFile", null);
+        }}
       />
     </div>
   );

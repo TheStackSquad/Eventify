@@ -1,4 +1,5 @@
 // frontend/src/app/checkout/page.js
+
 "use client";
 
 import { useMemo, useState, useEffect, useCallback } from "react";
@@ -11,6 +12,7 @@ import { ArrowLeft, User } from "lucide-react";
 import PaystackCheckout from "@/components/checkoutUI/checkout";
 import CustomerForm from "@/components/checkoutUI/customerForm";
 import OrderSummary from "@/components/checkoutUI/orderSummaryCard";
+import CheckoutSectionBoundary from "@/components/errorBoundary/checkoutSectionBoundary";
 
 // Utils
 import {
@@ -49,11 +51,25 @@ export default function CheckoutPage() {
   }, []);
 
   // Calculate cart totals using new fee structure
+  // 🎯 DEFENSIVE CODING: Wrap calculations in try-catch for safety
   const cartTotals = useMemo(() => {
-    console.log("🟢 CheckoutPage: Calculating cart totals for items:", items);
-    const totals = calculateCartTotals(items);
-    console.log("🟢 CheckoutPage: Cart Totals:", totals);
-    return totals;
+    try {
+      console.log("🟢 CheckoutPage: Calculating cart totals for items:", items);
+      const totals = calculateCartTotals(items);
+      console.log("🟢 CheckoutPage: Cart Totals:", totals);
+      return totals;
+    } catch (error) {
+      console.error("🔴 Cart calculation error:", error);
+      // Return safe defaults if calculation fails
+      return {
+        subtotal: 0,
+        finalTotal: 0,
+        finalTotalKobo: 0,
+        hasMixedTiers: false,
+        serviceCharge: 0,
+        vat: 0,
+      };
+    }
   }, [items]);
 
   // Stable callback for customer info updates
@@ -70,9 +86,14 @@ export default function CheckoutPage() {
 
   // Memoize payment metadata
   const paymentMetadata = useMemo(() => {
-    const metadata = formatOrderMetadata(cartTotals, customerInfo, items);
-    console.log("🟢 CheckoutPage: Payment metadata created:", metadata);
-    return metadata;
+    try {
+      const metadata = formatOrderMetadata(cartTotals, customerInfo, items);
+      console.log("🟢 CheckoutPage: Payment metadata created:", metadata);
+      return metadata;
+    } catch (error) {
+      console.error("🔴 Metadata formatting error:", error);
+      return null;
+    }
   }, [cartTotals, customerInfo, items]);
 
   // Log when customerInfo changes to debug the flow
@@ -111,89 +132,105 @@ export default function CheckoutPage() {
       <div className="grid lg:grid-cols-3 gap-8">
         {/* Left Column - Customer Info & Payment */}
         <div className="lg:col-span-2 space-y-8">
-          {/* Customer Information Section */}
-          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-            <CustomerForm
-              onCustomerInfoChange={handleCustomerInfoChange}
-              onValidationChange={handleFormValidation}
-              initialData={{ user: userData }}
-            />
-          </div>
+          {/* 🎯 BOUNDARY 1: Customer Form (Medium Priority) */}
+          <CheckoutSectionBoundary
+            section="Customer Information"
+            minHeight="400px" // Match approximate form height
+          >
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+              <CustomerForm
+                onCustomerInfoChange={handleCustomerInfoChange}
+                onValidationChange={handleFormValidation}
+                initialData={{ user: userData }}
+              />
+            </div>
+          </CheckoutSectionBoundary>
 
-          {/* Payment Section */}
-          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-            <h2 className="text-2xl font-bold text-red-700 mb-6">
-              Payment Method
-            </h2>
+          {/* 🎯 BOUNDARY 2: Payment Section (CRITICAL - Third-party) */}
+          <CheckoutSectionBoundary
+            section="Payment Gateway"
+            minHeight="300px" // Match payment section height
+          >
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+              <h2 className="text-2xl font-bold text-red-700 mb-6">
+                Payment Method
+              </h2>
 
-            {/* Debug Info - Remove in production */}
-            {process.env.NODE_ENV === "development" && (
-              <div className="mb-4 p-3 bg-gray-100 rounded text-xs font-mono">
-                <div>
-                  <strong>Debug Info:</strong>
-                </div>
-                <div>Form Valid: {isFormValid.toString()}</div>
-                <div>Email: {customerInfo.email || "empty"}</div>
-                <div>FirstName: {customerInfo.firstName || "empty"}</div>
-                <div>LastName: {customerInfo.lastName || "empty"}</div>
-                <div>Phone: {customerInfo.phone || "empty"}</div>
-                <div>
-                  Final Total: ₦{cartTotals.finalTotal.toLocaleString()}
-                </div>
-                <div>Amount in Kobo: {cartTotals.finalTotalKobo}</div>
-                <div>
-                  Has Mixed Tiers: {cartTotals.hasMixedTiers.toString()}
-                </div>
-                <div>Metadata exists: {paymentMetadata ? "YES" : "NO"}</div>
-              </div>
-            )}
-
-            {isFormValid && customerInfo.email ? (
-              <>
-                {/* Fee Structure Notice */}
-                {cartTotals.hasMixedTiers && (
-                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                    <p className="font-medium mb-1">
-                      ℹ️ Mixed Fee Structure Applied
-                    </p>
-                    <p className="text-xs">
-                      Your cart contains tickets with different fee structures:
-                      Small tickets (≤₦5,000) have a 10% fee, premium tickets
-                      (&gt;₦5,000) have 7% + ₦50 + VAT.
-                    </p>
+              {/* Debug Info - Remove in production */}
+              {process.env.NODE_ENV === "development" && (
+                <div className="mb-4 p-3 bg-gray-100 rounded text-xs font-mono">
+                  <div>
+                    <strong>Debug Info:</strong>
                   </div>
-                )}
+                  <div>Form Valid: {isFormValid.toString()}</div>
+                  <div>Email: {customerInfo.email || "empty"}</div>
+                  <div>FirstName: {customerInfo.firstName || "empty"}</div>
+                  <div>LastName: {customerInfo.lastName || "empty"}</div>
+                  <div>Phone: {customerInfo.phone || "empty"}</div>
+                  <div>
+                    Final Total: ₦{cartTotals.finalTotal.toLocaleString()}
+                  </div>
+                  <div>Amount in Kobo: {cartTotals.finalTotalKobo}</div>
+                  <div>
+                    Has Mixed Tiers: {cartTotals.hasMixedTiers.toString()}
+                  </div>
+                  <div>Metadata exists: {paymentMetadata ? "YES" : "NO"}</div>
+                </div>
+              )}
 
-                <PaystackCheckout
-                  amountInKobo={cartTotals.finalTotalKobo}
-                  email={customerInfo.email}
-                  totalAmount={cartTotals.finalTotal}
-                  metadata={paymentMetadata}
-                />
-              </>
-            ) : (
-              <div className="text-center p-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                <User className="mx-auto mb-4 text-gray-400" size={48} />
-                <h3 className="text-lg font-medium text-gray-700 mb-2">
-                  Complete Customer Information
-                </h3>
-                <p className="text-gray-500">
-                  Please fill in all required customer details above to proceed
-                  with payment.
-                </p>
-              </div>
-            )}
-          </div>
+              {isFormValid && customerInfo.email ? (
+                <>
+                  {/* Fee Structure Notice */}
+                  {cartTotals.hasMixedTiers && (
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                      <p className="font-medium mb-1">
+                        ℹ️ Mixed Fee Structure Applied
+                      </p>
+                      <p className="text-xs">
+                        Your cart contains tickets with different fee
+                        structures: Small tickets (≤₦5,000) have a 10% fee,
+                        premium tickets (&gt;₦5,000) have 7% + ₦50 + VAT.
+                      </p>
+                    </div>
+                  )}
+
+                  <PaystackCheckout
+                    amountInKobo={cartTotals.finalTotalKobo}
+                    email={customerInfo.email}
+                    totalAmount={cartTotals.finalTotal}
+                    metadata={paymentMetadata}
+                  />
+                </>
+              ) : (
+                <div className="text-center p-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                  <User className="mx-auto mb-4 text-gray-400" size={48} />
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">
+                    Complete Customer Information
+                  </h3>
+                  <p className="text-gray-500">
+                    Please fill in all required customer details above to
+                    proceed with payment.
+                  </p>
+                </div>
+              )}
+            </div>
+          </CheckoutSectionBoundary>
         </div>
 
         {/* Right Column - Order Summary */}
+        {/* 🎯 BOUNDARY 3: Order Summary (Low Priority, but prevents cart breaking) */}
         <div className="lg:col-span-1">
-          <OrderSummary
-            customerInfo={customerInfo}
-            itemCount={itemCount}
-            orderBreakdown={cartTotals}
-            items={items}
-          />
+          <CheckoutSectionBoundary
+            section="Order Summary"
+            minHeight="500px" // Match summary card height
+          >
+            <OrderSummary
+              customerInfo={customerInfo}
+              itemCount={itemCount}
+              orderBreakdown={cartTotals}
+              items={items}
+            />
+          </CheckoutSectionBoundary>
         </div>
       </div>
     </div>

@@ -10,7 +10,12 @@ import ErrorState from "@/components/ticketUI/errorState";
 import TicketPageHeader from "@/components/ticketUI/components/ticketPageHeader";
 import TicketCard from "@/components/ticketUI/components/ticketCard";
 import TicketFooter from "@/components/ticketUI/footer";
+import TicketVerificationBoundary from "@/components/errorBoundary/ticketVerificationBoundary";
 
+/**
+ * Inner component that uses useSearchParams
+ * MUST be inside Suspense boundary
+ */
 function TicketContent() {
   const searchParams = useSearchParams();
   const reference = searchParams.get("ref") || searchParams.get("reference");
@@ -23,64 +28,102 @@ function TicketContent() {
   } = useQuery({
     queryKey: ["verifyTicket", reference],
     queryFn: async () => {
-      if (!reference) throw new Error("Missing Reference");
+      if (!reference) {
+        throw new Error("Missing Reference");
+      }
 
       try {
         const response = await backendInstance.get(
           `${ENDPOINTS.PAYMENTS.VERIFY}/${reference}`,
         );
 
-        if (response.data.data?.items) {
-          response.data.data.items.forEach((item, index) => {
-            console.log(`📄 Item ${index} field check:`, {
-              title: !!item.eventTitle,
-              date: !!item.eventDate,
-              venue: !!item.eventVenue,
-              keys: Object.keys(item),
-            });
-          });
+        // Validate response structure
+        if (!response.data) {
+          throw new Error("Invalid response format");
         }
 
         if (response.data.status !== "success") {
           throw new Error(response.data.message || "Verification Failed");
         }
 
+        if (!response.data.data?.items?.length) {
+          throw new Error("No tickets found for this reference");
+        }
+
+        // Log ticket data for debugging
+        if (process.env.NODE_ENV === "development") {
+          response.data.data.items.forEach((item, index) => {
+            console.log(`📄 Ticket ${index + 1}:`, {
+              title: item.eventTitle || "N/A",
+              date: item.eventDate || "N/A",
+              venue: item.eventVenue || "N/A",
+              tier: item.tierName || "N/A",
+            });
+          });
+        }
+
         return response.data;
       } catch (apiError) {
-        console.error(
-          "❌ API Error:",
-          apiError.response?.data || apiError.message,
-        );
+        console.error("❌ Ticket Verification API Error:", {
+          message: apiError.message,
+          status: apiError.response?.status,
+          data: apiError.response?.data,
+          reference,
+        });
+
+        // Re-throw to let React Query and boundary handle it
         throw apiError;
       }
     },
     enabled: !!reference,
-    retry: 1,
-    staleTime: 5 * 60 * 1000,
+    retry: (failureCount, error) => {
+      // Don't retry on 404 or 401
+      if (error.response?.status === 404 || error.response?.status === 401) {
+        return false;
+      }
+      // Retry network errors up to 2 times
+      return failureCount < 2;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
+  // Loading state
   if (isLoading) {
     return <LoadingSpinner message="Verifying your ticket..." />;
   }
 
+  // Missing reference
   if (!reference) {
     return (
       <ErrorState
         message="No Reference Provided"
-        subtext="A transaction reference is required."
+        subtext="A transaction reference is required to view your tickets."
       />
     );
   }
 
-  if (isError || !orderData?.data?.items?.length) {
+  // Error state (React Query errors)
+  if (isError) {
     return (
       <ErrorState
         message="Verification Failed"
-        subtext={error?.message || "We couldn't find your ticket record."}
+        subtext={error?.message || "We couldn't verify your ticket."}
       />
     );
   }
 
+  // No tickets found
+  if (!orderData?.data?.items?.length) {
+    return (
+      <ErrorState
+        message="No Tickets Found"
+        subtext="We couldn't find any tickets associated with this reference."
+      />
+    );
+  }
+
+  // Extract data
   const {
     items,
     reference: orderReference,
@@ -92,9 +135,9 @@ function TicketContent() {
   } = orderData.data;
 
   const customer = {
-    firstName: customerFirstName,
-    lastName: customerLastName,
-    email: customerEmail,
+    firstName: customerFirstName || "Guest",
+    lastName: customerLastName || "",
+    email: customerEmail || "",
     phone: customerPhone?.String || customerPhone || "",
   };
 
@@ -125,10 +168,21 @@ function TicketContent() {
   );
 }
 
+function TicketPageWithBoundary() {
+  const searchParams = useSearchParams();
+  const reference = searchParams.get("ref") || searchParams.get("reference");
+
+  return (
+    <TicketVerificationBoundary reference={reference}>
+      <TicketContent />
+    </TicketVerificationBoundary>
+  );
+}
+
 export default function TicketPage() {
   return (
-    <Suspense fallback={<LoadingSpinner message="Loading your ticket..." />}>
-      <TicketContent />
+    <Suspense fallback={<LoadingSpinner message="Loading your tickets..." />}>
+      <TicketPageWithBoundary />
     </Suspense>
   );
 }

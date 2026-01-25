@@ -3,51 +3,77 @@
 
 //Aligns Backend Model to Frontend Form State
 export const transformEventToFormData = (event) => {
-  const safeDate = (d) => d ? new Date(d).toISOString().split("T")[0] : "";
-  const safeTime = (d) => d ? new Date(d).toTimeString().slice(0, 5) : "";
+  if (!event) return null;
+
+  const safeDate = (d) => (d ? new Date(d).toISOString().split("T")[0] : "");
+  const safeTime = (d) => (d ? new Date(d).toTimeString().slice(0, 5) : "");
 
   return {
     ...event,
-    startDate: safeDate(event.startDate),
-    startTime: safeTime(event.startDate),
-    endDate: safeDate(event.endDate),
-    endTime: safeTime(event.endDate),
-    tickets: (event.tickets || []).map(t => ({
-      id: t.id || t.ID, // Stable UUID from Backend
-      tierName: t.name || t.tierName || "",
-      price: Number(t.priceKobo || t.price) || 0,
-      quantity: Number(t.capacity || t.quantity) || 0,
-      soldCount: Number(t.sold || t.soldCount) || 0,
-      isFree: t.isFree || (t.priceKobo === 0),
-      description: t.description || ""
+    // 1. Map 'title' from API to 'eventTitle' for the Form
+    eventTitle: event.title || event.eventTitle || "",
+
+    // 2. Map 'image' from API to 'eventImagePreview'
+    eventImagePreview: event.image || event.eventImagePreview || "",
+
+    // 3. Handle Dates
+    startDate: safeDate(event.startDate || event.date),
+    startTime: safeTime(event.startDate || event.date),
+
+    // 4. Ensure tickets exist
+    tickets: (event.tickets || []).map((t) => ({
+      id: t.id || t.ID,
+      tierName: t.tierName || t.name || "",
+      price: t.price ? t.price / 100 : 0,
+      quantity: t.quantity || t.capacity || 0,
+      soldCount: t.soldCount || t.sold || 0,
+      description: t.description || "",
     })),
   };
 };
 
-//Prepares Payload for API (Enforces UUID integrity)
+
 export const prepareEventPayload = (formData, imageUrl) => {
   const payload = { ...formData };
+  
+  // 1. Map Image URL
   if (imageUrl) payload.eventImage = imageUrl;
 
-  // Combine Dates
+  // 2. Format Dates (Backend needs time.Time)
   if (payload.startDate && payload.startTime) {
     payload.startDate = new Date(`${payload.startDate}T${payload.startTime}:00`).toISOString();
+  }
+  if (payload.endDate && payload.endTime) {
     payload.endDate = new Date(`${payload.endDate}T${payload.endTime}:00`).toISOString();
   }
 
-  // ALIGNMENT: Sanitize Tickets
-  payload.tickets = (payload.tickets || []).map(t => ({
-    // If ID is a temp string (e.g., from 'add ticket' button), send undefined
-    // Backend will then generate a real UUID
-    id: (t.id && !t.id.toString().startsWith('temp-')) ? t.id : undefined,
+  // 3. Convert Numeric Types (The int32 fix)
+  if (payload.maxAttendees) {
+    payload.maxAttendees = parseInt(payload.maxAttendees, 10) || 0;
+  }
+
+  // 4. THE FIX: Match the "TicketTiers" key and internal fields
+  const sanitizedTickets = (payload.tickets || []).map((t) => ({
+    // Use the keys required by the TicketTier struct binding
     tierName: t.tierName,
-    price: parseFloat(t.price) || 0, // Backend handler will do * 100
-    quantity: parseInt(t.quantity, 10) || 0,
-    description: t.description || ""
+    price: parseFloat(t.price) || 0,
+    quantity: parseInt(t.quantity, 10) || 0, // Capacity
+    description: t.description || "",
   }));
 
-  // Clean UI-only fields
-  ['eventImagePreview', 'startTime', 'endTime', 'timezone'].forEach(k => delete payload[k]);
+  // Assign to the key the validator is asking for
+  payload.TicketTiers = sanitizedTickets; 
+
+  // 5. Cleanup
+  // Remove the old 'tickets' key and UI helper fields
+  const fieldsToRemove = [
+    'tickets', 
+    'eventImagePreview', 
+    'startTime', 
+    'endTime', 
+    'timezone'
+  ];
+  fieldsToRemove.forEach(k => delete payload[k]);
   
   return payload;
 };

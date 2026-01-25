@@ -1,4 +1,4 @@
-// frontend/src/components/common/loading/loadingSpinner.jsx (Enhanced)
+// frontend/src/components/common/loading/loadingSpinner.jsx (Enhanced & Fixed)
 import React from "react";
 
 const LoadingSpinner = ({
@@ -56,10 +56,22 @@ const LoadingSpinner = ({
       bg: "border-red-200",
       spinner: "border-t-red-600",
     },
+    white: {
+      bg: "border-gray-600",
+      spinner: "border-t-white",
+    },
+    gray: {
+      bg: "border-gray-300",
+      spinner: "border-t-gray-700",
+    },
   };
 
-  const { spinner, border, text, subText } = sizeConfig[size];
-  const { bg, spinner: spinnerColor } = colorConfig[color];
+  // ✅ Safe destructuring with fallback
+  const sizeStyles = sizeConfig[size] || sizeConfig.md;
+  const colorStyles = colorConfig[color] || colorConfig.indigo;
+
+  const { spinner, border, text, subText } = sizeStyles;
+  const { bg, spinner: spinnerColor } = colorStyles;
 
   const containerClasses = `
     flex items-center justify-center 
