@@ -1,71 +1,49 @@
-# Binaries (compiled executables)
-backend.exe
-main.exe
+# === Binaries & Executables ===
+# Ignore all executables and compiled binaries
 *.exe
+*.exe~
 backend
 main
+bin/
+# Specifically ignoring the ones seen in your ls -la
+backend.exe
+main.exe
 
-# Environment variables
+# === Environment & Secrets ===
+# Never track secrets or session headers
 .env
-.env.local
-*.env.*
+.env.*
+*.env
 cookies.txt
 login_headers.txt
 
-# Go-specific (but NOT go.mod or go.sum)
-#vendor/           # Dependencies folder (can be ignored if using go modules)
-*.test           # Test binaries
-*.out           # Build outputs
-coverage.html   # Test coverage reports
+# === Go Artifacts ===
+# Ignore test binaries and coverage reports
+*.test
+*.out
+*.prof
+# Specific coverage files from your directory
 coverage.out
+handlers_coverage.out
+coverage.html
 
-# Database files
-*.db
-*.sqlite
-*.sqlite3
-*.dump
+# === Local Test Folders & Scripts ===
+# These appear to be local testing playgrounds
+test_scripts/
+testy/
+# Ignore local helper scripts
+*.sh
 
-# Logs
-*.log
-logs/
-tmp/
-
-# IDE/Editor
+# === IDE & OS ===
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS files
 .DS_Store
 Thumbs.db
 
-# Temporary files
+# === Logs & Temp ===
+*.log
+logs/
 tmp/
 temp/
-
-# Scripts that should not be tracked if they contain sensitive commands/paths
-port-kill.sh
-test-api.sh
-# Executables
-*.exe
-backend.exe
-main.exe
-
-# Test files and directories
-test_scripts/
-testy/
-*_test.go
-coverage.out
-handlers_coverage.out
-
-# Text files
-*.txt
-cookies.txt
-login_headers.txt
-
-# Shell scripts (optional - remove if you want to track them)
-*.sh
-test-api.sh
-port-kill.sh
-

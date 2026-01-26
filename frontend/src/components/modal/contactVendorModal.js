@@ -1,15 +1,13 @@
 // frontend/src/components/modal/contactVendorModal.js
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { Mail, Loader2, X, User, MapPin, Star, Send } from "lucide-react";
+import { Mail, Loader2, X, User, MapPin, Star, Send, AlertCircle } from "lucide-react";
 import useContact from "@/utils/hooks/useContact";
-// Import the necessary validation function
 import { contactValidate } from "@/utils/validate/contactValidate";
-// Import the toast utility
 import toastAlert from "@/components/common/toast/toastAlert";
+import ContactInquiryBoundary from "@/components/errorBoundary/contactInquiryBoundary";
 
 const MODES = Object.freeze({ CREATE: "create", UPDATE: "update" });
 
@@ -26,10 +24,11 @@ const ContactVendorModal = ({
     email: "",
     message: "",
   });
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
 
-  // Define handleSuccess first
+  // Handle success callback
   const handleSuccess = useCallback(() => {
-    // The success toast is triggered inside the useContact hook
     const timer = setTimeout(() => {
       onClose();
       setFormData({ name: "", email: "", message: "" });
@@ -37,19 +36,21 @@ const ContactVendorModal = ({
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  // Now useContact can reference handleSuccess
   const { sendInquiry, isSubmitting, isSuccess, resetContact } =
     useContact(handleSuccess);
 
+  // Initialize form data
   useEffect(() => {
     if (isOpen) {
       setFormData(
         initialData ? { ...initialData } : { name: "", email: "", message: "" }
       );
+      setImageError(false);
+      setImageLoading(true);
     }
   }, [initialData, isOpen]);
 
-  // Reset form and contact state when modal closes
+  // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
       setFormData({ name: "", email: "", message: "" });
@@ -62,7 +63,6 @@ const ContactVendorModal = ({
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // --- START: Integration of contactValidate with Toast Alert ---
   const validateForm = () => {
     const validationData = {
       name: formData.name,
@@ -72,7 +72,6 @@ const ContactVendorModal = ({
 
     const result = contactValidate(validationData);
 
-    // If validation fails, display the first error found as a toast
     if (!result.isValid) {
       const firstErrorKey = Object.keys(result.errors).find(
         (key) => result.errors[key]
@@ -84,21 +83,28 @@ const ContactVendorModal = ({
 
     return result.isValid;
   };
-  // --- END: Integration of contactValidate with Toast Alert ---
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
 
-    // Run client-side validation first
     if (!validateForm()) return;
 
     try {
-      // sendInquiry handles the API call and triggers success/error toasts via the hook
       await sendInquiry({ vendorId, formData });
     } catch (err) {
-      // API errors are handled by the onError callback inside useContact hook.
+      // Errors handled by useContact hook and boundary
+      console.error('Inquiry submission error:', err);
     }
+  };
+
+  const handleImageError = () => {
+    setImageError(true);
+    setImageLoading(false);
+  };
+
+  const handleImageLoad = () => {
+    setImageLoading(false);
   };
 
   if (!isOpen) return null;
@@ -123,21 +129,42 @@ const ContactVendorModal = ({
           <X size={20} />
         </button>
 
-        {/* Left Column: Image with Overlay (omitted for brevity) */}
-        <div className="lg:w-5/12 relative min-h-[280px] lg:min-h-[600px] overflow-hidden">
-          <Image
-            src={vendorData?.image || "/img/vendor/contactModal.jpg"}
-            alt={vendorData?.name || "Vendor Profile"}
-            fill
-            priority
-            sizes="(max-width: 1024px) 100vw, 40vw"
-            className="object-cover"
-          />
+        {/* Left Column: Image with Overlay */}
+        <div className="lg:w-5/12 relative min-h-[280px] lg:min-h-[600px] overflow-hidden bg-gray-900">
+          {/* Image Loading Skeleton */}
+          {imageLoading && (
+            <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 animate-pulse" />
+          )}
+
+          {/* Image Error State */}
+          {imageError ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+              <div className="text-center text-white px-4">
+                <AlertCircle className="mx-auto mb-3 opacity-50" size={48} />
+                <p className="text-sm font-semibold opacity-75">
+                  Image unavailable
+                </p>
+              </div>
+            </div>
+          ) : (
+            <Image
+              src={vendorData?.image || "/img/vendor/contactModal.jpg"}
+              alt={vendorData?.name || "Vendor Profile"}
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 40vw"
+              className="object-cover"
+              onError={handleImageError}
+              onLoad={handleImageLoad}
+            />
+          )}
+
+          {/* Gradient Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/20 lg:bg-gradient-to-r lg:from-black/80 lg:to-transparent" />
 
-          {/* Vendor Info Overlay (omitted for brevity) */}
+          {/* Vendor Info Overlay */}
           <div className="absolute bottom-0 left-0 p-6 sm:p-8 w-full text-white">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <span className="px-2.5 py-1 bg-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg">
                 {vendorData?.category || "Verified Vendor"}
               </span>
@@ -158,95 +185,114 @@ const ContactVendorModal = ({
           </div>
         </div>
 
-        {/* Right Column: Form (no changes needed here as it relies on the toast for feedback) */}
+        {/* Right Column: Form with Boundary */}
         <div className="lg:w-7/12 p-6 sm:p-10 bg-white dark:bg-gray-950">
-          <div className="mb-8">
-            <h3 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
-              {mode === MODES.CREATE ? "Get a Quote" : "Modify Inquiry"}
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 font-medium mt-2">
-              Send a direct message to{" "}
-              {vendorData?.name?.split(" ")[0] || "the vendor"}.
-            </p>
-          </div>
+          <ContactInquiryBoundary 
+            vendorId={vendorId} 
+            vendorName={vendorData?.name}
+            onClose={onClose}
+          >
+            <div className="mb-8">
+              <h3 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                {mode === MODES.CREATE ? "Get a Quote" : "Modify Inquiry"}
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 font-medium mt-2">
+                Send a direct message to{" "}
+                {vendorData?.name?.split(" ")[0] || "the vendor"}.
+              </p>
+            </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-500 dark:text-gray-400 ml-1">
-                  Your Name
-                </label>
-                <div className="relative group">
-                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-indigo-600 transition-colors pointer-events-none" />
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    required
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800 focus:border-indigo-600 focus:bg-white dark:focus:bg-gray-900 rounded-xl outline-none text-sm font-semibold text-gray-900 dark:text-white transition-all"
-                    placeholder="Full Name"
-                  />
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {/* Name Input */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-500 dark:text-gray-400 ml-1">
+                    Your Name
+                  </label>
+                  <div className="relative group">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-indigo-600 transition-colors pointer-events-none" />
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      disabled={isSubmitting || isSuccess}
+                      required
+                      className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800 focus:border-indigo-600 focus:bg-white dark:focus:bg-gray-900 rounded-xl outline-none text-sm font-semibold text-gray-900 dark:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      placeholder="Full Name"
+                    />
+                  </div>
+                </div>
+
+                {/* Email Input */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-500 dark:text-gray-400 ml-1">
+                    Email Address
+                  </label>
+                  <div className="relative group">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-indigo-600 transition-colors pointer-events-none" />
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      disabled={isSubmitting || isSuccess}
+                      required
+                      className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800 focus:border-indigo-600 focus:bg-white dark:focus:bg-gray-900 rounded-xl outline-none text-sm font-semibold text-gray-900 dark:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      placeholder="name@email.com"
+                    />
+                  </div>
                 </div>
               </div>
 
+              {/* Message Textarea */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-500 dark:text-gray-400 ml-1">
-                  Email Address
+                  Inquiry Details
                 </label>
-                <div className="relative group">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-indigo-600 transition-colors pointer-events-none" />
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    required
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800 focus:border-indigo-600 focus:bg-white dark:focus:bg-gray-900 rounded-xl outline-none text-sm font-semibold text-gray-900 dark:text-white transition-all"
-                    placeholder="name@email.com"
-                  />
-                </div>
+                <textarea
+                  name="message"
+                  value={formData.message}
+                  onChange={handleChange}
+                  disabled={isSubmitting || isSuccess}
+                  rows="4"
+                  required
+                  className="w-full p-4 bg-gray-50 dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800 focus:border-indigo-600 focus:bg-white dark:focus:bg-gray-900 rounded-xl outline-none text-sm font-medium text-gray-900 dark:text-white transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  placeholder="Mention date, location, and specific services required..."
+                />
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-500 dark:text-gray-400 ml-1">
-                Inquiry Details
-              </label>
-              <textarea
-                name="message"
-                value={formData.message}
-                onChange={handleChange}
-                rows="4"
-                required
-                className="w-full p-4 bg-gray-50 dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-800 focus:border-indigo-600 focus:bg-white dark:focus:bg-gray-900 rounded-xl outline-none text-sm font-medium text-gray-900 dark:text-white transition-all resize-none"
-                placeholder="Mention date, location, and specific services required..."
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting || isSuccess}
-              className={`w-full flex justify-center items-center gap-3 py-4 rounded-xl text-[11px] font-black uppercase tracking-[0.2em] transition-all transform active:scale-[0.98] shadow-lg ${
-                isSubmitting
-                  ? "bg-gray-200 dark:bg-gray-800 text-gray-400 cursor-not-allowed"
-                  : isSuccess
-                  ? "bg-emerald-500 text-white shadow-emerald-500/50"
-                  : "bg-gray-900 dark:bg-indigo-600 text-white hover:bg-black dark:hover:bg-indigo-700 hover:shadow-xl"
-              }`}
-            >
-              {isSubmitting ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : isSuccess ? (
-                "✓ Message Sent"
-              ) : (
-                <>
-                  <span>Send Inquiry</span>
-                  <Send className="h-4 w-4" />
-                </>
-              )}
-            </button>
-          </form>
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={isSubmitting || isSuccess}
+                className={`w-full flex justify-center items-center gap-3 py-4 rounded-xl text-[11px] font-black uppercase tracking-[0.2em] transition-all transform active:scale-[0.98] shadow-lg ${
+                  isSubmitting
+                    ? "bg-gray-200 dark:bg-gray-800 text-gray-400 cursor-not-allowed"
+                    : isSuccess
+                    ? "bg-emerald-500 text-white shadow-emerald-500/50"
+                    : "bg-gray-900 dark:bg-indigo-600 text-white hover:bg-black dark:hover:bg-indigo-700 hover:shadow-xl"
+                }`}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : isSuccess ? (
+                  <>
+                    <span className="text-lg">✓</span>
+                    <span>Message Sent!</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Send Inquiry</span>
+                    <Send className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          </ContactInquiryBoundary>
         </div>
       </div>
 

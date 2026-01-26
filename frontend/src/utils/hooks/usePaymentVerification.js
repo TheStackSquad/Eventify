@@ -13,6 +13,7 @@ const verifyPayment = async (reference) => {
 
 export function usePaymentVerification(trxref) {
   const { clearCart } = useCart();
+  const STORAGE_KEY = "checkout_customer_draft";
 
   const [verificationStatus, setVerificationStatus] = useState("verifying");
   const [paymentData, setPaymentData] = useState(null);
@@ -49,7 +50,11 @@ export function usePaymentVerification(trxref) {
           // ✅ Clear cart immediately on successful verification
           clearCartRef.current();
 
-          // ❌ REMOVED: Auto-redirect - user controls navigation via button
+          if (typeof window !== "undefined") {
+            sessionStorage.removeItem(STORAGE_KEY);
+            console.log("Checkout draft cleared successfully.");
+          }
+
           // User will click "View Your Tickets" button to proceed to /tickets page
         } else if (data.status === "pending") {
           setVerificationStatus("pending");

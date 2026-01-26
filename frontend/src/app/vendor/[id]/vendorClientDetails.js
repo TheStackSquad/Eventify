@@ -4,10 +4,10 @@
 
 import React from "react";
 import { useVendorProfile } from "@/utils/hooks/useVendorData";
-import ContactVendorButton from "../../../components/common/contactVendorButton";
-import RateVendor from "../../../components/common/rateVendor";
-import VendorProfileDetail from "../../../components/vendorUI/vendorProfileWrapper/vendorProfileDetail";
-import LoadingSpinner from "../../../components/common/loading/loadingSpinner";
+import ContactVendorButton from "@/components/common/contactVendorButton";
+import RateVendor from "@/components/common/rateVendor";
+import VendorProfileDetail from "@/components/vendorUI/vendorProfileWrapper/vendorProfileDetail";
+import LoadingSpinner from "@/components/common/loading/loadingSpinner";
 
 const VendorClientDetails = ({
   vendorData,

@@ -1,51 +1,5 @@
 // frontend/src/utils/constants/globalConstants.js
 
-// ========== REDUX ACTION TYPES ==========
-export const REDUX_ACTION_TYPES = {
-  SIGNUP: "auth/signupUser",
-  SIGNIN: "auth/signinUser",
-  RESTORE_SESSION: "auth/restoreSession",
-  LOGOUT: "auth/logoutUser",
-
-  CREATE_EVENT: "events/createEvent",
-  GET_EVENT_BY_ID: "events/getEventById",
-  FETCH_USER_EVENTS: "events/fetchUserEvents",
-  FETCH_ALL_EVENTS: "events/fetchAllEvents",
-  FETCH_EVENT_ANALYTICS: "events/fetchEventAnalytics",
-  UPDATE_EVENT: "events/updateEvent",
-  DELETE_EVENT: "events/deleteEvent",
-  PUBLISH_EVENT: "events/publishEvent",
-
-  // VENDOR ACTIONS
-  FETCH_VENDORS: "vendors/fetchVendors",
-  GET_VENDOR_PROFILE: "vendors/getVendorProfile",
-  REGISTER_VENDOR: "vendors/registerVendor",
-  UPDATE_VENDOR: "vendors/updateVendor",
-
-  // INQUIRY ACTIONS
-  CREATE_INQUIRY: "inquiry/createInquiry",
-  GET_VENDOR_INQUIRIES: "inquiry/getVendorInquiries",
-  UPDATE_INQUIRY_STATUS: "inquiry/updateInquiryStatus",
-  RESET_CREATE_INQUIRY_STATUS: "inquiry/resetCreateInquiryStatus",
-
-  // ✅ REVIEW ACTIONS (NEW)
-  CREATE_REVIEW: "reviews/createReview",
-  GET_VENDOR_REVIEWS: "reviews/getVendorReviews",
-  UPDATE_REVIEW_STATUS: "reviews/updateReviewStatus",
-  RESET_CREATE_REVIEW_STATUS: "reviews/resetCreateReviewStatus",
-
-  // ADMIN VENDOR ACTIONS
-  TOGGLE_IDENTITY_VERIFICATION: "admin/toggleIdentityVerification",
-  TOGGLE_BUSINESS_VERIFICATION: "admin/toggleBusinessVerification",
-  DELETE_VENDOR: "admin/deleteVendor",
-
-  // 🆕 FEEDBACK ACTIONS
-  CREATE_FEEDBACK: "feedback/createFeedback",
-  FETCH_ALL_FEEDBACK: "feedback/fetchAllFeedback",
-  DELETE_FEEDBACK: "feedback/deleteFeedback",
-  RESET_CREATE_FEEDBACK_STATUS: "feedback/resetCreateFeedbackStatus",
-};
-
 // ========== API ENDPOINTS ==========
 export const API_ENDPOINTS = {
   AUTH: {
@@ -173,15 +127,12 @@ export const REDIRECT_PATHS = {
   DASHBOARD: ROUTES.DASHBOARD,
 };
 
-// ========== STATUS CONSTANTS (Dependency must come first) ==========
 export const STATUS = {
   IDLE: "idle",
   LOADING: "loading",
   SUCCEEDED: "succeeded",
   FAILED: "failed",
 };
-
-// ========== STATE DEFAULTS (These depend on STATUS, so they come after) ==========
 
 export const VENDOR_DEFAULTS = {
   INITIAL_STATE: {
@@ -240,7 +191,6 @@ export const EVENT_DEFAULTS = {
 // Analytics cache duration (5 minutes)
 export const ANALYTICS_CACHE_DURATION_MS = 5 * 60 * 1000;
 
-// ========== ANALYTICS CONSTANTS ==========
 export const ANALYTICS_CONSTANTS = {
   // Insight types (for styling)
   INSIGHT_TYPES: {
@@ -307,66 +257,6 @@ export const ANALYTICS_CONSTANTS = {
   },
 };
 
-// ========== ERROR MESSAGES ==========
-export const ERROR_MESSAGES = {
-  // Event Operations
-  CREATE_EVENT_FAILED: "Failed to create event",
-  UPDATE_EVENT_FAILED: "Failed to update event",
-  DELETE_EVENT_FAILED: "Failed to delete event",
-  FETCH_EVENTS_FAILED: "Failed to fetch events",
-  FETCH_EVENT_FAILED: "Failed to fetch event",
-  FETCH_ANALYTICS_FAILED: "Analytics failed",
-  // Vendor Operations (New)
-  FETCH_VENDORS_FAILED: "Failed to fetch vendors list",
-  FETCH_PROFILE_FAILED: "Failed to load vendor profile.",
-  REGISTER_VENDOR_FAILED: "Failed to complete vendor registration.",
-  UPDATE_VENDOR_FAILED: "Failed to update vendor profile.",
-
-  FEEDBACK_SUBMIT_FAILED: "Failed to submit feedback. Please try again.",
-  FEEDBACK_DELETE_FAILED: "Failed to delete feedback. Please try again.",
-  FEEDBACK_FETCH_FAILED: "Failed to fetch feedback. Please try again.",
-
-  REVIEW: {
-    DUPLICATE: "You've already reviewed this vendor",
-    INVALID_RATING: "Please select a rating between 1 and 5 stars",
-    MISSING_FIELDS: "Please fill in all required fields",
-    INVALID_EMAIL: "Please enter a valid email address",
-    COMMENT_TOO_SHORT: "Please write a few words about your experience",
-    COMMENT_TOO_LONG:
-      "Your review is too long. Please keep it under 500 characters",
-    SUBMISSION_FAILED:
-      "We couldn't submit your review right now. Please try again.",
-    NETWORK_ERROR: "Network error. Please check your connection and try again.",
-  },
-  INQUIRY: {
-    DUPLICATE: "You've already contacted this vendor",
-    SUBMISSION_FAILED: "Failed to send inquiry. Please try again.",
-  },
-
-  // General
-  AUTH_REQUIRED: "Authentication required. Please log in to continue.",
-  NETWORK_ERROR: "Network error. Please check your connection.",
-  SERVER_ERROR: "Server error. Please try again later.",
-  UNKNOWN_ERROR: "An unexpected error occurred.",
-};
-
-// ========== SUCCESS MESSAGES ==========
-export const SUCCESS_MESSAGES = {
-  EVENT_CREATED: "🎉 Event created successfully!",
-  EVENT_UPDATED: "🎉 Event updated successfully!",
-  EVENT_DELETED: "Event deleted successfully!",
-  EVENT_PUBLISHED: "Event published successfully!",
-  // Vendor Operations (New)
-  VENDOR_REGISTERED: "Vendor registration submitted successfully!",
-
-  FEEDBACK_SUBMITTED: "Thank you for your feedback! We'll review it shortly.",
-  FEEDBACK_DELETED: "Feedback deleted successfully.",
-
-  // Admin Operations (New)
-  IDENTITY_VERIFIED: "Vendor identity verification status updated.",
-  BUSINESS_VERIFIED: "Vendor business verification status updated.",
-  VENDOR_DELETED: "Vendor permanently removed from the platform.",
-};
 
 export const replaceUrlParams = (url, params) => {
   if (!url) return "";
@@ -384,11 +274,8 @@ export const replaceUrlParams = (url, params) => {
 };
 // Named export for the entire constants object
 const globalConstants = {
-  REDUX_ACTION_TYPES,
   API_ENDPOINTS,
   STATUS,
-  ERROR_MESSAGES,
-  SUCCESS_MESSAGES,
   ROUTES,
   EVENT_DEFAULTS,
   VENDOR_DEFAULTS, // 💡 NEW: Ensure VENDOR_DEFAULTS is included here

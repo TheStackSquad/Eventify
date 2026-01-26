@@ -73,41 +73,35 @@ const processQueue = (error, token = null) => {
 
 // === CLEAR AUTH & REDIRECT TO LOGIN ===
 const clearAuthAndRedirect = () => {
-  debugLog("REDIRECT", "Clearing auth and redirecting to login");
+  debugLog("REDIRECT", "Clearing auth state");
 
-  // Clear cookies
+  // Always clear the data
   clearAuthCookies();
-
-  // Clear refresh timers
   clearRefreshTimer();
-
-  // Reset refresh state
   isRefreshing = false;
   refreshPromise = null;
   processQueue(new Error("AUTH_CLEARED"), null);
 
-  // Redirect to login only if in browser context
   if (typeof window !== "undefined") {
     const currentPath = window.location.pathname;
 
-    // Don't redirect if already on auth pages
-    if (currentPath.startsWith("/account/auth/")) {
-      debugLog("REDIRECT", "Already on auth page, skipping redirect");
-      return;
+    // 1. Define only the routes that REQUIRE a redirect
+    const PROTECTED_ROUTES = ["/dashboard", "/create-events"];
+    
+    // Check if current path starts with any protected route
+    const isProtected = PROTECTED_ROUTES.some(route => 
+      currentPath === route || currentPath.startsWith(`${route}/`)
+    );
+
+    if (isProtected) {
+      const loginUrl = `/account/auth/login?callbackUrl=${encodeURIComponent(currentPath)}`;
+      
+      debugLog("REDIRECT", "Protected route detected, forcing login", { to: loginUrl });
+      window.location.href = loginUrl;
+    } else {
+      debugLog("REDIRECT", "Public route detected, staying on page");
+      // Optional: window.location.reload(); // Refresh to update UI to "Logged Out" state
     }
-
-    const loginUrl = `/account/auth/login${
-      currentPath !== "/dashboard" && currentPath !== "/"
-        ? `?callbackUrl=${encodeURIComponent(currentPath)}`
-        : ""
-    }`;
-
-    debugLog("REDIRECT", "Redirecting to login", {
-      from: currentPath,
-      to: loginUrl,
-    });
-
-    window.location.href = loginUrl;
   }
 };
 

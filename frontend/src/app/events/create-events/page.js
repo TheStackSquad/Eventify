@@ -10,7 +10,8 @@ import useEventSubmission from "@/app/events/create-events/hooks/useEventSubmiss
 import CreateEventForm from "@/components/create-events/create";
 import LoadingSpinner from "@/components/common/loading/loadingSpinner";
 import AuthGuard from "@/components/auth/authGuard";
-import { ERROR_MESSAGES, ROUTES } from "@/utils/constants/globalConstants";
+import { ERROR_MESSAGES } from "@/utils/constants/errorMessages";
+import { ROUTES } from "@/utils/constants/globalConstants";
 import CheckoutSectionBoundary from "@/components/errorBoundary/checkoutSectionBoundary";
 import { Upload, Save, CheckCircle, AlertCircle } from "lucide-react";
 
