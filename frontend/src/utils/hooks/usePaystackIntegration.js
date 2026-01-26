@@ -1,7 +1,7 @@
 // frontend/src/utils/hooks/usePaystackIntegration.js
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useCart } from "@/context/cartContext";
 import toastAlert from "@/components/common/toast/toastAlert";
 import backendInstance, { ENDPOINTS } from "@/axiosConfig/axios";

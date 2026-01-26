@@ -11,7 +11,7 @@ import toastAlert from "@/components/common/toast/toastAlert";
 import {
   SUCCESS_MESSAGES,
   ERROR_MESSAGES,
-} from "@/utils/constants/globalConstants";
+} from "@/utils/constants/errorMessages";
 
 // Logging utility
 const log = {

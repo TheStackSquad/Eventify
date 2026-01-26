@@ -1,8 +1,6 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
+# === Dependencies ===
+node_modules/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,72 +8,51 @@
 !.yarn/releases
 !.yarn/versions
 
-# Test files
+# === Next.js Build & Runtime ===
+.next/
+out/
+build/
+dist/
+.swc/
+next-env.d.ts
+*.tsbuildinfo
+
+# === Environment & Secrets ===
+.env*
+!.env.example
+*.pem
+rsa_private.pem
+rsa_public.pem
+cookies.txt
+
+# === Test & Coverage ===
+coverage/
+__tests__/
+__mocks__/
+.jest/
 *.test.js
 *.test.jsx
 *.test.ts
 *.test.tsx
-**/*.test.js
-**/*.test.jsx
-**/*.test.ts
-**/*.test.tsx
+*.unit.js
 
-# Test directories
-__tests__/
-__mocks__/
-coverage/
-.jest/
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-
-# Ignore frontend test files
-frontend/src/**/*.test.js
-frontend/src/**/*.unit.js
-
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
+# === Debug & Logs ===
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-*.pem
-rsa_private.pem
-rsa_public.pem
-
-# vercel
 .vercel
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# === OS & IDE ===
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
 
-
-# Dependency and Build directories
-/node_modules
-/.next
-/out
-/dist
-
-# Compiled/Runtime files
-/coverage
-.swc/
-
-# Environment files
-.env.local
-.env.productionbackend.exe
+# === Miscellaneous ===
+# Catching the backend binary if it's accidentally moved here
+backend.exe
+main.exe
+*.exe

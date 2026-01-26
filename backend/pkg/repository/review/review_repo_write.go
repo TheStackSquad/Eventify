@@ -5,10 +5,13 @@ package review
 import (
 	"context"
 	"fmt"
+	"errors"
 
 	"github.com/eventify/backend/pkg/models"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
+var ErrDuplicateReview = errors.New("models: review unique constraint violation")
 
 // Create persists a review to the database.
 // Review object should have IsVerified and TrustWeight set by service layer.
@@ -26,9 +29,16 @@ func (r *PostgresReviewRepository) Create(ctx context.Context, review *models.Re
 			:ip_address, :is_verified, :trust_weight, NOW(), NOW()
 		)`
 
-	_, err := r.DB.NamedExecContext(ctx, query, review)
+_, err := r.DB.NamedExecContext(ctx, query, review)
 	if err != nil {
-		return fmt.Errorf("failed to create review: %w", err)
+		// 1. Check for Postgres specific error
+		if pgErr, ok := err.(*pq.Error); ok {
+			// 23505 is the code for unique_violation
+			if pgErr.Code == "23505" || pgErr.Constraint == "idx_reviews_one_per_user_vendor" {
+				return ErrDuplicateReview
+			}
+		}
+		return fmt.Errorf("database error: %w", err)
 	}
 
 	return nil

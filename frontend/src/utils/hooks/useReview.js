@@ -2,7 +2,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { reviewAPI } from "@/services/reviewApi";
 import toastAlert from "@/components/common/toast/toastAlert";
-import { parseReviewError } from "@/utils/helper/errorParser";
 import { SUCCESS_MESSAGES } from "@/utils/constants/errorMessages";
 
 export const useReview = (vendorId) => {
@@ -46,8 +45,8 @@ export const useReview = (vendorId) => {
 
     onError: (err, newReview, context) => {
       queryClient.setQueryData(["reviews", vendorId], context.previousReviews);
-      const friendlyError = parseReviewError(err);
-      toastAlert.error(friendlyError);
+      // Toast now automatically parses the error - no need for parseReviewError
+      toastAlert.error(err);
     },
 
     onSuccess: (data) => {
@@ -66,6 +65,10 @@ export const useReview = (vendorId) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reviews", vendorId] });
       toastAlert.success(SUCCESS_MESSAGES.REVIEW.APPROVED);
+    },
+    onError: (err) => {
+      // Automatically parsed by enhanced toast
+      toastAlert.error(err);
     },
   });
 

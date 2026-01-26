@@ -9,10 +9,12 @@ import {
 } from "../services/eventServices";
 import toastAlert from "@/components/common/toast/toastAlert";
 import {
-  ERROR_MESSAGES,
-  SUCCESS_MESSAGES,
   ROUTES,
 } from "@/utils/constants/globalConstants";
+import {
+  ERROR_MESSAGES,
+  SUCCESS_MESSAGES,
+} from "@/utils/constants/errorMessages";
 import { INITIAL_FORM_DATA } from "@/components/create-events/constants/formConfig";
 
 export default function useEventSubmission(
