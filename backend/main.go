@@ -32,6 +32,7 @@ import (
 	servicefeedback "github.com/eventify/backend/pkg/services/feedback"
 	serviceinquiries "github.com/eventify/backend/pkg/services/inquiries"
 	servicejwt "github.com/eventify/backend/pkg/services/jwt"
+	serviceauth "github.com/eventify/backend/pkg/services/auth"
 	servicelike "github.com/eventify/backend/pkg/services/like"
 	serviceorder "github.com/eventify/backend/pkg/services/order"
 	servicepricing "github.com/eventify/backend/pkg/services/pricing"
@@ -55,34 +56,41 @@ import (
 const serviceName = "eventify-api"
 
 // startTokenCleanup schedules periodic cleanup of expired refresh tokens
-func startTokenCleanup(repo repoauth.RefreshTokenRepository) {
+func startTokenCleanup(refreshRepo repoauth.RefreshTokenRepository, authRepo repoauth.AuthRepository) {
 	ticker := time.NewTicker(24 * time.Hour)
 	
-	// Initial cleanup
-	go func() {
+	// Helper to run both cleanups
+	runCleanup := func() {
 		ctx := context.Background()
-		deleted, err := repo.CleanupExpiredTokens(ctx)
+		
+		// 1. Clean up Expired Refresh Tokens
+		deletedTokens, err := refreshRepo.CleanupExpiredTokens(ctx)
 		if err != nil {
-			utils.LogError(serviceName, "token-cleanup", "Initial cleanup failed", err)
-		} else {
-			utils.LogSuccess(serviceName, "token-cleanup", fmt.Sprintf("Initial cleanup completed (%d tokens)", deleted))
+			utils.LogError(serviceName, "token-cleanup", "Refresh token cleanup failed", err)
+		} else if deletedTokens > 0 {
+			utils.LogInfo(serviceName, "token-cleanup", fmt.Sprintf("🧹 Cleaned up %d expired refresh tokens", deletedTokens))
 		}
-	}()
 
-	// Periodic cleanup
+		// 2. NEW: Clean up Expired Blacklisted Access Tokens
+		deletedBlacklist, err := authRepo.CleanupBlacklist(ctx)
+		if err != nil {
+			utils.LogError(serviceName, "token-cleanup", "Blacklist cleanup failed", err)
+		} else if deletedBlacklist > 0 {
+			utils.LogInfo(serviceName, "token-cleanup", fmt.Sprintf("🛡️ Cleaned up %d expired blacklist entries", deletedBlacklist))
+		}
+	}
+
+	// Initial cleanup on startup
+	go runCleanup()
+
+	// Periodic cleanup every 24 hours
 	go func() {
 		for range ticker.C {
-			ctx := context.Background()
-			deleted, err := repo.CleanupExpiredTokens(ctx)
-			if err != nil {
-				utils.LogError(serviceName, "token-cleanup", "Scheduled cleanup failed", err)
-			} else {
-				utils.LogInfo(serviceName, "token-cleanup", "🧹 Scheduled cleanup completed (%d tokens)", deleted)
-			}
+			runCleanup()
 		}
 	}()
 
-	utils.LogSuccess(serviceName, "token-cleanup", "Cleanup scheduler started (24-hour intervals)")
+	utils.LogSuccess(serviceName, "token-cleanup", "Full maintenance scheduler started (24-hour intervals)")
 }
 
 func main() {
@@ -150,6 +158,7 @@ func main() {
 	// ============================================================================
 	// STEP 6: SERVICE INITIALIZATION
 	// ============================================================================
+	authService := serviceauth.NewAuthService(authRepo, refreshTokenRepo, jwtService) 
 	eventService := serviceevent.NewEventService(dbClient, eventRepo)
 	likeService := servicelike.NewLikeService(likeRepo)
 	vendorService := servicevendor.NewVendorService(vendorRepo)
@@ -182,7 +191,7 @@ func main() {
 	// ============================================================================
 	// STEP 7: HANDLER INITIALIZATION
 	// ============================================================================
-	authHandler := handlerauth.NewAuthHandler(authRepo, refreshTokenRepo, jwtService)
+	authHandler := handlerauth.NewAuthHandler(authService)
 	eventHandler := handlerevent.NewEventHandler(eventService, likeService)
 	vendorHandler := handlervendor.NewVendorHandler(vendorService)
 	reviewHandler := handlerreview.NewReviewHandler(reviewService)
@@ -194,11 +203,11 @@ func main() {
 
 	utils.LogSuccess(serviceName, "handlers", "All handlers initialized")
 
-	// ============================================================================
-	// STEP 8: START BACKGROUND JOBS
-	// ============================================================================
-	startTokenCleanup(refreshTokenRepo)
-	go orderService.StartStockReleaseWorker(context.Background(), 1*time.Minute, 15*time.Minute)
+// ============================================================================
+// STEP 8: START BACKGROUND JOBS
+// ============================================================================
+startTokenCleanup(refreshTokenRepo, authRepo) 
+go orderService.StartStockReleaseWorker(context.Background(), 1*time.Minute, 15*time.Minute)
 
 	// ============================================================================
 	// STEP 9: ROUTER CONFIGURATION
@@ -215,6 +224,7 @@ func main() {
 		analyticsHandler,
 		vendorAnalyticsHandler,
 		jwtService,
+		authService,
 	)
 
 	utils.LogSuccess(serviceName, "router", "Router configured with all endpoints")

@@ -149,27 +149,18 @@ export function useUpdateEvent() {
     mutationFn: updateEventApi,
     ...MUTATION_CONFIG,
     onMutate: async (variables) => {
-      if (process.env.NODE_ENV === "development") {
-        console.log("✏️ [useUpdateEvent] Updating event:", {
-          eventId: variables.eventId,
-        });
-      }
-
-      // Cancel outgoing refetches
       await queryClient.cancelQueries({
         queryKey: eventKeys.detail(variables.eventId),
       });
 
-      // Snapshot previous value for rollback
       const previousEvent = queryClient.getQueryData(
         eventKeys.detail(variables.eventId),
       );
 
-      // Optimistically update cache
       if (previousEvent) {
         queryClient.setQueryData(eventKeys.detail(variables.eventId), {
           ...previousEvent,
-          ...variables.eventData,
+          ...variables.updates, // Change from eventData to updates
         });
       }
 

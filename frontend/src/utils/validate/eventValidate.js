@@ -28,16 +28,35 @@ export const validateStep = (step, formData, setErrors) => {
     }
   }
 
-  if (step === 3) {
+if (step === 3) {
+  if (!formData.tickets || formData.tickets.length === 0) {
+    newErrors.tickets = "At least one ticket tier is required";
+  } else {
     formData.tickets.forEach((ticket, index) => {
-      if (!ticket.tierName)
+      // Check Tier Name
+      if (!ticket.tierName.trim()) {
         newErrors[`ticket_${index}_tierName`] = "Tier name is required";
-      if (!ticket.price)
+      }
+
+      // Check Price - Refined to allow 0 (Free) but block undefined/null
+      // We use isNaN to ensure it's a valid number (e.g., 5000 or 0)
+      if (
+        ticket.price === undefined ||
+        ticket.price === null ||
+        isNaN(ticket.price)
+      ) {
         newErrors[`ticket_${index}_price`] = "Price is required";
-      if (!ticket.quantity)
-        newErrors[`ticket_${index}_quantity`] = "Quantity is required";
+      } else if (ticket.price < 0) {
+        newErrors[`ticket_${index}_price`] = "Price cannot be negative";
+      }
+
+      // Check Quantity
+      if (!ticket.quantity || ticket.quantity <= 0) {
+        newErrors[`ticket_${index}_quantity`] = "Quantity must be at least 1";
+      }
     });
   }
+}
 
   if (step === 4) {
     if (!formData.paystackSubaccountCode) {

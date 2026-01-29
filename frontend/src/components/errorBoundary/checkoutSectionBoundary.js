@@ -33,46 +33,57 @@ class CheckoutSectionBoundary extends Component {
 
   render() {
     if (this.state.hasError) {
-      // CRITICAL: Match the height of the original component to prevent CLS
-      const { minHeight = "auto", section = "section" } = this.props;
+      const { minHeight = "600px", section = "Event Form" } = this.props;
 
       return (
         <div
-          className="bg-white p-6 rounded-xl shadow-lg border border-red-200"
-          style={{ minHeight }} // Prevents layout shift
+          className="flex items-center justify-center rounded-2xl border border-red-500/30 bg-gray-900/50 backdrop-blur-xl"
+          style={{ minHeight }}
         >
-          <div className="flex flex-col items-center justify-center text-center py-8">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-full mb-3">
-              <AlertCircle className="text-red-600" size={24} />
+          <div className="flex flex-col items-center justify-center text-center p-8">
+            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-6 border border-red-500/20">
+              <AlertCircle className="text-red-500" size={32} />
             </div>
 
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {section} Error
+            <h3 className="text-2xl font-bold text-white mb-3">
+              Section Load Error
             </h3>
 
-            <p className="text-sm text-gray-600 mb-4 max-w-sm">
-              We encountered an issue loading this section. Your cart and other
-              sections are safe.
+            <p className="text-gray-400 mb-8 max-w-md leading-relaxed">
+              Something went wrong while loading the{" "}
+              <span className="text-red-400 font-mono">{section}</span>. This is
+              often caused by a configuration mismatch or a temporary connection
+              glitch.
             </p>
 
-            <button
-              onClick={this.handleRetry}
-              className="inline-flex items-center px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
-            >
-              <RefreshCw size={16} className="mr-2" />
-              Try Again
-            </button>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button
+                onClick={this.handleRetry}
+                className="inline-flex items-center px-6 py-3 bg-white text-black text-sm font-bold rounded-xl hover:bg-gray-200 transition-all active:scale-95"
+              >
+                <RefreshCw size={18} className="mr-2" />
+                Retry Section
+              </button>
 
-            {/* Development Details */}
-            {process.env.NODE_ENV === "development" && this.state.error && (
-              <details className="mt-4 text-left w-full">
-                <summary className="text-xs text-gray-500 cursor-pointer">
-                  Error Details (Dev Only)
-                </summary>
-                <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-auto">
-                  {this.state.error.toString()}
-                </pre>
-              </details>
+              <button
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center px-6 py-3 bg-gray-800 text-white text-sm font-bold rounded-xl border border-gray-700 hover:bg-gray-700 transition-all"
+              >
+                Reload Page
+              </button>
+            </div>
+
+            {process.env.NODE_ENV === "development" && (
+              <div className="mt-10 w-full max-w-xl text-left">
+                <p className="text-xs text-red-400 uppercase tracking-widest font-bold mb-2">
+                  Developer Logs
+                </p>
+                <div className="bg-black/50 p-4 rounded-lg border border-gray-800 overflow-auto max-h-40">
+                  <code className="text-xs text-red-300 whitespace-pre-wrap">
+                    {this.state.error?.toString()}
+                  </code>
+                </div>
+              </div>
             )}
           </div>
         </div>

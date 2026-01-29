@@ -5,30 +5,21 @@ import (
 	"os"
 	"time"
 
-	repoauth "github.com/eventify/backend/pkg/repository/auth"
-	servicejwt "github.com/eventify/backend/pkg/services/jwt"
-
+	serviceauth "github.com/eventify/backend/pkg/services/auth" // Import the new service
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
 
-// AuthHandler handles authentication requests
+
+// AuthHandler now only needs the AuthService and maybe the JWT configuration
 type AuthHandler struct {
-	AuthRepo         repoauth.AuthRepository
-	RefreshTokenRepo repoauth.RefreshTokenRepository
-	JWTService       *servicejwt.JWTService // ✅ Changed to pointer
+	AuthService serviceauth.AuthService
 }
 
-// NewAuthHandler creates a new AuthHandler instance
-func NewAuthHandler(
-	authRepo repoauth.AuthRepository,
-	tokenRepo repoauth.RefreshTokenRepository,
-	jwtService *servicejwt.JWTService, // ✅ Changed to pointer
-) *AuthHandler {
+// NewAuthHandler injects the service instead of the repos
+func NewAuthHandler(authService serviceauth.AuthService) *AuthHandler {
 	return &AuthHandler{
-		AuthRepo:         authRepo,
-		RefreshTokenRepo: tokenRepo,
-		JWTService:       jwtService,
+		AuthService: authService,
 	}
 }
 
@@ -120,3 +111,6 @@ func clearAuthCookies(c *gin.Context) {
 	
 	log.Debug().Msg("Auth: Cookies cleared")
 }
+
+
+

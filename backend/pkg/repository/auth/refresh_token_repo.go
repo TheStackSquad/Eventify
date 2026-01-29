@@ -10,15 +10,19 @@ import (
 	"time"
 	"fmt"
 
+	"github.com/eventify/backend/pkg/models"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
 
 type RefreshTokenRepository interface {
-	SaveRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiresIn int) error
+	SaveRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiresIn int, parentID *uuid.UUID, ipAddress string, userAgent string) (uuid.UUID, error)
+    GetByHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error)
+	ConsumeToken(ctx context.Context, id uuid.UUID) error
 	ValidateRefreshToken(ctx context.Context, userID uuid.UUID, token string) (bool, error)
 	RevokeRefreshToken(ctx context.Context, userID uuid.UUID, token string) error
 	RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error
+	RevokeFamily(ctx context.Context, rootID uuid.UUID) error
 	CleanupExpiredTokens(ctx context.Context) (int64, error)
 	GetActiveTokenCount(ctx context.Context, userID uuid.UUID) (int, error)
 }
@@ -36,39 +40,48 @@ func hashToken(token string) string {
 	hash := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(hash[:])
 }
-
-// SaveRefreshToken stores a hashed refresh token in the database
+// SaveRefreshToken now persists the IP and UserAgent for security auditing
 func (r *PostgresRefreshTokenRepository) SaveRefreshToken(
-	ctx context.Context,
-	userID uuid.UUID,
-	token string,
-	expiresIn int,
-) error {
-	tokenHash := hashToken(token)
-	expiresAt := time.Now().Add(time.Duration(expiresIn) * time.Second)
+    ctx context.Context,
+    userID uuid.UUID,
+    token string,
+    expiresIn int,
+    parentID *uuid.UUID,
+    ipAddress string, // NEW
+    userAgent string, // NEW
+) (uuid.UUID, error) {
+    tokenHash := hashToken(token)
+    expiresAt := time.Now().Add(time.Duration(expiresIn) * time.Second)
+    newID := uuid.New()
 
-	query := `
-		INSERT INTO refresh_tokens (id, user_id, token_hash, revoked, expires_at, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`
+    // Added ip_address and user_agent to the query
+    query := `
+        INSERT INTO refresh_tokens (
+            id, user_id, token_hash, revoked, expires_at, 
+            created_at, parent_id, ip_address, user_agent
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `
 
-	_, err := r.DB.ExecContext(
-		ctx,
-		query,
-		uuid.New(),
-		userID,
-		tokenHash,
-		false,
-		expiresAt,
-		time.Now(),
-	)
+    _, err := r.DB.ExecContext(
+        ctx, 
+        query, 
+        newID, 
+        userID, 
+        tokenHash, 
+        false, 
+        expiresAt, 
+        time.Now(), 
+        parentID,
+        ipAddress, // Bind NEW field
+        userAgent, // Bind NEW field
+    )
+    
+    if err != nil {
+        return uuid.Nil, fmt.Errorf("failed to save refresh token with metadata: %w", err)
+    }
 
-	if err != nil {
-		return fmt.Errorf("failed to save refresh token: %w", err)
-		//return errors.New("failed to save refresh token")
-	}
-
-	return nil
+    return newID, nil
 }
 
 // ValidateRefreshToken checks if a token exists, is not revoked, and not expired
@@ -168,4 +181,45 @@ func (r *PostgresRefreshTokenRepository) GetActiveTokenCount(
 
 	err := r.DB.GetContext(ctx, &count, query, userID)
 	return count, err
+}
+
+func (r *PostgresRefreshTokenRepository) GetByHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error) {
+    var token models.RefreshToken
+    query := `
+        SELECT id, user_id, token_hash, revoked, expires_at, created_at, consumed_at, parent_id
+        FROM refresh_tokens
+        WHERE token_hash = $1
+        LIMIT 1
+    `
+    err := r.DB.GetContext(ctx, &token, query, tokenHash)
+    if err != nil {
+        return nil, err
+    }
+    return &token, nil
+}
+
+func (r *PostgresRefreshTokenRepository) ConsumeToken(ctx context.Context, id uuid.UUID) error {
+    query := `
+        UPDATE refresh_tokens
+        SET consumed_at = NOW()
+        WHERE id = $1 AND consumed_at IS NULL
+    `
+    _, err := r.DB.ExecContext(ctx, query, id)
+    return err
+}
+
+func (r *PostgresRefreshTokenRepository) RevokeFamily(ctx context.Context, rootID uuid.UUID) error {
+    query := `
+        WITH RECURSIVE token_family AS (
+            SELECT id FROM refresh_tokens WHERE id = $1
+            UNION ALL
+            SELECT t.id FROM refresh_tokens t
+            INNER JOIN token_family tf ON t.parent_id = tf.id
+        )
+        UPDATE refresh_tokens
+        SET revoked = true
+        WHERE id IN (SELECT id FROM token_family)
+    `
+    _, err := r.DB.ExecContext(ctx, query, rootID)
+    return err
 }

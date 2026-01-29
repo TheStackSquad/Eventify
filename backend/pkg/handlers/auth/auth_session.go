@@ -1,175 +1,144 @@
+//backend/pkg/handlers/auth/auth_session.go
+
 package auth
 
 import (
-	"context"
 	"net/http"
-	"time"
-
+	 "time"
 	"github.com/eventify/backend/pkg/models"
-	//repoauth "github.com/eventify/backend/pkg/repository/auth"
-
+	serviceauth "github.com/eventify/backend/pkg/services/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
-	"golang.org/x/crypto/bcrypt"
 )
 
-// Login handles user authentication
+// Login handles user authentication with device metadata capture
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req models.LoginRequest
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-	defer cancel()
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid request."})
 		return
 	}
 
-	user, err := h.AuthRepo.GetUserByEmail(ctx, req.Email)
-	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid credentials."})
+	// 1. Capture Metadata
+	// We extract the IP and UserAgent here to pass to the service for security auditing
+	ip := c.ClientIP()
+	ua := c.Request.UserAgent()
+
+	// 2. Service Call
+	// The signature now matches the updated AuthService interface
+	user, tokens, err := h.AuthService.Login(c.Request.Context(), req.Email, req.Password, ip, ua)
+	
+	if err != nil {
+		switch err {
+		case serviceauth.ErrAccountLocked:
+			c.JSON(http.StatusForbidden, gin.H{"message": "Account temporarily locked."})
+		case serviceauth.ErrInvalidCredentials:
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid email or password."})
+		default:
+			log.Error().Err(err).Msg("Auth: Unexpected error during login")
+			c.JSON(http.StatusInternalServerError, gin.H{"message": "An internal error occurred."})
+		}
 		return
 	}
 
-	// ✅ Fixed: Use new method names from JWT service
-	access, _ := h.JWTService.GenerateAccessToken(user.ID.String())    // Changed from GenerateAccessJWT
-	refresh, _ := h.JWTService.GenerateRefreshToken(user.ID.String()) // Changed from GenerateRefreshJWT
+	// 3. Set Persistence
+	setAuthCookies(c, tokens.AccessToken, tokens.RefreshToken)
 
-	h.RefreshTokenRepo.SaveRefreshToken(ctx, user.ID, refresh, RefreshMaxAge)
-	setAuthCookies(c, access, refresh)
+	// 4. Response
+	log.Info().
+		Str("user_id", user.ID.String()).
+		Str("ip", ip).
+		Msg("Auth: Login successful")
 
-	// Update last login
-	h.AuthRepo.UpdateLastLogin(ctx, user.ID)
-
-	log.Info().Msgf("Auth: Login success: %s", user.ID.String()[:8])
 	c.JSON(http.StatusOK, models.AuthResponse{
 		Message: "Welcome back!",
-		User:    user.ToUserProfile(false, false),
+		User:    user,
 	})
 }
-
-// RefreshToken handles token rotation with absolute session timeout
+// RefreshToken handles token rotation with metadata awareness
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-	defer cancel()
-
 	oldRefreshToken, err := c.Cookie(RefreshTokenCookieName)
+	if err != nil || oldRefreshToken == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "No active session."})
+		return
+	}
+
+	// 1. GATHER METADATA
+	ipAddress := c.ClientIP()
+	userAgent := c.Request.UserAgent()
+
+	// 2. ATTEMPT REFRESH
+	// FIXED: Pass ipAddress and userAgent to satisfy the "want 5 arguments" error
+	tokens, err := h.AuthService.RefreshToken(
+		c.Request.Context(), 
+		oldRefreshToken, 
+		time.Duration(AbsoluteSessionTimeout)*time.Second, // Ensure correct type
+		ipAddress, 
+		userAgent,
+	)
+
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "No session."})
+		log.Debug().Err(err).Msg("Auth: Refresh process interrupted")
+
+		switch err {
+		case serviceauth.ErrSessionExpired:
+			clearAuthCookies(c)
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code": "SESSION_EXPIRED",
+				"message": "Your session has expired. Please log in again.",
+			})
+
+		case serviceauth.ErrTokenReused: // Now defined in serviceauth
+			clearAuthCookies(c)
+			log.Warn().Str("ip", ipAddress).Msg("🚨 Security Alert: Token reuse attempt")
+			c.JSON(http.StatusForbidden, gin.H{
+				"code": "SECURITY_VIOLATION",
+				"message": "Security alert: Multiple session access detected. Please log in again.",
+			})
+
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"message": "Temporary authentication failure. Please try again.",
+			})
+		}
 		return
 	}
 
-	// ✅ Fixed: Use ValidateRefreshToken instead of ValidateTokenType with constant
-	claims, err := h.JWTService.ValidateRefreshToken(oldRefreshToken) // Changed from ValidateTokenType
-	if err != nil {
-		log.Debug().Err(err).Msg("Auth: Refresh token expired or invalid")
-		clearAuthCookies(c)
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "Session expired."})
-		return
-	}
-
-	userID, err := uuid.Parse(claims.UserID)
-	if err != nil {
-		clearAuthCookies(c)
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid user ID in token."})
-		return
-	}
-
-	// Validate refresh token exists in DB and isn't revoked
-	valid, err := h.RefreshTokenRepo.ValidateRefreshToken(ctx, userID, oldRefreshToken)
-	if err != nil || !valid {
-		log.Debug().Msg("Auth: Refresh token not found or revoked in database")
-		clearAuthCookies(c)
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid session."})
-		return
-	}
-
-	// Check absolute session timeout
-	tokenAge := time.Since(claims.IssuedAt.Time)
-	if tokenAge > AbsoluteSessionTimeout*time.Second {
-		log.Info().
-			Str("user_id", userID.String()[:8]).
-			Dur("age", tokenAge).
-			Msg("Auth: Absolute session timeout reached")
-		
-		// Revoke the token
-		h.RefreshTokenRepo.RevokeRefreshToken(ctx, userID, oldRefreshToken)
-		clearAuthCookies(c)
-		
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"message": "Session expired. Please log in again.",
-			"code":    "ABSOLUTE_TIMEOUT",
-		})
-		return
-	}
-
-	// Generate NEW tokens (rotation for security)
-	// ✅ Fixed: Use new method names
-	newAccessToken, err := h.JWTService.GenerateAccessToken(claims.UserID)    // Changed from GenerateAccessJWT
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to generate new access token")
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to refresh session."})
-		return
-	}
-
-	newRefreshToken, err := h.JWTService.GenerateRefreshToken(claims.UserID) // Changed from GenerateRefreshJWT
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to generate new refresh token")
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to refresh session."})
-		return
-	}
-
-	// Revoke old refresh token
-	if err := h.RefreshTokenRepo.RevokeRefreshToken(ctx, userID, oldRefreshToken); err != nil {
-		log.Warn().Err(err).Msg("Failed to revoke old refresh token")
-		// Continue anyway - new token is more important
-	}
-
-	// Save new refresh token with remaining time from absolute timeout
-	remainingTime := int(AbsoluteSessionTimeout - tokenAge.Seconds())
-	if remainingTime < RefreshMaxAge {
-		// Use remaining time if less than standard expiry
-		h.RefreshTokenRepo.SaveRefreshToken(ctx, userID, newRefreshToken, remainingTime)
-	} else {
-		h.RefreshTokenRepo.SaveRefreshToken(ctx, userID, newRefreshToken, RefreshMaxAge)
-	}
-
-	// Set new cookies
-	setAuthCookies(c, newAccessToken, newRefreshToken)
-
-	log.Info().
-		Msgf("Auth: Token rotated for %s (age: %s)", claims.UserID[:8], tokenAge.Round(time.Minute))
-	
-	c.JSON(http.StatusOK, gin.H{"message": "Session refreshed successfully"})
+	setAuthCookies(c, tokens.AccessToken, tokens.RefreshToken)
+	c.JSON(http.StatusOK, gin.H{"message": "Session refreshed."})
 }
-
 // Logout handles user session termination
 func (h *AuthHandler) Logout(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-	defer cancel()
-
-	// Get user ID from context (set by auth middleware)
-	userIDInterface, exists := c.Get("user_id")
-	if !exists {
-		clearAuthCookies(c)
-		c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully."})
-		return
-	}
-
-	userID, ok := userIDInterface.(uuid.UUID)
-	if !ok {
-		clearAuthCookies(c)
-		c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully."})
-		return
-	}
-
-	// Get refresh token and revoke it
-	refreshToken, err := c.Cookie(RefreshTokenCookieName)
-	if err == nil && refreshToken != "" {
-		h.RefreshTokenRepo.RevokeRefreshToken(ctx, userID, refreshToken)
-	}
-
+	// 1. Clear cookies IMMEDIATELY to protect the client
 	clearAuthCookies(c)
-	log.Info().Msgf("Auth: User %s logged out", userID.String()[:8])
+
+	var userID uuid.UUID
+	if val, exists := c.Get("user_id"); exists {
+		if id, ok := val.(uuid.UUID); ok {
+			userID = id
+		}
+	}
+
+	// 2. Extract tokens from cookies (Gin can still read them if called before the response is sent)
+	refreshToken, _ := c.Cookie(RefreshTokenCookieName)
+	accessToken, _ := c.Cookie(AccessTokenCookieName)
+
+	// 3. Delegate ALL revocation logic to the service
+	// This now handles Refresh revocation AND Access blacklisting in one call
+	if userID != uuid.Nil {
+		err := h.AuthService.Logout(c.Request.Context(), userID, refreshToken, accessToken)
+		if err != nil {
+			log.Error().Err(err).Msg("Auth: Logout service reported an error")
+			// We don't return 500 here because the client is already "logged out" locally
+		}
+	}
+
+	log.Info().
+		Str("user_id", userID.String()[:8]).
+		Bool("has_refresh", refreshToken != "").
+		Bool("has_access", accessToken != "").
+		Msg("Auth: Logout successful")
+
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully."})
 }

@@ -95,10 +95,9 @@ export default function useEventSubmission(
           const oldImageUrl = initialData?.eventImage;
 
           await updateEventMutation.mutateAsync({
-            eventId,
+            eventId: eventId,
             updates: finalPayload,
           });
-
           setUploadProgress(100);
           setCurrentStep("Success!");
 
