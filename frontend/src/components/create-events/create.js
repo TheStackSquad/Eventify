@@ -25,7 +25,14 @@ export default function CreateEventForm({
   const [currentFormStep, setCurrentFormStep] = useState(1);
 
   if (!formData) {
-    return <div className="p-10 text-white text-center">Loading Form...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-950">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-green-500 animate-spin mx-auto mb-4" />
+          <p className="text-gray-400">Loading Form...</p>
+        </div>
+      </div>
+    );
   }
 
   const handleInputChange = (field, value) => {
@@ -98,6 +105,17 @@ export default function CreateEventForm({
               validationErrors.push(`Ticket ${i + 1}: Name required`);
             if (ticket.quantity <= 0)
               validationErrors.push(`Ticket ${i + 1}: Quantity required`);
+
+            // ✅ Price type validation
+            if (typeof ticket.price === "string") {
+              validationErrors.push(
+                `Ticket ${i + 1}: Invalid price format (contact support if this persists)`,
+              );
+              console.error(
+                `❌ Price is still a string for ticket ${i + 1}:`,
+                ticket.price,
+              );
+            }
           });
         }
         break;
@@ -110,7 +128,6 @@ export default function CreateEventForm({
     const validationErrors = validateStep(currentFormStep);
 
     if (validationErrors.length > 0) {
-      // 🎯 FIXED: Use toast instead of alert
       toastAlert.error(validationErrors[0]);
       return;
     }
@@ -174,11 +191,11 @@ export default function CreateEventForm({
 
   return (
     <div className="max-w-4xl mx-auto bg-gray-900 rounded-2xl border border-gray-700 overflow-hidden shadow-2xl">
-      {/* 🎯 NEW: Upload Progress Overlay */}
+      {/* ✨ ENHANCED: Upload Progress Overlay - Lighthouse Optimized */}
       {isSubmitting && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
-            {/* Progress Header */}
+            {/* Progress Icon */}
             <div className="text-center mb-6">
               {uploadProgress === 100 ? (
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
@@ -194,10 +211,12 @@ export default function CreateEventForm({
                 </div>
               )}
 
+              {/* Dynamic Title */}
               <h3 className="text-xl font-bold text-gray-900 mb-2">
                 {submissionStep || "Processing..."}
               </h3>
 
+              {/* Dynamic Subtitle */}
               <p className="text-sm text-gray-600">
                 {uploadProgress === 100
                   ? "Almost there! Finalizing your event..."
@@ -209,26 +228,31 @@ export default function CreateEventForm({
               </p>
             </div>
 
-            {/* Progress Bar */}
+            {/* Progress Bar - Pure CSS */}
             <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-3">
               <div
                 className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-500 ease-out"
                 style={{ width: `${uploadProgress}%` }}
               >
-                {/* Animated shimmer effect */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+                {/* Shimmer effect - Lightweight animation */}
+                <div
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                  style={{
+                    animation: "shimmer 2s infinite",
+                  }}
+                />
               </div>
             </div>
 
             {/* Progress Percentage */}
-            <div className="text-center">
+            <div className="text-center mb-4">
               <span className="text-2xl font-bold text-gray-900">
                 {uploadProgress}%
               </span>
             </div>
 
             {/* Warning Message */}
-            <div className="mt-6 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
               <p className="text-xs text-yellow-800 text-center">
                 Please don&apos;t close this window. This may take up to 30
                 seconds.
@@ -238,6 +262,7 @@ export default function CreateEventForm({
         </div>
       )}
 
+      {/* Main Form Content */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -259,7 +284,7 @@ export default function CreateEventForm({
         />
       </form>
 
-      {/* 🎯 NEW: Shimmer animation styles */}
+      {/* ✨ Shimmer animation - Single lightweight keyframe */}
       <style jsx>{`
         @keyframes shimmer {
           0% {
@@ -268,9 +293,6 @@ export default function CreateEventForm({
           100% {
             transform: translateX(100%);
           }
-        }
-        .animate-shimmer {
-          animation: shimmer 2s infinite;
         }
       `}</style>
     </div>

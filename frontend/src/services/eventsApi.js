@@ -72,7 +72,7 @@ export async function fetchEventAnalyticsApi(eventId) {
 }
 
 export async function updateEventApi({ eventId, updates }) {
-  const endpoint = API_ENDPOINTS.EVENTS.UPDATE.replace(":id", eventId);
+  const endpoint = API_ENDPOINTS.EVENTS.UPDATE.replace(":eventId", eventId);
   const response = await backendInstance.put(endpoint, updates);
   return normalizeEventResponse(response);
 }

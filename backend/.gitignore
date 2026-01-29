@@ -46,4 +46,6 @@ Thumbs.db
 *.log
 logs/
 tmp/
-temp/
+temp/.env
+.env.test
+.env.local

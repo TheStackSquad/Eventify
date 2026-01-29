@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# backend/test/auth-test-suite.sh
+# backend/testy/auth-test-suite.sh
 # Main entry point for the Enhanced Authentication Test Suite.
 # Usage: ./auth-test-suite.sh [BASE_URL] [--debug]
 # Example: ./auth-test-suite.sh http://localhost:8081
@@ -165,3 +165,17 @@ if [ $FAILED_TESTS -eq 0 ] && [ $TOTAL_TESTS -gt 0 ]; then
 else
     exit 1
 fi
+
+# ============================================
+# RUN INDIVIDUAL TEST FILES (REVISED)
+# ============================================
+
+# Define the expected API prefix to match your router
+# If you didn't change Go code, set this to ""
+API_PREFIX="" 
+
+# Pass the cookie jar and prefix to sub-tests
+export COOKIE_JAR
+export API_PREFIX
+export OUTPUT_DIR
+export BASE_URL

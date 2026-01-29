@@ -1,4 +1,4 @@
-// backend/pkg/models/events.
+// backend/pkg/models/events.go
 
 package models
 

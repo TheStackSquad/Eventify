@@ -14,6 +14,8 @@ import (
 	handlerreview "github.com/eventify/backend/pkg/handlers/review"
 	handlervendor "github.com/eventify/backend/pkg/handlers/vendor"
 
+	"github.com/eventify/backend/pkg/services/auth"
+
 	repoauth "github.com/eventify/backend/pkg/repository/auth"
 	servicejwt "github.com/eventify/backend/pkg/services/jwt"
 
@@ -40,6 +42,7 @@ func ConfigureRouter(
 	analyticsHandler *handleranalytics.AnalyticsHandler,
 	vendorAnalyticsHandler *handlervendor.VendorAnalyticsHandler,
 	jwtService *servicejwt.JWTService,
+	authService auth.AuthService,
 ) *gin.Engine {
 
 	utils.LogInfo(serviceName, "configure", "Initializing router configuration")
@@ -81,8 +84,8 @@ func ConfigureRouter(
 		auth.POST("/signup", authHandler.Signup)
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/refresh", authHandler.RefreshToken)
-		auth.POST("/logout", authHandler.Logout)
-		auth.GET("/me", middleware.AuthMiddleware(jwtService), authHandler.GetCurrentUser)
+		auth.POST("/logout", middleware.AuthMiddleware(authService), authHandler.Logout)
+		auth.GET("/me", middleware.AuthMiddleware(authService), authHandler.GetCurrentUser)
 		auth.POST("/forgot-password", authHandler.ForgotPassword)
 		auth.GET("/verify-reset-token", authHandler.VerifyResetToken)
 		auth.POST("/reset-password", authHandler.ResetPassword)
@@ -109,14 +112,14 @@ func ConfigureRouter(
 	}
 
 	vendorProtected := router.Group("/api/v1/vendors")
-	vendorProtected.Use(middleware.AuthMiddleware(jwtService), middleware.RateLimit(utils.WriteLimiter))
+	vendorProtected.Use(middleware.AuthMiddleware(authService), middleware.RateLimit(utils.WriteLimiter))
 	{
 		vendorProtected.POST("/register", vendorHandler.RegisterVendor)
 		vendorProtected.PATCH("/:id", vendorHandler.UpdateVendor)
 	}
 
 	vendorAnalytics := router.Group("/api/v1/vendors/:id/analytics")
-	vendorAnalytics.Use(middleware.AuthMiddleware(jwtService))
+	vendorAnalytics.Use(middleware.AuthMiddleware(authService))
 	{
 		vendorAnalytics.GET("/overview", vendorAnalyticsHandler.GetVendorAnalytics)
 	}
@@ -138,7 +141,7 @@ func ConfigureRouter(
 	}
 
 	protectedEvents := router.Group("/api/events")
-	protectedEvents.Use(middleware.AuthMiddleware(jwtService))
+	protectedEvents.Use(middleware.AuthMiddleware(authService))
 	{
 		protectedEvents.POST("/create", middleware.RateLimit(utils.WriteLimiter), eventHandler.CreateEvent)
 		protectedEvents.GET("/my-events", eventHandler.GetUserEvents)
@@ -151,15 +154,14 @@ func ConfigureRouter(
 	// --- TICKET GATE ROUTES ---
     // Protected routes for event staff/organizers to check in attendees
     gateRoutes := router.Group("/api/v1/gate")
-    gateRoutes.Use(middleware.AuthMiddleware(jwtService), middleware.RateLimit(utils.WriteLimiter))
+    gateRoutes.Use(middleware.AuthMiddleware(authService), middleware.RateLimit(utils.WriteLimiter))
     {
         // POST /api/v1/gate/check-in
         // Body: { "code": "REF-001-SIGNATURE" }
         gateRoutes.POST("/check-in", eventHandler.CheckIn) 
     }
 
-	setupAdminRoutes(router, authHandler, eventHandler, vendorHandler, reviewHandler, inquiryHandler, feedbackHandler, authRepo, jwtService)
-
+setupAdminRoutes(router, authHandler, eventHandler, vendorHandler, reviewHandler, inquiryHandler, feedbackHandler, authRepo, authService)
 	utils.LogSuccess(serviceName, "configure", "Router configuration completed")
 	printRegisteredRoutes(router)
 	
@@ -167,23 +169,25 @@ func ConfigureRouter(
 }
 
 func setupAdminRoutes(
-	r *gin.Engine,
-	ah *handlerauth.AuthHandler,
-	eh *handlerevent.EventHandler,
-	vh *handlervendor.VendorHandler,
-	rh *handlerreview.ReviewHandler,
-	ih *handlerinquiries.InquiryHandler,
-	fh *handlerfeedback.FeedbackHandler,
-	repo repoauth.AuthRepository,
-	jwtService *servicejwt.JWTService,
+    r *gin.Engine,
+    ah *handlerauth.AuthHandler,
+    eh *handlerevent.EventHandler,
+    vh *handlervendor.VendorHandler,
+    rh *handlerreview.ReviewHandler,
+    ih *handlerinquiries.InquiryHandler,
+    fh *handlerfeedback.FeedbackHandler,
+    repo repoauth.AuthRepository,
+    // Change this line:
+    authService auth.AuthService, 
 ) {
-	admin := r.Group("/api/v1/admin")
-	admin.Use(middleware.AuthMiddleware(jwtService), middleware.AdminMiddleware(repo))
-	{
-		admin.PUT("/vendors/:id/verify/identity", vh.ToggleIdentityVerification)
-		admin.GET("/feedback", fh.GetAllFeedback)
-		admin.DELETE("/feedback/:id", fh.DeleteFeedback)
-	}
+    admin := r.Group("/api/v1/admin")
+    // Now this line will work:
+    admin.Use(middleware.AuthMiddleware(authService), middleware.AdminMiddleware(repo))
+    {
+        admin.PUT("/vendors/:id/verify/identity", vh.ToggleIdentityVerification)
+        admin.GET("/feedback", fh.GetAllFeedback)
+        admin.DELETE("/feedback/:id", fh.DeleteFeedback)
+    }
 }
 
 func RegisterReviewRoutes(r *gin.Engine, reviewHandler *handlerreview.ReviewHandler, jwtService *servicejwt.JWTService) {
