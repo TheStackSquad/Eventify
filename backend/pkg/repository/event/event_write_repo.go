@@ -6,11 +6,13 @@ import (
 	"context"
 	"fmt"
 	"time"
+	
 
 	"github.com/eventify/backend/pkg/models"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+	"github.com/rs/zerolog/log"
 )
 
 // WRITE OPERATIONS
@@ -204,6 +206,27 @@ func (r *postgresEventRepository) UpdateEvent(
 	tx *sqlx.Tx,
 	event *models.Event,
 ) error {
+    // --- 📥 LOG PAYLOAD START ---
+    log.Info().
+        Str("event_id", event.ID.String()).
+        Str("title", event.EventTitle).
+        Interface("tags", event.Tags).
+      //  Int("max_attendees", event.MaxAttendees).
+        Time("start_date", event.StartDate).
+        Msg("🔨 [Repository.UpdateEvent] Preparing DB Update")
+
+    // Log nested ticket info if they are part of the event model at this stage
+    if len(event.TicketTiers) > 0 {
+        for i, tier := range event.TicketTiers {
+            log.Debug().
+                Int("tier_index", i).
+                Str("name", tier.Name).
+                Float64("price", tier.Price).
+                Msg("🎫 Ticket Tier in Payload")
+        }
+    }
+    // --- 📥 LOG PAYLOAD END ---
+
 	query := `
 		UPDATE events SET
 			event_title = $1,
@@ -250,14 +273,17 @@ func (r *postgresEventRepository) UpdateEvent(
 	)
 
 	if err != nil {
+        log.Error().Err(err).Str("event_id", event.ID.String()).Msg("❌ [Repository.UpdateEvent] SQL Execution Failed")
 		return fmt.Errorf("failed to update event %s: %w", event.ID, err)
 	}
 
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
+        log.Warn().Str("event_id", event.ID.String()).Msg("⚠️ [Repository.UpdateEvent] No rows affected (Event missing or deleted)")
 		return fmt.Errorf("event not found or already deleted")
 	}
 
+    log.Info().Str("event_id", event.ID.String()).Msg("✅ [Repository.UpdateEvent] Database update successful")
 	return nil
 }
 

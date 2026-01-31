@@ -1,6 +1,10 @@
 // frontend/src/services/eventsApi.js
 import backendInstance from "@/axiosConfig/axios";
 import { API_ENDPOINTS } from "@/utils/constants/globalConstants";
+import {
+  prepareEventPayload,
+  // normalizeEventResponse,
+} from "@/app/events/create-events/utils/eventTransformers";
 
 const getCookie = (name) => {
   if (typeof document === "undefined") return "";
@@ -72,9 +76,39 @@ export async function fetchEventAnalyticsApi(eventId) {
 }
 
 export async function updateEventApi({ eventId, updates }) {
-  const endpoint = API_ENDPOINTS.EVENTS.UPDATE.replace(":eventId", eventId);
-  const response = await backendInstance.put(endpoint, updates);
-  return normalizeEventResponse(response);
+  // 1. Validation Guard
+  if (!eventId || eventId === 'undefined') {
+    throw new Error('Invalid event ID provided to updateEventApi');
+  }
+
+  console.group("📡 [API Request] updateEventApi");
+  
+  try {
+    // 2. THE FIX: Apply the mapping logic here
+    // This ensures 'tierName' in UI maps to 'tierName' in Go JSON tag
+    // and 'quantity' maps to 'quantity' (Capacity in Go struct)
+    const sanitizedPayload = prepareEventPayload(updates);
+
+    const endpoint = API_ENDPOINTS.EVENTS.UPDATE.replace(":eventId", eventId);
+    
+    console.log("📤 Sending Mapping-Verified Payload:", sanitizedPayload);
+
+    // 3. Execute PUT request to Go Gin Server
+    const response = await backendInstance.put(endpoint, sanitizedPayload);
+
+    // 4. Normalize the response
+    // Converts Go's response (with potential nulls) into clean UI data
+    const normalizedData = normalizeEventResponse(response.data);
+    
+    console.log("✅ Received & Normalized Response:", normalizedData);
+    console.groupEnd();
+    
+    return normalizedData;
+  } catch (error) {
+    console.error("❌ API Error in updateEventApi:", error);
+    console.groupEnd();
+    throw error;
+  }
 }
 
 export async function deleteEventApi(eventId) {

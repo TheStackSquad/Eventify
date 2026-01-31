@@ -139,7 +139,7 @@ func ConfigureRouter(
 			eventHandler.ToggleLike,
 		)
 	}
-
+//router.PUT("/api/events/:eventId", eventHandler.UpdateEvent)
 	protectedEvents := router.Group("/api/events")
 	protectedEvents.Use(middleware.AuthMiddleware(authService))
 	{

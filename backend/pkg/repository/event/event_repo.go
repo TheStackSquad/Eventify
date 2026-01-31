@@ -20,8 +20,9 @@ type TierDetails struct {
 	EventTitle   string    `db:"event_title"`
 	EndDate      time.Time `db:"end_date"`
 	TicketTierID uuid.UUID `db:"ticket_tier_id"`
-	TierName     string    `db:"name"` 
-	PriceKobo    int32     `db:"price_kobo"`
+	TierName     string    `db:"name"`
+	PriceKobo   int32     `json:"-" db:"price_kobo"`
+	Price       float64   `json:"price" db:"-"`
 	TotalStock   int32     `db:"capacity"`
 	SoldCount    int32     `db:"sold"`     
 	Available    int32     `db:"available"`

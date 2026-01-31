@@ -1,5 +1,7 @@
 // frontend/src/utils/hooks/useEvents.js
+
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { transformEventToFormData } from "@/app/events/create-events/utils/eventTransformers";
 import { useAuth } from "./useAuth";
 import {
   fetchUserEventsApi,
@@ -14,6 +16,7 @@ import {
 } from "@/services/eventsApi";
 
 // QUERY KEYS
+
 export const eventKeys = {
   all: ["events"],
   lists: () => [...eventKeys.all, "list"],
@@ -25,7 +28,8 @@ export const eventKeys = {
   analytics: (eventId) => [...eventKeys.all, "analytics", eventId],
 };
 
-// SHARED CONFIG
+// SHARED CONFIGURATION
+
 const QUERY_CONFIG = {
   staleTime: 5 * 60 * 1000, // 5 minutes
   gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
@@ -46,20 +50,20 @@ const MUTATION_CONFIG = {
   retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
 };
 
-// QUERY HOOKS - All return normalized data
 
-// Fetch all events (PUBLIC - no auth required)
+// QUERY HOOKS - PUBLIC & PROTECTED
+
+//Fetch all events (PUBLIC - no auth required)
 export function useAllEvents() {
   return useQuery({
     queryKey: eventKeys.list(),
     queryFn: fetchAllEventsApi,
     ...QUERY_CONFIG,
-    // Public endpoint - always enabled
-    enabled: true,
+    enabled: true, // Public endpoint - always enabled
   });
 }
 
-// Fetch events for specific user (PROTECTED)
+//Fetch events for specific user (PROTECTED)
 export function useUserEvents(userId, isEnabled = true) {
   const { isAuthenticated } = useAuth();
 
@@ -67,23 +71,49 @@ export function useUserEvents(userId, isEnabled = true) {
     queryKey: eventKeys.user(userId),
     queryFn: () => fetchUserEventsApi(userId),
     ...QUERY_CONFIG,
-    // Only fetch if authenticated AND userId exists AND manually enabled
     enabled: isAuthenticated && !!userId && isEnabled,
   });
 }
 
+// Fetch single event by ID (PROTECTED - for editing)
 export function useEvent(eventId, options = {}) {
   return useQuery({
     queryKey: eventKeys.detail(eventId),
-    queryFn: () => fetchEventByIdApi(eventId),
+    queryFn: async () => {
+      const response = await fetchEventByIdApi(eventId);
+
+      // Debug logging
+      if (process.env.NODE_ENV === "development") {
+        console.log("🔍 [useEvent] Raw API Response:", response);
+        // Check ticket prices from backend
+        if (response.tickets && response.tickets.length > 0) {
+          console.log("💰 [useEvent] Ticket Prices (should be in Naira):", 
+            response.tickets.map(t => ({ 
+              tier: t.tierName, 
+              price: t.price,
+              isFree: t.isFree 
+            }))
+          );
+        }
+      }
+
+      // Transform the data (only structure, no price conversion)
+      const transformed = transformEventToFormData(response);
+
+      if (process.env.NODE_ENV === "development") {
+        console.log("✨ [useEvent] Transformed Data:", transformed);
+      }
+
+      return transformed;
+    },
     ...QUERY_CONFIG,
     staleTime: 60 * 60 * 1000, // 1 hour (events don't change often)
-    // Merge default config with user options
     enabled: options.enabled !== undefined ? options.enabled : !!eventId,
     ...options,
   });
 }
 
+//Fetch event analytics (PROTECTED)
 export function useEventAnalytics(eventId, isEnabled = true) {
   const { isAuthenticated } = useAuth();
 
@@ -92,14 +122,13 @@ export function useEventAnalytics(eventId, isEnabled = true) {
     queryFn: () => fetchEventAnalyticsApi(eventId),
     ...QUERY_CONFIG,
     staleTime: 1 * 60 * 1000, // 1 minute (analytics change frequently)
-    // Only fetch if authenticated AND eventId exists AND manually enabled
     enabled: isAuthenticated && !!eventId && isEnabled,
   });
 }
 
-// MUTATION HOOKS (All require authentication)
+// MUTATION HOOKS - ALL REQUIRE AUTHENTICATION
 
-// Create new event (PROTECTED)
+//Create new event (PROTECTED)
 export function useCreateEvent() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -115,21 +144,24 @@ export function useCreateEvent() {
         });
       }
     },
-    onSuccess: (newEvent) => {
+    onSuccess: (serverResponse) => {
       if (process.env.NODE_ENV === "development") {
         console.log("✅ [useCreateEvent] Event created:", {
-          eventId: newEvent?.id,
-          title: newEvent?.eventTitle,
+          eventId: serverResponse?.id,
+          title: serverResponse?.eventTitle,
         });
       }
+
+      // 🔍 CRITICAL: Transform server response before caching
+      const transformed = ensureTransformedData(serverResponse);
 
       // Invalidate list queries to refetch
       queryClient.invalidateQueries({ queryKey: eventKeys.lists() });
       queryClient.invalidateQueries({ queryKey: eventKeys.users() });
 
-      // Optimistically set the new event in cache
-      if (newEvent?.id) {
-        queryClient.setQueryData(eventKeys.detail(newEvent.id), newEvent);
+      // Cache the transformed event
+      if (transformed?.id) {
+        queryClient.setQueryData(eventKeys.detail(transformed.id), transformed);
       }
     },
     onError: (error) => {
@@ -141,66 +173,132 @@ export function useCreateEvent() {
   });
 }
 
-//  Update existing event (PROTECTED)
+// update event (PROTECTED)
+
 export function useUpdateEvent() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: updateEventApi,
+    mutationFn: async (variables) => {
+      console.group("🔧 [useUpdateEvent MutationFn]");
+      console.log("📤 Mutation variables received:", {
+        eventId: variables.eventId,
+        updatesKeys: Object.keys(variables.updates),
+      });
+
+      // Mapping Verification: We ensure we are logging 'tickets' 
+      // which is what prepareEventPayload generates
+      if (variables.updates.tickets) {
+        console.log("🎫 Mapping Verification (tickets):", {
+          count: variables.updates.tickets.length,
+          tiers: variables.updates.tickets.map((t, i) => ({
+            index: i,
+            id: t.id,
+            tierName: t.tierName, // Exact name check
+            price: t.price,
+            type: typeof t.price,
+            quantity: t.quantity,
+          })),
+        });
+      }
+
+      try {
+        console.log("📡 Calling updateEventApi...");
+        const response = await updateEventApi({
+          eventId: variables.eventId,
+          updates: variables.updates,
+        });
+        
+        console.log("✅ updateEventApi response received");
+        console.groupEnd();
+        return response;
+      } catch (error) {
+        console.error("❌ updateEventApi error:", error.message);
+        if (error.config) {
+          console.error("Payload sent to server:", error.config.data);
+        }
+        console.groupEnd();
+        throw error;
+      }
+    },
     ...MUTATION_CONFIG,
+    
     onMutate: async (variables) => {
+      console.group("🔄 [useUpdateEvent onMutate]");
+      
+      // Cancel outgoing refetches so they don't overwrite optimistic update
       await queryClient.cancelQueries({
         queryKey: eventKeys.detail(variables.eventId),
       });
 
+      // Snapshot the previous value
       const previousEvent = queryClient.getQueryData(
         eventKeys.detail(variables.eventId),
       );
 
+      // Perform Optimistic Update
       if (previousEvent) {
-        queryClient.setQueryData(eventKeys.detail(variables.eventId), {
+        const updatedEvent = {
           ...previousEvent,
-          ...variables.updates, // Change from eventData to updates
-        });
+          ...variables.updates,
+          // Sync naming: if payload has 'tickets', update the local 'tickets'
+          tickets: variables.updates.tickets || previousEvent.tickets,
+          updatedAt: new Date().toISOString(),
+        };
+        
+        queryClient.setQueryData(eventKeys.detail(variables.eventId), updatedEvent);
+        console.log("✅ Optimistic data set in cache");
       }
 
+      console.groupEnd();
       return { previousEvent };
     },
+    
     onSuccess: (updatedEvent, variables) => {
-      if (process.env.NODE_ENV === "development") {
-        console.log("✅ [useUpdateEvent] Event updated:", {
-          eventId: variables.eventId,
-        });
+      console.group("✅ [useUpdateEvent onSuccess]");
+      
+      // Data Consistency Check
+      if (updatedEvent?.tickets && variables.updates.tickets) {
+        const match = updatedEvent.tickets[0]?.tierName === variables.updates.tickets[0]?.tierName;
+        console.log(`🎫 Data Integrity Check: ${match ? "PASSED" : "FAILED"}`);
       }
 
-      // Update cache with server response
+      // Update cache with the definitive server response
       queryClient.setQueryData(
         eventKeys.detail(variables.eventId),
         updatedEvent,
       );
 
-      // Invalidate related queries
+      // Invalidate related queries to trigger background refreshes
       queryClient.invalidateQueries({ queryKey: eventKeys.lists() });
       queryClient.invalidateQueries({ queryKey: eventKeys.users() });
-    },
-    onError: (error, variables, context) => {
-      console.error("❌ [useUpdateEvent] Failed:", {
-        eventId: variables.eventId,
-        message: error.message,
-      });
 
-      // Rollback to previous value
+      console.groupEnd();
+    },
+    
+    onError: (error, variables, context) => {
+      console.group("❌ [useUpdateEvent onError]");
+      
+      // Rollback to the previous state if the mutation fails
       if (context?.previousEvent) {
+        console.log("🔄 Rolling back optimistic update...");
         queryClient.setQueryData(
           eventKeys.detail(variables.eventId),
           context.previousEvent,
         );
       }
+
+      console.groupEnd();
+    },
+    
+    onSettled: (data, error, variables) => {
+      console.log("🏁 [useUpdateEvent onSettled] Sync complete for:", variables.eventId);
     },
   });
 }
 
-// Delete event (PROTECTED)
+
+//Delete event (PROTECTED)
 export function useDeleteEvent() {
   const queryClient = useQueryClient();
 
@@ -251,7 +349,7 @@ export function useDeleteEvent() {
   });
 }
 
-//  Publish/unpublish event (PROTECTED)
+//Publish/unpublish event (PROTECTED)
 export function usePublishEvent() {
   const queryClient = useQueryClient();
 
@@ -276,7 +374,7 @@ export function usePublishEvent() {
         eventKeys.detail(variables.eventId),
       );
 
-      // Optimistically update
+      // Optimistically update publish status (safe - doesn't affect prices)
       if (previousEvent) {
         queryClient.setQueryData(eventKeys.detail(variables.eventId), {
           ...previousEvent,
@@ -286,17 +384,18 @@ export function usePublishEvent() {
 
       return { previousEvent };
     },
-    onSuccess: (updatedEvent, variables) => {
+    onSuccess: (serverResponse, variables) => {
       if (process.env.NODE_ENV === "development") {
         console.log("✅ [usePublishEvent] Event published:", {
           eventId: variables.eventId,
         });
       }
 
-      // Update with server response
+      // Transform and update with server response
+      const transformed = ensureTransformedData(serverResponse);
       queryClient.setQueryData(
         eventKeys.detail(variables.eventId),
-        updatedEvent,
+        transformed,
       );
 
       // Invalidate related queries
@@ -320,7 +419,7 @@ export function usePublishEvent() {
   });
 }
 
-// Like/unlike event (PROTECTED)
+//Like/unlike event (PROTECTED)
 export function useLikeEvent() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -343,7 +442,7 @@ export function useLikeEvent() {
       // Snapshot for rollback
       const previousEvent = queryClient.getQueryData(eventKeys.detail(eventId));
 
-      // Optimistically update like count
+      // Optimistically update like count (safe - doesn't affect prices)
       if (previousEvent) {
         const isLiked = previousEvent.likes?.includes(user?.id);
         const newLikes = isLiked
@@ -387,6 +486,7 @@ export function useLikeEvent() {
 
 // UTILITY HOOKS
 
+//Check if current user owns the event
 export function useIsEventOwner(eventId) {
   const { user } = useAuth();
   const { data: event } = useEvent(eventId);
@@ -394,6 +494,7 @@ export function useIsEventOwner(eventId) {
   return event?.userId === user?.id;
 }
 
+//Check if current user has liked the event
 export function useHasLikedEvent(eventId) {
   const { user } = useAuth();
   const { data: event } = useEvent(eventId);

@@ -73,11 +73,21 @@ func (req *EventCreateRequest) MapToModels() (*models.Event, []models.TicketTier
 	tiers := make([]models.TicketTier, len(req.TicketTiers))
 	for i, t := range req.TicketTiers {
 		tiers[i] = models.TicketTier{
+			ID:          uuid.New(), // Generate new ID for each tier
 			Name:        t.TierName,
 			Description: t.Description,
-			PriceKobo:   int32(t.Price), // Service layer will convert to kobo
+			// IMPORTANT: Convert Naira to Kobo for storage
+			// Price is in Naira from frontend, multiply by 100 to get kobo
+			PriceKobo:   int64(t.Price * 100), // Convert Naira to Kobo
 			Capacity:    t.Quantity,
+			Sold:        0,        // Initialize to 0 for new events
+			Available:   t.Quantity, // Initially all tickets are available
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
 		}
+		
+		// Also set the Price field for display (in Naira)
+		tiers[i].Price = t.Price
 	}
 	return event, tiers
 }
@@ -105,6 +115,21 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 
 	// Map to domain models
 	event, tiers := req.MapToModels()
+
+	// Log the conversion for debugging
+	log.Info().
+		Str("organizer_id", organizerID.String()).
+		Int("ticket_count", len(tiers)).
+		Msg("Handler: Converting ticket prices for create")
+	
+	// Debug log each ticket conversion
+	for i, tier := range tiers {
+		log.Debug().
+			Str("tier_name", tier.Name).
+			Float64("price_naira", tier.Price).
+			Int64("price_kobo", tier.PriceKobo).
+			Msgf("Handler: Ticket %d - Naira→Kobo conversion", i+1)
+	}
 
 	// Call service layer with timeout
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)

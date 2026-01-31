@@ -169,7 +169,7 @@ func TestEventLike_Toggle_Unlike_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Act - Unlike (delete like)
-	query := `DELETE FROM event_likes WHERE event_id = $1 AND user_id = $2`
+	query := `DELETE FROM likes WHERE event_id = $1 AND user_id = $2`
 	result, err := tc.Tx.ExecContext(ctx, query, event.ID, userID)
 
 	// Assert
