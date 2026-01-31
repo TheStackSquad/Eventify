@@ -283,7 +283,7 @@ func RollbackTicketSale(ctx context.Context, db *sqlx.DB, tierID uuid.UUID, quan
 // GetEventLikeCount returns the number of likes for an event
 func GetEventLikeCount(ctx context.Context, db *sqlx.DB, eventID uuid.UUID) (int, error) {
 	var count int
-	query := `SELECT COUNT(*) FROM event_likes WHERE event_id = $1`
+	query := `SELECT COUNT(*) FROM likes WHERE event_id = $1`
 	err := db.GetContext(ctx, &count, query, eventID)
 	return count, err
 }
@@ -291,7 +291,7 @@ func GetEventLikeCount(ctx context.Context, db *sqlx.DB, eventID uuid.UUID) (int
 // SimulateEventLike adds a like to an event
 func SimulateEventLike(ctx context.Context, db *sqlx.DB, eventID uuid.UUID, userID *uuid.UUID, guestID string) error {
 	query := `
-		INSERT INTO event_likes (id, event_id, user_id, guest_id, created_at)
+		INSERT INTO likes (id, event_id, user_id, guest_id, created_at)
 		VALUES ($1, $2, $3, $4, NOW())
 		ON CONFLICT DO NOTHING
 	`
@@ -304,7 +304,7 @@ func UserHasLikedEvent(ctx context.Context, db *sqlx.DB, eventID uuid.UUID, user
 	var exists bool
 	query := `
 		SELECT EXISTS(
-			SELECT 1 FROM event_likes 
+			SELECT 1 FROM likes 
 			WHERE event_id = $1 
 			AND (user_id = $2 OR guest_id = $3)
 		)

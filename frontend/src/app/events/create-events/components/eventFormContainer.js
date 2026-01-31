@@ -18,7 +18,7 @@ import SubmissionProgressOverlay from "./submissionProgressOverlay";
 export default function EventFormContainer({ eventId = null }) {
   const router = useRouter();
   const { user, authLoading } = useAuth();
-
+  console.log("EventFormContainer received eventId:", eventId);
   // Event form hook
   const {
     formData,
@@ -47,55 +47,52 @@ export default function EventFormContainer({ eventId = null }) {
     stableInitialData,
   );
 
-  // 💰 Price Conversion Debug Logging
+  // 📊 Price Verification Logging (Backend now returns Naira)
   useEffect(() => {
     if (
       process.env.NODE_ENV === "development" &&
       eventId &&
       formData?.tickets?.length > 0
     ) {
-      console.group("💰 Price Conversion Check - Edit Mode");
+      console.group("💰 Price Verification - Edit Mode");
 
-      // Compare stable initial data (from DB) with current form data
+      // Compare stable initial data (from DB, already in Naira) with current form data
       const dbTicket = stableInitialData?.tickets?.[0];
       const formTicket = formData?.tickets?.[0];
 
       if (dbTicket && formTicket) {
-        console.log("📊 Data Comparison:");
+        console.log("📊 Price Data (Already in Naira):");
         console.table({
-          "Raw DB (should be kobo)": {
+          "From Backend": {
             price: dbTicket.price,
             source: "stableInitialData",
+            currency: "NGN",
           },
-          "Transformed Form (should be naira)": {
+          "Current Form": {
             price: formTicket.price,
             source: "formData",
-          },
-          "Conversion Check": {
-            price: `${dbTicket.price} ÷ 100 = ${dbTicket.price / 100}`,
-            source: "calculation",
+            currency: "NGN",
           },
         });
 
         console.log(
-          "💵 Expected Display Format:",
+          "💵 Display Format:",
           new Intl.NumberFormat("en-NG", {
             style: "currency",
             currency: "NGN",
           }).format(formTicket.price || 0),
         );
 
-        // Validation check
-        const expectedNaira = dbTicket.price / 100;
-        const isCorrect = formTicket.price === expectedNaira;
+        // Validation check - prices should match since no conversion needed
+        const pricesMatch = dbTicket.price === formTicket.price;
 
-        if (isCorrect) {
-          console.log("✅ Conversion is CORRECT");
+        if (pricesMatch) {
+          console.log("✅ Prices match correctly (already in Naira)");
         } else {
-          console.error("❌ Conversion MISMATCH:", {
-            expected: expectedNaira,
-            actual: formTicket.price,
-            difference: formTicket.price - expectedNaira,
+          console.warn("⚠️ Price mismatch detected:", {
+            backendPrice: dbTicket.price,
+            formPrice: formTicket.price,
+            difference: formTicket.price - dbTicket.price,
           });
         }
       }
@@ -110,13 +107,16 @@ export default function EventFormContainer({ eventId = null }) {
       console.group("📊 Form State Sync");
       console.log("👤 Current User:", { id: user.id, name: user.name });
       console.log("📝 Mode:", eventId ? "EDIT MODE" : "CREATE MODE");
+      console.log(
+        "💰 Currency Handling: Backend returns Naira, no client conversion",
+      );
 
       if (eventId) {
         console.log("🔄 Editing Event ID:", eventId);
-        console.log("💾 Data from DB (stableInitialData):", stableInitialData);
-        console.log("📋 Current Form Data:", formData);
+        console.log("💾 Data from Backend (Naira):", stableInitialData);
+        console.log("📋 Current Form Data (Naira):", formData);
 
-        // Compare DB data vs form data
+        // Compare data
         if (stableInitialData && formData) {
           console.log("🔍 Data Comparison:", {
             dbTitle: stableInitialData.eventTitle,
@@ -128,14 +128,19 @@ export default function EventFormContainer({ eventId = null }) {
           });
         }
 
-        // Ticket details
+        // Ticket details (all prices in Naira)
         if (formData?.tickets?.length > 0) {
-          console.log("🎫 Tickets Configuration:");
+          console.log("🎫 Tickets Configuration (Prices in Naira):");
           console.table(
             formData.tickets.map((t, i) => ({
               Index: i + 1,
               "Tier Name": t.tierName,
               "Price (₦)": t.price,
+              "Formatted Price": new Intl.NumberFormat("en-NG", {
+                style: "currency",
+                currency: "NGN",
+                minimumFractionDigits: 0,
+              }).format(t.price),
               Quantity: t.quantity,
               "Sold Count": t.soldCount || 0,
               Locked: (t.soldCount || 0) > 0 ? "🔒 Yes" : "🔓 No",
@@ -145,6 +150,14 @@ export default function EventFormContainer({ eventId = null }) {
       } else {
         console.log("✨ Creating New Event");
         console.log("📋 Current Form Data:", formData);
+
+        // Create mode ticket prices
+        if (formData?.tickets?.length > 0) {
+          console.log("🎫 Initial Tickets (Create Mode):");
+          formData.tickets.forEach((t, i) => {
+            console.log(`  ${i + 1}. ${t.tierName}: ₦${t.price || 0} (Naira)`);
+          });
+        }
       }
 
       console.log("❌ Validation Errors:", errors);
@@ -163,11 +176,7 @@ export default function EventFormContainer({ eventId = null }) {
       <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-md">
         <div className="p-8 rounded-2xl bg-gray-900/10 border border-white/5 flex flex-col items-center">
           <LoadingSpinner
-            message={
-              eventId
-                ? "Loading event data from database..."
-                : "Preparing form..."
-            }
+            message={eventId ? "Loading event data..." : "Preparing form..."}
             size="lg"
             color="white"
           />
@@ -226,17 +235,19 @@ export default function EventFormContainer({ eventId = null }) {
       console.group("🚀 Form Submission");
       console.log("👤 Submitted by:", user.name);
       console.log("📝 Mode:", eventId ? "UPDATE" : "CREATE");
+      console.log("💰 Currency: Prices in Naira (no client conversion needed)");
       console.log("📤 Form Data:", formData);
 
-      // Log ticket data for submission
+      // Log ticket data for submission (prices in Naira)
       if (formData?.tickets?.length > 0) {
-        console.log("🎫 Tickets being submitted:");
+        console.log("🎫 Tickets being submitted (Naira):");
         console.table(
           formData.tickets.map((t) => ({
             Tier: t.tierName,
             "Price (Naira)": t.price,
-            "Will Convert to (Kobo)": t.price * 100,
+            "Will be sent as": `${t.price} NGN`,
             Quantity: t.quantity,
+            "Total Value": `₦${(t.price * t.quantity).toLocaleString()}`,
           })),
         );
       }
@@ -273,6 +284,10 @@ export default function EventFormContainer({ eventId = null }) {
                     ? "Update your event details below"
                     : "Fill in the details to create your event"}
                 </p>
+                {/* Currency notice */}
+                <div className="mt-1 text-sm text-gray-500">
+                  All prices are in Nigerian Naira (₦)
+                </div>
               </div>
               <div className="px-4 py-2 bg-gray-800 rounded-full">
                 <span className="text-sm font-medium text-gray-300">

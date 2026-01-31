@@ -1,165 +1,126 @@
 // frontend/src/app/events/create-events/utils/eventTransformers.js
 
+/**
+ * Transforms Backend Event data into the shape required by the React Form.
+ * Maps Go Model JSON tags -> Frontend Form Field Names.
+ */
 export const transformEventToFormData = (event) => {
   if (!event) return null;
 
-  // Helper for date/time strings
-  const safeDate = (d) => (d ? new Date(d).toISOString().split("T")[0] : "");
-  const safeTime = (d) => (d ? new Date(d).toTimeString().slice(0, 5) : "");
+  // Split ISO date-time into parts for the form inputs
+  const start = event.startDate ? new Date(event.startDate) : null;
+  const end = event.endDate ? new Date(event.endDate) : null;
 
-  // EXPLICIT MAPPING: Only return what the form needs
   return {
-    // Basic Info
+    // Identity
     id: event.id,
-    organizerId: event.organizerId || event.organizer_id,
-    eventTitle: event.eventTitle || event.event_title || "",
-    eventDescription: event.eventDescription || event.event_description || "",
+    organizerId: event.organizerId || event.userId,
+
+    // Core Info (Check both Title and eventTitle for safety)
+    eventTitle: event.eventTitle || event.title || "",
+    eventDescription: event.eventDescription || event.description || "",
     category: event.category || "",
-    eventType: event.eventType || event.event_type || "physical",
+    eventType: event.eventType || "physical",
 
     // Dates & Times
-    startDate: safeDate(event.startDate || event.start_date),
-    startTime: event.startTime || safeTime(event.startDate || event.start_date),
-    endDate: safeDate(event.endDate || event.end_date),
-    endTime: event.endTime || safeTime(event.endDate || event.end_date),
-    timezone: event.timezone || "Africa/Lagos",
+    startDate: start ? start.toISOString().split("T")[0] : "",
+    startTime: start ? start.toTimeString().slice(0, 5) : "",
+    endDate: end ? end.toISOString().split("T")[0] : "",
+    endTime: end ? end.toTimeString().slice(0, 5) : "",
 
     // Location
-    venueName: event.venueName || event.venue_name || "",
-    venueAddress: event.venueAddress || event.venue_address || "",
+    venueName: event.venueName || "",
+    venueAddress: event.venueAddress || "",
     city: event.city || "",
     state: event.state || "",
-    country: event.country || "Nigeria",
-    virtualPlatform: event.virtualPlatform || event.virtual_platform || "",
-    meetingLink: event.meetingLink || event.meeting_link || "",
+    country: event.country || "",
+    virtualPlatform: event.virtualPlatform || "",
+    meetingLink: event.meetingLink || "",
 
-    // Tickets - THE CRITICAL PART
+    // Tickets (Crucial: Map Go "capacity" or "quantity" to form "quantity")
     tickets: (event.tickets || []).map((t) => ({
       id: t.id,
-      tierName: t.tierName || t.tier_name || "",
-      price: (Number(t.price) || 0) / 100,
-      quantity: Number(t.quantity) || 0,
-      soldCount: Number(t.soldCount) || 0,
-      isFree: (Number(t.price) || 0) === 0,
+      tierName: t.tierName || t.name || "",
+      price: Number(t.price || 0),
+      quantity: Number(t.quantity || t.capacity || 0),
       description: t.description || "",
+      soldCount: t.soldCount || 0,
+      isFree: Number(t.price) === 0,
     })),
 
-    // Images & Meta
-    eventImage: event.eventImage || event.event_image_url || null,
-    eventImagePreview:
-      event.eventImagePreview ||
-      event.eventImage ||
-      event.event_image_url ||
-      "",
-    paystackSubaccountCode:
-      event.paystackSubaccountCode || event.paystack_subaccount_code || "",
+    // Media
+    eventImage: event.eventImage || "",
+    eventImagePreview: event.eventImage || "", // Use same URL for preview
+
+    // Other
     tags: Array.isArray(event.tags) ? event.tags : [],
-    maxAttendees: event.maxAttendees || event.max_attendees || "",
+    maxAttendees: Number(event.maxAttendees || 0),
   };
 };
-export const prepareEventPayload = (
-  formData,
-  imageUrl = null,
-  isEditMode = false,
-) => {
-  const payload = { ...formData };
-
-  // 1. IMAGE HANDLING
-  if (imageUrl) {
-    payload.eventImage = imageUrl;
-    if (process.env.NODE_ENV === "development") {
-      console.log("📸 [Payload] Using NEW uploaded image:", imageUrl);
+/**
+ * Transforms Form/UI data into the JSON payload the Go Backend expects.
+ */
+export function prepareEventPayload(formData) {
+  // Helper to combine date and time strings back into an ISO string for Go time.Time
+  const combineDateTime = (date, time) => {
+    if (!date) return null;
+    try {
+      return time
+        ? new Date(`${date}T${time}`).toISOString()
+        : new Date(date).toISOString();
+    } catch (e) {
+      return new Date(date).toISOString();
     }
-  } else if (isEditMode && formData.eventImage) {
-    payload.eventImage = formData.eventImage;
-    if (process.env.NODE_ENV === "development") {
-      console.log(
-        "📸 [Payload] Preserving EXISTING image:",
-        formData.eventImage,
-      );
-    }
-  }
+  };
 
-  // 2. Format Dates - Combine date/time into ISO timestamps
-  if (payload.startDate && payload.startTime) {
-    payload.startDate = new Date(
-      `${payload.startDate}T${payload.startTime}:00`,
-    ).toISOString();
-  }
-  if (payload.endDate && payload.endTime) {
-    payload.endDate = new Date(
-      `${payload.endDate}T${payload.endTime}:00`,
-    ).toISOString();
-  }
+  return {
+    organizerId: formData.organizerId,
+    eventTitle: formData.eventTitle,
+    eventDescription: formData.eventDescription,
+    category: formData.category,
+    eventType: formData.eventType,
+    eventImage: formData.eventImage, // Maps to EventImageURL via json:"eventImage"
+    venueName: formData.venueName || null,
+    venueAddress: formData.venueAddress || null,
+    city: formData.city || null,
+    state: formData.state || null,
+    country: formData.country || null,
+    virtualPlatform: formData.virtualPlatform || null,
+    meetingLink: formData.meetingLink || null,
+    startDate: combineDateTime(formData.startDate, formData.startTime),
+    endDate: combineDateTime(formData.endDate, formData.endTime),
+    maxAttendees: formData.maxAttendees ? Number(formData.maxAttendees) : null,
+    tags: formData.tags || [],
 
-  // 3. Convert Numeric Types
-  if (payload.maxAttendees) {
-    payload.maxAttendees = parseInt(payload.maxAttendees, 10) || 0;
-  }
+    // Ticket Mapping: Aligning with Go's TicketTier JSON tags
+    tickets: (formData.tickets || []).map((ticket) => ({
+      id: ticket.id || undefined,
+      tierName: ticket.tierName, // json:"tierName"
+      description: ticket.description || "",
+      price: Number(ticket.price), // float64
+      quantity: Number(ticket.quantity), // json:"quantity" (maps to Capacity in Go)
+    })),
+  };
+}
 
-  // 4. TICKETS - Convert price from naira BACK to kobo for backend
-  const sanitizedTickets = (payload.tickets || []).map((t) => {
-    // CRITICAL: Convert naira back to kobo (multiply by 100)
-    const priceInKobo = Math.round(parseFloat(t.price || 0) * 100);
+/**
+ * Normalizes the Backend response back into the Frontend structure.
+ */
+export function normalizeEventResponse(data) {
+  if (!data) return null;
 
-    const ticket = {
-      tierName: t.tierName,
-      price: priceInKobo, // Backend expects kobo
-      quantity: parseInt(t.quantity, 10) || 0,
-      description: t.description || "",
-    };
-
-    // Include ticket ID for updates (edit mode)
-    if (t.id && isEditMode) {
-      ticket.id = t.id;
-    }
-
-    // Log price conversion for debugging
-    if (process.env.NODE_ENV === "development") {
-      console.log(`💰 [Payload] ${ticket.tierName}:`, {
-        frontendNaira: t.price,
-        backendKobo: priceInKobo,
-        calculation: `${t.price} × 100 = ${priceInKobo}`,
-        quantity: ticket.quantity,
-      });
-    }
-
-    return ticket;
-  });
-
-  // Assign to the key the backend validator expects
-  payload.TicketTiers = sanitizedTickets;
-
-  // 5. Cleanup - Remove UI-only fields
-  const fieldsToRemove = [
-    "tickets",
-    "eventImagePreview",
-    "eventImageFile",
-    "startTime",
-    "endTime",
-    "timezone",
-  ];
-
-  fieldsToRemove.forEach((k) => delete payload[k]);
-
-  // Log final payload structure
-  if (process.env.NODE_ENV === "development") {
-    console.log("📦 [Payload] Final structure:", {
-      mode: isEditMode ? "EDIT" : "CREATE",
-      eventTitle: payload.eventTitle,
-      hasImage: !!payload.eventImage,
-      ticketCount: payload.TicketTiers?.length || 0,
-      tickets: payload.TicketTiers?.map((t) => ({
-        name: t.tierName,
-        priceKobo: t.price,
-        priceNaira: t.price / 100,
-      })),
-    });
-  }
-
-  return payload;
-};
-
+  return {
+    ...data,
+    tickets: (data.tickets || []).map((t) => ({
+      ...t,
+      tierName: t.tierName || "",
+      price: Number(t.price || 0),
+      quantity: Number(t.quantity || 0),
+      soldCount: Number(t.soldCount || 0),
+      available: Number(t.available || 0),
+    })),
+  };
+}
 // Helper: Format price for display
 export const formatPriceDisplay = (kobo) => {
   const naira = kobo / 100;

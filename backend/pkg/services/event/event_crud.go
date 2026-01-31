@@ -63,7 +63,6 @@ func (s *eventService) CreateEvent(
 
 	// Prepare ticket tiers
 	for i := range tiers {
-		tiers[i].PriceKobo = tiers[i].PriceKobo * 100 // Convert to Kobo
 		tiers[i].EventID = confirmedEventID
 		tiers[i].ID = uuid.New()
 		tiers[i].Sold = 0
@@ -92,7 +91,61 @@ func (s *eventService) GetEventByID(
 	eventID uuid.UUID,
 	userID *uuid.UUID,
 ) (*models.Event, error) {
-	return s.eventRepo.GetEventByID(ctx, eventID, userID)
+	log.Printf("🚀 [eventService.GetEventByID] Fetching event %s for user %v", 
+		eventID, userID)
+	
+	// Get event from repository
+	event, err := s.eventRepo.GetEventByID(ctx, eventID, userID)
+	if err != nil {
+		log.Printf("❌ [eventService.GetEventByID] Error fetching event: %v", err)
+		return nil, err
+	}
+	
+	// Verify price conversion in service layer
+	log.Printf("🔍 [eventService.GetEventByID] Verifying ticket prices:")
+	
+	if len(event.TicketTiers) == 0 {
+		log.Printf("   No ticket tiers found")
+	} else {
+		for i, ticket := range event.TicketTiers {
+			log.Printf("   Ticket %d: %s", i+1, ticket.Name)
+			log.Printf("     Price field (should be Naira): %.2f", ticket.Price)
+			
+			// Verify it's not a kobo value
+			if ticket.Price > 1000 {
+				log.Printf("     ⚠️ WARNING: Price %.2f seems high - might still be in kobo", ticket.Price)
+				log.Printf("     Expected: Less than 1000 for most events (e.g., 5000 for ₦5,000)")
+			} else {
+				log.Printf("     ✅ Price looks correct (in Naira)")
+			}
+			
+			// Format for display
+			if ticket.Price == 0 {
+				log.Printf("     Formatted: FREE")
+			} else {
+				log.Printf("     Formatted: ₦%.2f", ticket.Price)
+			}
+		}
+	}
+	
+	log.Printf("✅ [eventService.GetEventByID] Event %s successfully retrieved", eventID)
+	log.Printf("   Total tickets: %d", len(event.TicketTiers))
+	log.Printf("   Sample API response would have:")
+	log.Printf("     'price': %.2f (type: %T)", 
+		func() float64 {
+			if len(event.TicketTiers) > 0 {
+				return event.TicketTiers[0].Price
+			}
+			return 0
+		}(),
+		func() interface{} {
+			if len(event.TicketTiers) > 0 {
+				return event.TicketTiers[0].Price
+			}
+			return float64(0)
+		}())
+	
+	return event, nil
 }
 
 // GetAllEvents retrieves all public events with filters
@@ -123,7 +176,7 @@ func (s *eventService) UpdateEvent(
 	eventID, organizerID uuid.UUID,
 	updates *EventUpdateDTO,
 ) (*models.Event, error) {
-	existing, err := s.eventRepo.GetEventByID(ctx, eventID, nil)
+	existing, err := s.GetEventByID(ctx, eventID, &organizerID)
 	if err != nil {
 		return nil, fmt.Errorf("event not found: %w", err)
 	}
@@ -250,6 +303,14 @@ func (s *eventService) applyUpdatesToModel(m *models.Event, u *EventUpdateDTO) *
     if u.MaxAttendees != nil { m.MaxAttendees = u.MaxAttendees }
 
     // 4. Logic for Slices (Dereferencing the DTO pointer)
+    if u.Tags != nil {
+        m.Tags = *u.Tags
+    }
+	// ADD THIS: 4. Logic for Ticket Tiers
+    if u.Tickets != nil {
+        m.TicketTiers = u.Tickets
+    }
+
     if u.Tags != nil {
         m.Tags = *u.Tags
     }

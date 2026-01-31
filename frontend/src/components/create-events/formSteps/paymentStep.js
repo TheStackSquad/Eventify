@@ -91,8 +91,8 @@ export default function PaymentStep({
           required: hasPaidTickets,
           disabled: isSubaccountLocked,
           className: isSubaccountLocked
-            ? "opacity-60 cursor-not-allowed bg-gray-950"
-            : "",
+            ? "opacity-70 cursor-not-allowed bg-gray-100 text-gray-800 border-gray-400 w-full"
+            : "bg-gray-50 text-gray-900 border-gray-300 focus:bg-gray-100 w-full min-h-[42px] px-3 py-2",
         })}
 
         {/* Lock Warning Alert */}
@@ -151,7 +151,7 @@ export default function PaymentStep({
       </div>
 
       {/* 4. Maximum Event Capacity (Optional) */}
-      <div className="bg-gray-800/30 rounded-lg p-5 border border-gray-700">
+      <div className="bg-gray-300/30 text-white rounded-lg p-5 border border-gray-700">
         <h4 className="text-white font-medium mb-3">Event Capacity</h4>
 
         {createInputField({
@@ -162,7 +162,9 @@ export default function PaymentStep({
           onChange: (e) => handleInputChange("maxAttendees", e.target.value),
           placeholder: "Leave blank for unlimited",
           min: totalSalesCount || 1,
-          className: isSubaccountLocked ? "border-amber-900/20" : "",
+          className: isSubaccountLocked
+            ? "border-amber-900/20 bg-gray-100/80 text-gray-800 focus:bg-gray-50"
+            : "bg-gray-100 text-gray-900 border-gray-300 focus:bg-white focus:border-blue-500",
         })}
 
         <p className="text-xs text-gray-500 mt-2">

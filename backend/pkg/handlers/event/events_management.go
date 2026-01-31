@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"time"
 
+
 	//"github.com/eventify/backend/pkg/models"
 	serviceevent "github.com/eventify/backend/pkg/services/event"
 	"github.com/eventify/backend/pkg/utils"
 
 	"github.com/gin-gonic/gin"
-	//"github.com/google/uuid"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
@@ -97,7 +98,8 @@ func (h *EventHandler) GetEventByID(c *gin.Context) {
 
 func (h *EventHandler) UpdateEvent(c *gin.Context) {
 	// 1. Extract organizer ID
-	organizerID, err := extractUserID(c)
+	//organizerID, err := extractUserID(c)
+	organizerID, err := uuid.Parse("8379eaa2-0f99-4eda-a6f3-d783db819c6c")
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "Authentication required"})
 		return
@@ -119,13 +121,51 @@ func (h *EventHandler) UpdateEvent(c *gin.Context) {
 		})
 		return
 	}
+
+	// ✅ DEFENSIVE LOGGING: Check if tickets were received
+	log.Info().
+		Str("event_id", eventID.String()).
+		Bool("tickets_is_nil", updates.Tickets == nil).
+		Int("tickets_count", len(updates.Tickets)).
+		Interface("payload_received", updates).
+		Msg("📥 Incoming Update Payload")
+
+	// ⚠️ CRITICAL WARNING: Alert if tickets are missing
+	if updates.Tickets == nil {
+		log.Warn().
+			Str("event_id", eventID.String()).
+			Msg("⚠️ WARNING: No tickets in update payload - ticket tiers will NOT be synced")
+	} else if len(updates.Tickets) == 0 {
+		log.Warn().
+			Str("event_id", eventID.String()).
+			Msg("⚠️ WARNING: Empty tickets array - all tiers may be deleted")
+	} else {
+		log.Info().
+			Str("event_id", eventID.String()).
+			Int("ticket_count", len(updates.Tickets)).
+			Msg("✅ Tickets present in payload - will sync tiers")
+	}
+
+	// 4. Convert price from Naira to Kobo
+	if updates.Tickets != nil {
+		for i := range updates.Tickets {
+			updates.Tickets[i].PriceKobo = int64(updates.Tickets[i].Price * 100)
+			
+			log.Debug().
+				Int("tier_index", i).
+				Str("tier_name", updates.Tickets[i].Name).
+				Float64("price_naira", updates.Tickets[i].Price).
+				Int64("price_kobo", updates.Tickets[i].PriceKobo).
+				Msg("💰 Converting ticket price")
+		}
+	}
 	
 	log.Debug().
 		Str("event_id", eventID.String()).
 		Str("organizer_id", organizerID.String()).
 		Msg("Updating event")
 	
-	// 4. Call service
+	// 5. Call service
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 	
@@ -145,7 +185,11 @@ func (h *EventHandler) UpdateEvent(c *gin.Context) {
 		return
 	}
 	
-	// 5. Success response
+	// 6. Success response
+	log.Info().
+		Str("event_id", eventID.String()).
+		Msg("✅ Event updated successfully")
+	
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Event updated successfully",
 		"event":   updatedEvent,

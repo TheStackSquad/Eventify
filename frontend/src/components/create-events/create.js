@@ -1,8 +1,8 @@
 // frontend/src/components/create-events/create.js
 
 "use client";
-import { useState } from "react";
-import { Loader2, Upload, CheckCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import StepIndicator from "./components/stepIndicator";
 import BasicInfoStep from "./formSteps/basicFormStep";
 import DateTimeLocationStep from "./formSteps/dateTimeLocationStep";
@@ -20,44 +20,39 @@ export default function CreateEventForm({
   isSubmitting,
   isEditMode,
   uploadProgress = 0,
-  currentStep: submissionStep = "",
 }) {
   const [currentFormStep, setCurrentFormStep] = useState(1);
 
-  if (!formData) {
+  // 1. LOADING STATE
+  // Since useEventForm now sets formData immediately upon data arrival,
+  // this check ensures we show a spinner until the hook is ready.
+  if (!formData || (isEditMode && !formData.id)) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-950">
+      <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-green-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Loading Form...</p>
+          <p className="text-gray-400">Syncing event data...</p>
         </div>
       </div>
     );
   }
 
+  // 2. HELPERS
   const handleInputChange = (field, value) => {
     onFormChange({ ...formData, [field]: value });
   };
 
-  const handleImageUpload = (file, previewUrl) => {
-    if (typeof onImageUpload === "function") {
-      onImageUpload(file, previewUrl);
-    } else {
-      console.warn(
-        "CreateEventForm: onImageUpload not provided, using fallback",
-      );
-      handleInputChange("eventImageFile", file);
-      handleInputChange("eventImagePreview", previewUrl);
-    }
-  };
-
   const handleTicketChange = (index, field, value) => {
     const updatedTickets = [...(formData.tickets || [])];
-    updatedTickets[index] = { ...updatedTickets[index], [field]: value };
+    // Ensure numeric fields are cast correctly if they come from input strings
+    const finalValue =
+      field === "price" || field === "quantity" ? Number(value) : value;
+
+    updatedTickets[index] = { ...updatedTickets[index], [field]: finalValue };
     onFormChange({ ...formData, tickets: updatedTickets });
   };
 
-  // Step validation before progression
+  // 3. STEP VALIDATION
   const validateStep = (step) => {
     const validationErrors = [];
 
@@ -65,16 +60,12 @@ export default function CreateEventForm({
       case 1:
         if (!formData.eventTitle?.trim())
           validationErrors.push("Event title is required");
-        if (!formData.eventDescription?.trim())
-          validationErrors.push("Event description is required");
         if (!formData.category)
           validationErrors.push("Please select a category");
-        if (!formData.eventType)
-          validationErrors.push("Please select event type");
         if (
-          !formData.eventImageFile &&
           !formData.eventImage &&
-          !formData.eventImagePreview
+          !formData.eventImagePreview &&
+          !formData.eventImageFile
         ) {
           validationErrors.push("Please upload an event image");
         }
@@ -83,16 +74,11 @@ export default function CreateEventForm({
       case 2:
         if (!formData.startDate)
           validationErrors.push("Start date is required");
-        if (!formData.startTime)
-          validationErrors.push("Start time is required");
-        if (formData.eventType === "physical") {
-          if (!formData.venueName?.trim())
-            validationErrors.push("Venue name is required");
-          if (!formData.city?.trim()) validationErrors.push("City is required");
+        if (formData.eventType === "physical" && !formData.venueName?.trim()) {
+          validationErrors.push("Venue name is required");
         }
-        if (formData.eventType === "virtual") {
-          if (!formData.meetingLink?.trim())
-            validationErrors.push("Meeting link is required");
+        if (formData.eventType === "virtual" && !formData.meetingLink?.trim()) {
+          validationErrors.push("Meeting link is required");
         }
         break;
 
@@ -103,21 +89,14 @@ export default function CreateEventForm({
           formData.tickets.forEach((ticket, i) => {
             if (!ticket.tierName?.trim())
               validationErrors.push(`Ticket ${i + 1}: Name required`);
-            if (ticket.quantity <= 0)
-              validationErrors.push(`Ticket ${i + 1}: Quantity required`);
-
-            // ✅ Price type validation
-            if (typeof ticket.price === "string") {
+            if (Number(ticket.quantity) <= 0)
               validationErrors.push(
-                `Ticket ${i + 1}: Invalid price format (contact support if this persists)`,
+                `Ticket ${i + 1}: Quantity must be greater than 0`,
               );
-              console.error(
-                `❌ Price is still a string for ticket ${i + 1}:`,
-                ticket.price,
-              );
-            }
           });
         }
+        break;
+      default:
         break;
     }
 
@@ -126,38 +105,34 @@ export default function CreateEventForm({
 
   const handleNext = () => {
     const validationErrors = validateStep(currentFormStep);
-
     if (validationErrors.length > 0) {
       toastAlert.error(validationErrors[0]);
       return;
     }
-
     setCurrentFormStep((s) => Math.min(4, s + 1));
   };
 
+  // 4. STEP RENDERER
   const renderStep = () => {
     const commonProps = {
       formData,
       errors,
       handleInputChange,
       isEditMode,
+      isSubmitting,
     };
 
     switch (currentFormStep) {
       case 1:
         return (
-          <BasicInfoStep
-            {...commonProps}
-            handleImageUpload={handleImageUpload}
-          />
+          <BasicInfoStep {...commonProps} handleImageUpload={onImageUpload} />
         );
       case 2:
         return <DateTimeLocationStep {...commonProps} />;
       case 3:
         return (
           <TicketingStep
-            formData={formData}
-            errors={errors}
+            {...commonProps}
             handleTicketChange={handleTicketChange}
             addTicketTier={() =>
               onFormChange({
@@ -190,91 +165,20 @@ export default function CreateEventForm({
   };
 
   return (
-    <div className="max-w-4xl mx-auto bg-gray-900 rounded-2xl border border-gray-700 overflow-hidden shadow-2xl">
-      {/* ✨ ENHANCED: Upload Progress Overlay - Lighthouse Optimized */}
-      {isSubmitting && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
-            {/* Progress Icon */}
-            <div className="text-center mb-6">
-              {uploadProgress === 100 ? (
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-                  <CheckCircle className="w-8 h-8 text-green-600" />
-                </div>
-              ) : uploadProgress > 0 && uploadProgress < 60 ? (
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                  <Upload className="w-8 h-8 text-blue-600 animate-pulse" />
-                </div>
-              ) : (
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-purple-100 rounded-full mb-4">
-                  <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
-                </div>
-              )}
-
-              {/* Dynamic Title */}
-              <h3 className="text-xl font-bold text-gray-900 mb-2">
-                {submissionStep || "Processing..."}
-              </h3>
-
-              {/* Dynamic Subtitle */}
-              <p className="text-sm text-gray-600">
-                {uploadProgress === 100
-                  ? "Almost there! Finalizing your event..."
-                  : uploadProgress > 0
-                    ? "Uploading your event image..."
-                    : isEditMode
-                      ? "Updating your event..."
-                      : "Creating your event..."}
-              </p>
-            </div>
-
-            {/* Progress Bar - Pure CSS */}
-            <div className="relative w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-3">
-              <div
-                className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-500 ease-out"
-                style={{ width: `${uploadProgress}%` }}
-              >
-                {/* Shimmer effect - Lightweight animation */}
-                <div
-                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                  style={{
-                    animation: "shimmer 2s infinite",
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Progress Percentage */}
-            <div className="text-center mb-4">
-              <span className="text-2xl font-bold text-gray-900">
-                {uploadProgress}%
-              </span>
-            </div>
-
-            {/* Warning Message */}
-            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-xs text-yellow-800 text-center">
-                Please don&apos;t close this window. This may take up to 30
-                seconds.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Form Content */}
+    <div className="max-w-4xl mx-auto bg-gray-900 rounded-2xl border border-gray-700 overflow-hidden shadow-2xl transition-all duration-300">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (currentFormStep === 4) onSubmit();
+          if (currentFormStep === 4 && !isSubmitting) {
+            onSubmit();
+          }
         }}
-        className="p-8"
+        className={`p-8 ${isSubmitting ? "opacity-70 pointer-events-none" : ""}`}
+        noValidate
       >
         <StepIndicator currentStep={currentFormStep} />
 
-        <div className="mt-8 transition-opacity duration-300">
-          {renderStep()}
-        </div>
+        <div className="mt-8 min-h-[400px]">{renderStep()}</div>
 
         <NavigationButtons
           currentStep={currentFormStep}
@@ -283,18 +187,6 @@ export default function CreateEventForm({
           isSubmitting={isSubmitting}
         />
       </form>
-
-      {/* ✨ Shimmer animation - Single lightweight keyframe */}
-      <style jsx>{`
-        @keyframes shimmer {
-          0% {
-            transform: translateX(-100%);
-          }
-          100% {
-            transform: translateX(100%);
-          }
-        }
-      `}</style>
     </div>
   );
 }

@@ -16,8 +16,9 @@ export function useLockFields(tickets = [], eventStatus = {}) {
     }));
 
     // Rule 3: Future - Check if event has started
+    // If you uncomment this, you MUST add eventStatus back to the dependency array
     // const now = new Date();
-    // const hasStarted = eventStatus.startDate ? new Date(eventStatus.startDate) < now : false;
+    // const hasStarted = eventStatus?.startDate ? new Date(eventStatus.startDate) < now : false;
 
     // Define which field groups are locked
     const locks = {
@@ -63,7 +64,7 @@ export function useLockFields(tickets = [], eventStatus = {}) {
     }
 
     return locks;
-  }, [tickets, eventStatus]);
+  }, [tickets]); // Removed eventStatus to satisfy linter
 
   return lockStatus;
 }

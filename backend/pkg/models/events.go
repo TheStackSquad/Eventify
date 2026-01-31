@@ -21,7 +21,7 @@ type Event struct {
 	OrganizerID            uuid.UUID      `json:"organizerId" db:"organizer_id" binding:"required"`
 	EventTitle             string         `json:"eventTitle" db:"event_title" binding:"required"`
 	EventDescription       string         `json:"eventDescription" db:"event_description" binding:"required"`
-	EventSlug              sql.NullString `json:"eventSlug" db:"event_slug"` // Kept as NullString to match DB facts
+	EventSlug              sql.NullString `json:"eventSlug" db:"event_slug"`
 	Category               string         `json:"category" db:"category" binding:"required"`
 	EventType              EventType      `json:"eventType" db:"event_type" binding:"required,oneof=physical virtual"`
 	EventImageURL          string         `json:"eventImage" db:"event_image_url" binding:"required"`
@@ -51,18 +51,20 @@ type Event struct {
 }
 
 type TicketTier struct {
-	ID          uuid.UUID `json:"id" db:"id"`
-	EventID     uuid.UUID `json:"-" db:"event_id"`
-	TicketTierID uuid.UUID `db:"id"`
-	Name        string    `json:"tierName" db:"name" binding:"required"`
-	Description *string   `json:"description" db:"description"`
-	// Price comes in as Naira (float) from frontend, but we store Kobo (int)
-	PriceKobo   int32     `json:"price" db:"price_kobo"` 
-	Capacity    int32     `json:"quantity" db:"capacity" binding:"required"`
-	Sold        int32     `json:"soldCount" db:"sold"` // Matched frontend key "soldCount"
-	Available   int32     `json:"available" db:"available"` // Required by DB
-	CreatedAt   time.Time `json:"createdAt" db:"created_at"`
-	UpdatedAt   time.Time `json:"updatedAt" db:"updated_at"`
+	ID          uuid.UUID  `json:"id" db:"id"`
+	EventID     uuid.UUID  `json:"-" db:"event_id"`
+	Name        string     `json:"tierName" db:"name" binding:"required"`
+	Description *string    `json:"description" db:"description"`
+	
+	// ✅ CRITICAL FIX: Only Price field has json tag, PriceKobo is internal only
+	PriceKobo   int64      `json:"-" db:"price_kobo"`           // Internal: DB storage (kobo), hidden from JSON
+	Price       float64    `json:"price" db:"-"`                // External: API response (Naira), not in DB
+	
+	Capacity    int32      `json:"quantity" db:"capacity" binding:"required"`
+	Sold        int32      `json:"soldCount" db:"sold"`
+	Available   int32      `json:"available" db:"available"`
+	CreatedAt   time.Time  `json:"createdAt" db:"created_at"`
+	UpdatedAt   time.Time  `json:"updatedAt" db:"updated_at"`
 }
 
 
