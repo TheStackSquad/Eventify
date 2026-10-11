@@ -1,0 +1,253 @@
+// backend/pkg/repository/auth/refresh_token_repo.go
+
+package auth
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"time"
+	"fmt"
+
+	"github.com/eventify/backend/pkg/models"
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+)
+
+type RefreshTokenRepository interface {
+	SaveRefreshToken(ctx context.Context, userID uuid.UUID, token string, expiresIn int, parentID *uuid.UUID, ipAddress string, userAgent string) (uuid.UUID, error)
+	GetByHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error)
+	ConsumeToken(ctx context.Context, id uuid.UUID) error
+	ValidateRefreshToken(ctx context.Context, userID uuid.UUID, token string) (bool, error)
+	RevokeRefreshToken(ctx context.Context, userID uuid.UUID, token string) error
+	RevokeAllUserTokens(ctx context.Context, userID uuid.UUID) error
+	RevokeFamily(ctx context.Context, rootID uuid.UUID) error
+	CleanupExpiredTokens(ctx context.Context) (int64, error)
+	GetActiveTokenCount(ctx context.Context, userID uuid.UUID) (int, error)
+	
+	// ✅ NEW: Get metadata for security validation
+	GetMetadataByHash(ctx context.Context, tokenHash string) (ipAddress string, userAgent string, err error)
+}
+
+type PostgresRefreshTokenRepository struct {
+	DB *sqlx.DB
+}
+
+func NewPostgresRefreshTokenRepository(db *sqlx.DB) *PostgresRefreshTokenRepository {
+	return &PostgresRefreshTokenRepository{DB: db}
+}
+
+// hashToken creates a SHA-256 hash of the token for secure storage
+func hashToken(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
+}
+
+// SaveRefreshToken now persists the IP and UserAgent for security auditing
+func (r *PostgresRefreshTokenRepository) SaveRefreshToken(
+	ctx context.Context,
+	userID uuid.UUID,
+	token string,
+	expiresIn int,
+	parentID *uuid.UUID,
+	ipAddress string,
+	userAgent string,
+) (uuid.UUID, error) {
+	tokenHash := hashToken(token)
+	expiresAt := time.Now().Add(time.Duration(expiresIn) * time.Second)
+	newID := uuid.New()
+
+	query := `
+		INSERT INTO refresh_tokens (
+			id, user_id, token_hash, revoked, expires_at, 
+			created_at, parent_id, ip_address, user_agent
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+
+	_, err := r.DB.ExecContext(
+		ctx,
+		query,
+		newID,
+		userID,
+		tokenHash,
+		false,
+		expiresAt,
+		time.Now(),
+		parentID,
+		ipAddress,
+		userAgent,
+	)
+
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to save refresh token with metadata: %w", err)
+	}
+
+	return newID, nil
+}
+
+// ValidateRefreshToken checks if a token exists, is not revoked, and not expired
+func (r *PostgresRefreshTokenRepository) ValidateRefreshToken(
+	ctx context.Context,
+	userID uuid.UUID,
+	token string,
+) (bool, error) {
+	tokenHash := hashToken(token)
+
+	var exists bool
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM refresh_tokens
+			WHERE user_id = $1
+			AND token_hash = $2
+			AND revoked = false
+			AND expires_at > NOW()
+		)
+	`
+
+	err := r.DB.GetContext(ctx, &exists, query, userID, tokenHash)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+// RevokeRefreshToken marks a specific token as revoked
+func (r *PostgresRefreshTokenRepository) RevokeRefreshToken(
+	ctx context.Context,
+	userID uuid.UUID,
+	token string,
+) error {
+	tokenHash := hashToken(token)
+
+	query := `
+		UPDATE refresh_tokens
+		SET revoked = true
+		WHERE user_id = $1 AND token_hash = $2
+	`
+
+	result, err := r.DB.ExecContext(ctx, query, userID, tokenHash)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err == nil && rows == 0 {
+		return errors.New("token not found")
+	}
+
+	return nil
+}
+
+// RevokeAllUserTokens revokes all tokens for a user (useful for logout from all devices)
+func (r *PostgresRefreshTokenRepository) RevokeAllUserTokens(
+	ctx context.Context,
+	userID uuid.UUID,
+) error {
+	query := `
+		UPDATE refresh_tokens
+		SET revoked = true
+		WHERE user_id = $1 AND revoked = false
+	`
+
+	_, err := r.DB.ExecContext(ctx, query, userID)
+	return err
+}
+
+// CleanupExpiredTokens removes expired tokens (run as periodic job)
+func (r *PostgresRefreshTokenRepository) CleanupExpiredTokens(ctx context.Context) (int64, error) {
+	query := `
+		DELETE FROM refresh_tokens
+		WHERE expires_at < NOW() OR (revoked = true AND created_at < NOW() - INTERVAL '30 days')
+	`
+
+	result, err := r.DB.ExecContext(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.RowsAffected()
+}
+
+// GetActiveTokenCount returns the number of active tokens for a user
+func (r *PostgresRefreshTokenRepository) GetActiveTokenCount(
+	ctx context.Context,
+	userID uuid.UUID,
+) (int, error) {
+	var count int
+	query := `
+		SELECT COUNT(*) FROM refresh_tokens
+		WHERE user_id = $1 AND revoked = false AND expires_at > NOW()
+	`
+
+	err := r.DB.GetContext(ctx, &count, query, userID)
+	return count, err
+}
+
+func (r *PostgresRefreshTokenRepository) GetByHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error) {
+	var token models.RefreshToken
+	query := `
+		SELECT id, user_id, token_hash, revoked, expires_at, created_at, consumed_at, parent_id
+		FROM refresh_tokens
+		WHERE token_hash = $1
+		LIMIT 1
+	`
+	err := r.DB.GetContext(ctx, &token, query, tokenHash)
+	if err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+func (r *PostgresRefreshTokenRepository) ConsumeToken(ctx context.Context, id uuid.UUID) error {
+	query := `
+		UPDATE refresh_tokens
+		SET consumed_at = NOW()
+		WHERE id = $1 AND consumed_at IS NULL
+	`
+	_, err := r.DB.ExecContext(ctx, query, id)
+	return err
+}
+
+func (r *PostgresRefreshTokenRepository) RevokeFamily(ctx context.Context, rootID uuid.UUID) error {
+	query := `
+		WITH RECURSIVE token_family AS (
+			SELECT id FROM refresh_tokens WHERE id = $1
+			UNION ALL
+			SELECT t.id FROM refresh_tokens t
+			INNER JOIN token_family tf ON t.parent_id = tf.id
+		)
+		UPDATE refresh_tokens
+		SET revoked = true
+		WHERE id IN (SELECT id FROM token_family)
+	`
+	_, err := r.DB.ExecContext(ctx, query, rootID)
+	return err
+}
+
+// GetMetadataByHash retrieves IP and UserAgent from refresh token
+func (r *PostgresRefreshTokenRepository) GetMetadataByHash(
+	ctx context.Context,
+	tokenHash string,
+) (ipAddress string, userAgent string, err error) {
+	var metadata struct {
+		IPAddress string `db:"ip_address"`
+		UserAgent string `db:"user_agent"`
+	}
+
+	query := `
+		SELECT ip_address, user_agent
+		FROM refresh_tokens
+		WHERE token_hash = $1
+		LIMIT 1
+	`
+
+	err = r.DB.GetContext(ctx, &metadata, query, tokenHash)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get token metadata: %w", err)
+	}
+
+	return metadata.IPAddress, metadata.UserAgent, nil
+}

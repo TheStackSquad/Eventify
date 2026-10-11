@@ -1,0 +1,47 @@
+# === Binaries & Executables ===
+*.exe
+*.exe~
+backend
+main
+bin/
+backend.exe
+main.exe
+
+# === Environment & Secrets ===
+# Never track real env files — track .example templates instead
+.env
+.env.*
+*.env
+.env.test          # has real DB credentials; copy .env.test.example to use
+.env.local
+cookies.txt
+login_headers.txt
+
+# === Go Artifacts ===
+# Compiled test binaries (e.g. vendor.test, analytics.test)
+*.test
+# Coverage and profiling output
+*.out
+*.prof
+coverage.out
+handlers_coverage.out
+coverage.html
+
+# === Local Test Folders & Scripts ===
+test_scripts/
+testy/
+*.sh
+
+# === IDE & OS ===
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# === Logs & Temp ===
+*.log
+logs/
+tmp/
+temp/vendorScript/

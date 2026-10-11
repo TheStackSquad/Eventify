@@ -1,0 +1,401 @@
+═══════════════════════════════════════════════════════════════════════════════
+                         VENDOR DOMAIN CALL CHAINS
+═══════════════════════════════════════════════════════════════════════════════
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│ CHAIN 1: List Vendors (Public)                                            │
+└───────────────────────────────────────────────────────────────────────────┘
+
+GET /api/v1/vendors?category=catering&state=Lagos
+
+  ┌─ HTTP Request
+  │
+  ├─ Router (pkg/routes/router.go:L158)
+  │  └─ vendorPublic.GET("", vendorHandler.ListVendors)
+  │
+  ├─ Handler: VendorHandler.ListVendors
+  │  │  File: pkg/handlers/vendor/vendor_read.go:L12
+  │  │
+  │  ├─ Extract query parameters (category, state, city, min_price)
+  │  ├─ Build filters map
+  │  └─ Call: vendorService.GetVendors(ctx, filters)
+  │
+  ├─ Service: VendorService.GetVendors
+  │  │  File: pkg/services/vendor/vendor_read.go:L12
+  │  │
+  │  ├─ Process filters (remove empty values)
+  │  ├─ Convert to repository format
+  │  └─ Call: vendorRepo.FindPublicVendors(ctx, repoFilters)
+  │
+  ├─ Repository: VendorRepository.FindPublicVendors
+  │  │  File: pkg/repository/vendor/vendor_repo.go:L163
+  │  │
+  │  ├─ Build WHERE clauses (status = 'active' + filters)
+  │  ├─ SQL Query:
+  │  │    SELECT id, owner_id, name, category, description, ...
+  │  │    FROM vendors
+  │  │    WHERE status = $1
+  │  │      AND category = $2  [if provided]
+  │  │      AND state = $3     [if provided]
+  │  │    ORDER BY is_identity_verified DESC, pvs_score DESC
+  │  │
+  │  └─ Return: []models.Vendor
+  │
+  └─ HTTP Response: 200 OK
+       {
+         "vendors": [...],
+         "pagination": {"totalCount": N}
+       }
+
+Database Impact:
+  ├─ Tables Read: vendors
+  ├─ Indexes Used: idx_vendors_category_state_status, idx_vendors_pvs_score
+  └─ Estimated Rows: ~100-1000 (depends on filters)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│ CHAIN 2: Get Vendor Profile with View Tracking                            │
+└───────────────────────────────────────────────────────────────────────────┘
+
+GET /api/v1/vendors/550e8400-e29b-41d4-a716-446655440000
+
+  ┌─ HTTP Request
+  │
+  ├─ Router (pkg/routes/router.go:L159-L162)
+  │  └─ vendorPublic.GET("/:id",
+  │       vendorHandler.TrackProfileView,    ← MIDDLEWARE
+  │       vendorHandler.GetVendorProfile,    ← HANDLER
+  │     )
+  │
+  ├─ Middleware: VendorHandler.TrackProfileView
+  │  │  File: pkg/handlers/vendor/vendor_read.go:L71
+  │  │
+  │  ├─ Extract vendor_id from URL params
+  │  ├─ Parse UUID
+  │  ├─ Extract viewer info:
+  │  │  ├─ viewer_id (from auth context, if logged in)
+  │  │  ├─ viewer_ip (from c.ClientIP())
+  │  │  ├─ session_id (from X-Session-ID header or IP+date)
+  │  │  └─ user_agent
+  │  │
+  │  └─ Async call (goroutine):
+  │     └─ vendorStatsRepo.RecordProfileView(...)
+  │        │  File: pkg/repository/vendor/vendor_stats_repo.go:L23
+  │        │
+  │        ├─ Call: SELECT record_profile_view($1,$2,$3,$4,$5)
+  │        │   └─ Database function with anti-gaming logic:
+  │        │      - Checks if same IP/session viewed in last 5 mins
+  │        │      - Returns true if recorded, false if duplicate
+  │        │
+  │        └─ INSERT INTO profile_views (if not duplicate)
+  │
+  ├─ Handler: VendorHandler.GetVendorProfile
+  │  │  File: pkg/handlers/vendor/vendor_read.go:L32
+  │  │
+  │  ├─ Validate vendor_id (UUID format)
+  │  └─ Call: vendorService.GetVendorByID(ctx, vendorID)
+  │
+  ├─ Service: VendorService.GetVendorByID
+  │  │  File: pkg/services/vendor/vendor_read.go:L24
+  │  │
+  │  ├─ Validate input (not empty)
+  │  ├─ Parse UUID
+  │  └─ Call: vendorRepo.GetByID(ctx, parsedID)
+  │
+  ├─ Repository: VendorRepository.GetByID
+  │  │  File: pkg/repository/vendor/vendor_repo.go:L149
+  │  │
+  │  ├─ SQL Query:
+  │  │    SELECT * FROM vendors WHERE id = $1
+  │  │
+  │  └─ Return: models.Vendor (or error if not found)
+  │
+  └─ HTTP Response: 200 OK
+       {
+         "id": "550e8400-e29b-41d4-a716-446655440000",
+         "name": "Elegant Events Lagos",
+         "category": "event-planning",
+         ...
+       }
+
+Database Impact:
+  ├─ Tables Written: profile_views (async)
+  ├─ Tables Read: vendors
+  ├─ Functions Called: record_profile_view()
+  └─ Concurrency: View tracking doesn't block response
+
+═══════════════════════════════════════════════════════════════════════════════
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│ CHAIN 3: Get Vendor Analytics (Tier-Gated)                                │
+└───────────────────────────────────────────────────────────────────────────┘
+
+GET /api/v1/vendors/550e8400-e29b-41d4-a716-446655440000/analytics/overview
+Authorization: Bearer <jwt_token>
+
+  ┌─ HTTP Request
+  │
+  ├─ Router (pkg/routes/router.go:L175-L178)
+  │  └─ vendorAnalytics.Use(middleware.AuthMiddleware(authService))
+  │     └─ vendorAnalytics.GET("/overview", vendorAnalyticsHandler.GetVendorAnalytics)
+  │
+  ├─ Middleware: AuthMiddleware
+  │  │  Extracts user_id from JWT and sets in context
+  │  │
+  │  └─ c.Set("user_id", authenticatedUserID)
+  │
+  ├─ Handler: VendorAnalyticsHandler.GetVendorAnalytics
+  │  │  File: pkg/handlers/vendor/vendor_analytics_main.go:L12
+  │  │
+  │  ├─ Extract authenticated user_id from context
+  │  ├─ Validate ownership (user_id == vendor's owner_id)
+  │  ├─ Parse vendor_id from URL
+  │  │
+  │  └─ Call: analyticsService.GetVendorAnalytics(ctx, vendorID)
+  │
+  ├─ Service: VendorAnalyticsService.GetVendorAnalytics
+  │  │  File: pkg/services/vendor/vendor_analytics_interface.go:L20
+  │  │  Implementation: vendorAnalyticsServiceImpl
+  │  │
+  │  ├─ PHASE 1: Synchronous Core Data
+  │  │  │
+  │  │  ├─ coreRepo.GetVendorBasicInfo(ctx, vendorID)
+  │  │  │  │  File: pkg/repository/vendor/vendor_metrics_repo.go:L33
+  │  │  │  │
+  │  │  │  ├─ SQL Query (ENRICHED JOIN):
+  │  │  │  │    SELECT 
+  │  │  │  │      v.id, v.name, v.category, v.pvs_score, v.review_count,
+  │  │  │  │      v.is_identity_verified, v.profile_completion, ...
+  │  │  │  │      COALESCE(s.tier, 'free') as tier,
+  │  │  │  │      COALESCE(s.status, 'inactive') as subscription_status,
+  │  │  │  │      COALESCE(st.views_total, 0) as views_total,
+  │  │  │  │      COALESCE(st.views_30d, 0) as views_30d
+  │  │  │  │    FROM vendors v
+  │  │  │  │    LEFT JOIN subscriptions s ON v.id = s.vendor_id 
+  │  │  │  │      AND s.status = 'active' 
+  │  │  │  │      AND (s.expires_at IS NULL OR s.expires_at > NOW())
+  │  │  │  │    LEFT JOIN vendor_stats st ON v.id = st.vendor_id
+  │  │  │  │    WHERE v.id = $1
+  │  │  │  │
+  │  │  │  └─ Return: *models.VendorBasicInfo
+  │  │  │
+  │  │  └─ coreRepo.GetVendorTrustScore(ctx, vendorID)
+  │  │     │  File: pkg/repository/vendor/vendor_metrics_repo.go:L19
+  │  │     │
+  │  │     ├─ SQL Query:
+  │  │     │    SELECT pvs_score as total_trust_weight, review_count
+  │  │     │    FROM vendors WHERE id = $1
+  │  │     │
+  │  │     └─ Return: *models.VendorTrustScore
+  │  │
+  │  ├─ PHASE 2: Concurrent Analytics Fetching (5 Goroutines)
+  │  │  │
+  │  │  ├─ Goroutine 1: GetReviewMetrics
+  │  │  │  │  File: pkg/repository/vendor/vendor_metrics_repo.go:L82
+  │  │  │  │
+  │  │  │  ├─ SQL Query:
+  │  │  │  │    SELECT 
+  │  │  │  │      COUNT(*) as total_reviews,
+  │  │  │  │      COALESCE(AVG(rating), 0) as avg_rating,
+  │  │  │  │      SUM(CASE WHEN rating = 1..5) as star_counts
+  │  │  │  │    FROM reviews WHERE vendor_id = $1
+  │  │  │  │
+  │  │  │  └─ Return: *models.ReviewMetricsRaw
+  │  │  │
+  │  │  ├─ Goroutine 2: GetRecentReviews
+  │  │  │  └─ DataRepo.GetRecentReviews(ctx, vendorID, 5)
+  │  │  │
+  │  │  ├─ Goroutine 3: GetRecentInquiries
+  │  │  │  └─ DataRepo.GetRecentInquiries(ctx, vendorID, 5)
+  │  │  │
+  │  │  ├─ Goroutine 4: 7-Day Metrics
+  │  │  │  ├─ GetInquiryCountByPeriod(ctx, vendorID, 7)
+  │  │  │  ├─ GetReviewCountByPeriod(ctx, vendorID, 7)
+  │  │  │  └─ GetAverageRatingByPeriod(ctx, vendorID, 7)
+  │  │  │
+  │  │  └─ Goroutine 5: 30-Day Metrics
+  │  │     ├─ GetInquiryCountByPeriod(ctx, vendorID, 30)
+  │  │     ├─ GetReviewCountByPeriod(ctx, vendorID, 30)
+  │  │     └─ GetAverageRatingByPeriod(ctx, vendorID, 30)
+  │  │
+  │  ├─ PHASE 3: Data Assembly
+  │  │  ├─ calculateOverview(vendorInfo, trustScore)
+  │  │  ├─ calculateInquiries(recentInquiries, in7, in30)
+  │  │  ├─ calculateReviews(reviewMetrics, recentReviews)
+  │  │  ├─ calculateTrends(in7, rev7, avg7, in30, rev30, avg30)
+  │  │  └─ calculatePerformance(vendorInfo, trustScore)
+  │  │
+  │  └─ PHASE 4: Tier Gating
+  │     │  File: pkg/services/vendor/analytics_tier_gate.go:L10
+  │     │
+  │     ├─ coreRepo.GetVendorTier(ctx, vendorID)
+  │     │  └─ Returns: 'free', 'premium', or 'featured'
+  │     │
+  │     ├─ Switch on tier:
+  │     │  ├─ 'free' → buildFreeTierAnalytics()
+  │     │  │   └─ Strips: detailed inquiries, trends, performance
+  │     │  │   └─ Adds: Restrictions message & upsell
+  │     │  │
+  │     │  ├─ 'premium' → buildPremiumTierAnalytics()
+  │     │  │   └─ Full data + upgrade to featured message
+  │     │  │
+  │     │  └─ 'featured' → Full analytics (no restrictions)
+  │     │
+  │     └─ Return: *models.VendorAnalyticsResponse (tier-adjusted)
+  │
+  └─ HTTP Response: 200 OK
+       {
+         "status": "success",
+         "data": {
+           "vendor_id": "...",
+           "overview": { ... },
+           "inquiries": { ... },
+           "reviews": { ... },
+           "trends": { ... } OR null (if free tier),
+           "performance": { ... } OR null (if free tier),
+           "restrictions": {  ← Only if not featured
+             "tier": "free",
+             "message": "🔒 Upgrade to Premium...",
+             "missing_features": [...]
+           }
+         }
+       }
+
+Database Impact:
+  ├─ Tables Read: vendors, subscriptions, vendor_stats, reviews, inquiries
+  ├─ Concurrent Queries: 5 (Phase 2)
+  ├─ Total Query Time: ~50-150ms (parallelized)
+  └─ Response Time: ~200-300ms (including tier gating)
+
+═══════════════════════════════════════════════════════════════════════════════
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│ CHAIN 4: Vendor Registration (Full Flow)                                  │
+└───────────────────────────────────────────────────────────────────────────┘
+
+POST /api/v1/vendors/register
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "name": "Elegant Events",
+  "category": "event-planning",
+  "vnin": "VN123456789",
+  "verifiedVnin": "VN123456789",
+  ...
+}
+
+  ┌─ HTTP Request
+  │
+  ├─ Router (pkg/routes/router.go:L168)
+  │  └─ vendorProtected.POST("/register", vendorHandler.RegisterVendor)
+  │     └─ Middlewares: AuthMiddleware, RateLimit
+  │
+  ├─ Middleware Chain:
+  │  ├─ AuthMiddleware → Extracts user_id from JWT
+  │  └─ RateLimit → Prevents abuse (WriteLimiter)
+  │
+  ├─ Handler: VendorHandler.RegisterVendor
+  │  │  File: pkg/handlers/vendor/vendor_write.go:L33
+  │  │
+  │  ├─ Bind JSON to VendorBinding struct
+  │  ├─ SECURITY CHECK: vnin == verifiedVnin (tamper-proof)
+  │  │   └─ If mismatch → 403 Forbidden
+  │  │
+  │  ├─ Get authenticated user_id from context
+  │  │
+  │  ├─ Check if user already has vendor profile:
+  │  │  └─ vendorService.GetVendorByOwnerID(ctx, ownerID)
+  │  │     └─ If exists → 409 Conflict
+  │  │
+  │  ├─ Map VendorBinding → models.Vendor
+  │  │  ├─ Use null helpers: ToNullString(), ToNullInt32(), etc.
+  │  │  └─ Set defaults: status='active', pvs_score=0
+  │  │
+  │  └─ Call: vendorService.CreateVendor(ctx, &vendor)
+  │
+  ├─ Service: VendorService.CreateVendor
+  │  │  File: pkg/services/vendor/vendor_write.go
+  │  │
+  │  └─ Call: vendorRepo.Create(ctx, vendor)
+  │
+  ├─ Repository: VendorRepository.Create
+  │  │  File: pkg/repository/vendor/vendor_repo.go:L37
+  │  │
+  │  ├─ Generate UUID if not provided
+  │  ├─ Set timestamps (created_at, updated_at)
+  │  │
+  │  ├─ SQL Query:
+  │  │    INSERT INTO vendors (
+  │  │      id, owner_id, name, category, vnin, ...
+  │  │    ) VALUES (
+  │  │      :id, :owner_id, :name, :category, :vnin, ...
+  │  │    ) RETURNING id
+  │  │
+  │  └─ Return: vendor_id (UUID)
+  │
+  └─ HTTP Response: 201 Created
+       {
+         "vendor_id": "550e8400-...",
+         "message": "Welcome aboard!"
+       }
+
+Database Impact:
+  ├─ Tables Written: vendors (1 row)
+  ├─ Constraints Checked: 
+  │  ├─ vendors_owner_id_unique (ensures 1 vendor per user)
+  │  └─ FK: vendors.owner_id → users.id
+  └─ Side Effects:
+     └─ vendors.subscription_tier defaults to 'free'
+
+═══════════════════════════════════════════════════════════════════════════════
+
+┌───────────────────────────────────────────────────────────────────────────┐
+│ CHAIN 5: Subscription Status Change → Vendor Tier Sync (Trigger)          │
+└───────────────────────────────────────────────────────────────────────────┘
+
+Triggered by: Subscription status change (payment webhook, expiry worker, etc.)
+
+  ┌─ Database Event: INSERT/UPDATE on subscriptions table
+  │
+  ├─ Trigger: trigger_sync_vendor_tier
+  │  │  Type: AFTER INSERT OR UPDATE
+  │  │  For Each Row
+  │  │
+  │  └─ Execute Function: sync_vendor_subscription_tier()
+  │
+  ├─ Function Logic:
+  │  │
+  │  ├─ IF NEW.status = 'active' AND not expired
+  │  │  │
+  │  │  └─ UPDATE vendors
+  │  │       SET subscription_tier = NEW.tier,
+  │  │           updated_at = NOW()
+  │  │       WHERE id = NEW.vendor_id
+  │  │
+  │  └─ ELSIF NEW.status IN ('expired', 'cancelled') OR expired
+  │     │
+  │     ├─ Check for other active subscriptions:
+  │     │    SELECT 1 FROM subscriptions
+  │     │    WHERE vendor_id = NEW.vendor_id
+  │     │      AND status = 'active'
+  │     │      AND (expires_at IS NULL OR expires_at > NOW())
+  │     │      AND id != NEW.id
+  │     │
+  │     └─ IF no active subs found:
+  │        └─ UPDATE vendors
+  │             SET subscription_tier = 'free',
+  │                 updated_at = NOW()
+  │             WHERE id = NEW.vendor_id
+  │
+  └─ Cascading Effects:
+     ├─ Analytics tier gating (immediate)
+     ├─ Search result ordering (on next query)
+     └─ Leaderboard eligibility (on next refresh)
+
+Database Impact:
+  ├─ Automatic: No application code needed
+  ├─ Consistency: Always synced (ACID guarantee)
+  └─ Performance: ~1-2ms per subscription change
+

@@ -1,0 +1,285 @@
+// backend/pkg/handlers/event/events_management.go
+
+package event
+
+import (
+	"context"
+	"net/http"
+	"time"
+
+
+	//"github.com/eventify/backend/pkg/models"
+	serviceevent "github.com/eventify/backend/pkg/services/event"
+	"github.com/eventify/backend/pkg/utils"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+)
+
+// ============================================================================
+// EVENT MANAGEMENT HANDLERS (Organizer Dashboard)
+// ============================================================================
+
+func (h *EventHandler) GetUserEvents(c *gin.Context) {
+	organizerID, err := extractUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Authentication required"})
+		return
+	}
+ 
+	includeDeleted := c.Query("includeDeleted") == "true"
+ 
+	log.Debug().
+		Str("organizer_id", organizerID.String()).
+		Bool("include_deleted", includeDeleted).
+		Msg("Fetching user events")
+ 
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+ 
+	result, err := h.eventService.GetEventsByOrganizer(ctx, organizerID, includeDeleted)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to fetch user events")
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch events"})
+		return
+	}
+ 
+	c.JSON(http.StatusOK, gin.H{
+		"events": result.Events,
+		"total":  result.Total,
+	})
+}
+ 
+
+func (h *EventHandler) GetEventByID(c *gin.Context) {
+	// 1. Extract organizer ID
+	organizerID, err := extractUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Authentication required"})
+		return
+	}
+	
+	// 2. Parse event ID
+	eventID, err := parseEventID(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid event ID"})
+		return
+	}
+	
+	log.Debug().
+		Str("event_id", eventID.String()).
+		Str("organizer_id", organizerID.String()).
+		Msg("Fetching protected event")
+	
+	// 3. Call service
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	
+	event, err := h.eventService.GetEventByID(ctx, eventID, &organizerID)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to fetch event")
+		c.JSON(http.StatusNotFound, gin.H{"message": "Event not found"})
+		return
+	}
+	
+	// 4. Verify ownership
+	if event.OrganizerID != organizerID {
+		c.JSON(http.StatusForbidden, gin.H{"message": "You don't have permission to access this event"})
+		return
+	}
+	
+	// 5. Success response
+	c.JSON(http.StatusOK, event)
+}
+
+func (h *EventHandler) UpdateEvent(c *gin.Context) {
+	// 1. Extract organizer ID
+	//organizerID, err := extractUserID(c)
+	organizerID, err := uuid.Parse("8379eaa2-0f99-4eda-a6f3-d783db819c6c")
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Authentication required"})
+		return
+	}
+	
+	// 2. Parse event ID
+	eventID, err := parseEventID(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid event ID"})
+		return
+	}
+	
+	// 3. Bind update payload
+	var updates serviceevent.EventUpdateDTO
+	if err := c.ShouldBindJSON(&updates); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "Invalid update data",
+			"errors":  utils.GetValidationErrors(err),
+		})
+		return
+	}
+
+	// ✅ DEFENSIVE LOGGING: Check if tickets were received
+	log.Info().
+		Str("event_id", eventID.String()).
+		Bool("tickets_is_nil", updates.Tickets == nil).
+		Int("tickets_count", len(updates.Tickets)).
+		Interface("payload_received", updates).
+		Msg("📥 Incoming Update Payload")
+
+	// ⚠️ CRITICAL WARNING: Alert if tickets are missing
+	if updates.Tickets == nil {
+		log.Warn().
+			Str("event_id", eventID.String()).
+			Msg("⚠️ WARNING: No tickets in update payload - ticket tiers will NOT be synced")
+	} else if len(updates.Tickets) == 0 {
+		log.Warn().
+			Str("event_id", eventID.String()).
+			Msg("⚠️ WARNING: Empty tickets array - all tiers may be deleted")
+	} else {
+		log.Info().
+			Str("event_id", eventID.String()).
+			Int("ticket_count", len(updates.Tickets)).
+			Msg("✅ Tickets present in payload - will sync tiers")
+	}
+
+	// 4. Convert price from Naira to Kobo
+	if updates.Tickets != nil {
+		for i := range updates.Tickets {
+			updates.Tickets[i].PriceKobo = int64(updates.Tickets[i].Price * 100)
+			
+			log.Debug().
+				Int("tier_index", i).
+				Str("tier_name", updates.Tickets[i].Name).
+				Float64("price_naira", updates.Tickets[i].Price).
+				Int64("price_kobo", updates.Tickets[i].PriceKobo).
+				Msg("💰 Converting ticket price")
+		}
+	}
+	
+	log.Debug().
+		Str("event_id", eventID.String()).
+		Str("organizer_id", organizerID.String()).
+		Msg("Updating event")
+	
+	// 5. Call service
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	
+	updatedEvent, err := h.eventService.UpdateEvent(ctx, eventID, organizerID, &updates)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to update event")
+		
+		if appErr, ok := err.(*utils.AppError); ok {
+			c.JSON(appErr.HTTPStatus(), gin.H{"message": appErr.Message})
+			return
+		}
+		
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Failed to update event",
+			"error":   err.Error(),
+		})
+		return
+	}
+	
+	// 6. Success response
+	log.Info().
+		Str("event_id", eventID.String()).
+		Msg("✅ Event updated successfully")
+	
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Event updated successfully",
+		"event":   updatedEvent,
+	})
+}
+
+func (h *EventHandler) DeleteEvent(c *gin.Context) {
+	// 1. Extract organizer ID
+	organizerID, err := extractUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Authentication required"})
+		return
+	}
+	
+	// 2. Parse event ID
+	eventID, err := parseEventID(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid event ID"})
+		return
+	}
+	
+	log.Debug().
+		Str("event_id", eventID.String()).
+		Str("organizer_id", organizerID.String()).
+		Msg("Deleting event")
+	
+	// 3. Call service
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	
+	err = h.eventService.SoftDeleteEvent(ctx, eventID, organizerID)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to delete event")
+		
+		if appErr, ok := err.(*utils.AppError); ok {
+			c.JSON(appErr.HTTPStatus(), gin.H{"message": appErr.Message})
+			return
+		}
+		
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Failed to delete event",
+			"error":   err.Error(),
+		})
+		return
+	}
+	
+	// 4. Success response
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Event deleted successfully",
+		"eventId": eventID.String(),
+	})
+}
+
+func (h *EventHandler) GetEventAnalytics(c *gin.Context) {
+	// 1. Extract organizer ID
+	organizerID, err := extractUserID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Authentication required"})
+		return
+	}
+	
+	// 2. Parse event ID
+	eventID, err := parseEventID(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid event ID"})
+		return
+	}
+	
+	log.Debug().
+		Str("event_id", eventID.String()).
+		Str("organizer_id", organizerID.String()).
+		Msg("Fetching event analytics")
+	
+	// 3. Call service
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	
+	analytics, err := h.eventService.GetEventAnalytics(ctx, eventID, organizerID)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to fetch analytics")
+		
+		if appErr, ok := err.(*utils.AppError); ok {
+			c.JSON(appErr.HTTPStatus(), gin.H{"message": appErr.Message})
+			return
+		}
+		
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Failed to fetch analytics",
+			"error":   err.Error(),
+		})
+		return
+	}
+	
+	// 4. Success response
+	c.JSON(http.StatusOK, analytics)
+}

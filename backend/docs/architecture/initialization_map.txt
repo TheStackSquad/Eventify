@@ -1,0 +1,179 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    APPLICATION INITIALIZATION SEQUENCE
+═══════════════════════════════════════════════════════════════════════════════
+
+main.go Execution Order (main() function):
+
+Step 1: Environment & Configuration
+├─ Load .env file
+├─ Get DATABASE_URL
+└─ Initialize logger
+
+Step 2: Database Connection
+├─ dbClient := db.InitDB(databaseURL)
+└─ Verify connection
+
+Step 3: JWT Service
+├─ jwtService := servicejwt.NewJWTService()
+└─ Load RSA keys (RS256)
+
+Step 4: Repository Layer (Data Access)
+├─ authRepo := repoauth.NewAuthRepository(dbClient)
+├─ refreshTokenRepo := repoauth.NewPostgresRefreshTokenRepository(dbClient)
+├─ vendorRepo := repovendor.NewPostgresVendorRepository(dbClient)
+├─ ⚠️  vendorStatsRepo := repovendor.NewPostgresVendorStatsRepo(dbClient)
+│   └─ NEEDED BY: VendorHandler.TrackProfileView
+├─ vendorCoreMetricsRepo := repovendor.NewVendorCoreMetricsRepository(dbClient)
+├─ vendorMetricsRepo := repovendor.NewVendorMetricsRepository(dbClient)
+├─ vendorDataRepo := repovendor.NewVendorDataRepository(dbClient)
+├─ likeRepo := repolike.NewPostgresLikeRepository(dbClient)
+├─ reviewRepo := reporeview.NewPostgresReviewRepository(dbClient)
+├─ inquiryRepo := repoinquiries.NewInquiryRepository(dbClient)
+├─ feedbackRepo := repofeedback.NewFeedbackRepository(dbClient)
+├─ orderRepo := repoorder.NewPostgresOrderRepository(dbClient)
+├─ eventRepo := repoevent.NewPostgresEventRepository(dbClient)
+├─ analyticsRepo := analytics.NewPostgresAnalyticsRepository(dbClient)
+└─ subscriptionRepo := reposubscription.NewSubscriptionRepository(dbClient)
+
+Step 5: External Services
+└─ paystackClient := servicepaystack.NewClient(
+     os.Getenv("PAYSTACK_SECRET_KEY"),
+     &http.Client{Timeout: 30 * time.Second},
+   )
+
+Step 6: Service Layer (Business Logic)
+├─ authService := serviceauth.NewAuthService(
+│    authRepo,
+│    refreshTokenRepo,
+│    vendorRepo,
+│    eventRepo,
+│    jwtService,
+│  )
+├─ eventService := serviceevent.NewEventService(dbClient, eventRepo)
+├─ likeService := servicelike.NewLikeService(likeRepo)
+├─ vendorService := servicevendor.NewVendorService(vendorRepo)
+├─ vendorAnalyticsService := servicevendor.NewVendorAnalyticsService(
+│    vendorCoreMetricsRepo,
+│    vendorMetricsRepo,
+│    vendorDataRepo,
+│  )
+├─ reviewService := servicereview.NewReviewService(reviewRepo, vendorRepo, inquiryRepo)
+├─ inquiryService := serviceinquiries.NewInquiryService(inquiryRepo, inquiryRepo, vendorRepo)
+├─ feedbackService := servicefeedback.NewFeedbackService(feedbackRepo)
+├─ analyticsService := serviceanalytics.NewAnalyticsService(analyticsRepo)
+├─ pricingService := servicepricing.NewPricingService(eventRepo)
+├─ orderService := serviceorder.NewOrderService(
+│    orderRepo,
+│    eventRepo,
+│    pricingService,
+│    paystackClient,
+│  )
+└─ subscriptionService := servicesubscription.NewSubscriptionService(
+     vendorRepo,
+     subscriptionRepo,
+     authRepo,
+     paystackClient,
+     os.Getenv("PAYSTACK_SECRET_KEY"),
+   )
+
+Step 7: Handler Layer (HTTP Controllers)
+├─ authHandler := handlerauth.NewAuthHandler(authService)
+├─ eventHandler := handlerevent.NewEventHandler(eventService, likeService)
+├─ vendorHandler := handlervendor.NewVendorHandler(vendorService, vendorStatsRepo)
+│   └─ Dependencies:
+│      ├─ vendorService (CRUD operations)
+│      └─ vendorStatsRepo (profile view tracking)
+├─ vendorAnalyticsHandler := handlervendor.NewVendorAnalyticsHandler(vendorAnalyticsService)
+├─ reviewHandler := handlerreview.NewReviewHandler(reviewService)
+├─ inquiryHandler := handlerinquiries.NewInquiryHandler(inquiryService)
+├─ feedbackHandler := handlerfeedback.NewFeedbackHandler(feedbackService)
+├─ orderHandler := handlerorder.NewOrderHandler(orderService)
+├─ analyticsHandler := handleranalytics.NewAnalyticsHandler(analyticsService)
+└─ subscriptionHandler := handlersubscription.NewSubscriptionHandler(
+     subscriptionService,
+     vendorRepo,
+   )
+
+Step 8: Background Workers
+├─ startTokenCleanup(refreshTokenRepo, authRepo)
+├─ go orderService.StartStockReleaseWorker(context.Background(), 1*time.Minute, 15*time.Minute)
+└─ go subscriptionService.StartExpiryWorker(context.Background(), 1*time.Hour)
+    └─ This worker triggers subscription status changes
+       └─ Which triggers: trigger_sync_vendor_tier
+          └─ Which updates: vendors.subscription_tier
+
+Step 9: Router Configuration
+router := routes.ConfigureRouter(
+  authHandler,
+  eventHandler,
+  vendorHandler,
+  reviewHandler,
+  inquiryHandler,
+  feedbackHandler,
+  orderHandler,
+  subscriptionHandler,
+  authRepo,
+  analyticsHandler,
+  vendorAnalyticsHandler,
+  jwtService,
+  authService,
+)
+
+Step 10: Server Start
+router.Run(":8080")
+
+═══════════════════════════════════════════════════════════════════════════════
+
+VENDOR-SPECIFIC DEPENDENCY CHAIN:
+
+dbClient (database connection)
+  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ REPOSITORY LAYER                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│ vendorRepo := NewPostgresVendorRepository(dbClient)              │
+│ vendorStatsRepo := NewPostgresVendorStatsRepo(dbClient)          │
+│ vendorCoreMetricsRepo := NewVendorCoreMetricsRepository(dbClient)│
+│ vendorMetricsRepo := NewVendorMetricsRepository(dbClient)        │
+│ vendorDataRepo := NewVendorDataRepository(dbClient)              │
+└─────────────────────────────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ SERVICE LAYER                                                    │
+├─────────────────────────────────────────────────────────────────┤
+│ vendorService := NewVendorService(vendorRepo)                   │
+│ vendorAnalyticsService := NewVendorAnalyticsService(             │
+│   vendorCoreMetricsRepo,                                         │
+│   vendorMetricsRepo,                                             │
+│   vendorDataRepo,                                                │
+│ )                                                                │
+└─────────────────────────────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ HANDLER LAYER                                                    │
+├─────────────────────────────────────────────────────────────────┤
+│ vendorHandler := NewVendorHandler(                               │
+│   vendorService,                                                 │
+│   vendorStatsRepo,  ← CROSS-LAYER (for TrackProfileView)        │
+│ )                                                                │
+│ vendorAnalyticsHandler := NewVendorAnalyticsHandler(             │
+│   vendorAnalyticsService,                                        │
+│ )                                                                │
+└─────────────────────────────────────────────────────────────────┘
+  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ ROUTER LAYER                                                     │
+├─────────────────────────────────────────────────────────────────┤
+│ router.GET("/api/v1/vendors",                                   │
+│   vendorHandler.ListVendors,                                    │
+│ )                                                                │
+│ router.GET("/api/v1/vendors/:id",                               │
+│   vendorHandler.TrackProfileView,    ← Uses vendorStatsRepo     │
+│   vendorHandler.GetVendorProfile,    ← Uses vendorService       │
+│ )                                                                │
+│ router.GET("/api/v1/vendors/:id/analytics/overview",            │
+│   authMiddleware,                                                │
+│   vendorAnalyticsHandler.GetVendorAnalytics,                    │
+│ )                                                                │
+└─────────────────────────────────────────────────────────────────┘
+

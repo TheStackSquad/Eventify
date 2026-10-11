@@ -1,0 +1,176 @@
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         HTTP LAYER (Handlers)                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ VendorHandler                                                         │  │
+│  │ ├─ File: pkg/handlers/vendor/vendor.go                               │  │
+│  │ ├─ Dependencies:                                                      │  │
+│  │ │  ├─ VendorService (service layer)                                  │  │
+│  │ │  └─ VendorStatsRepo (repository layer) ⚠️  CROSS-LAYER DEPENDENCY │  │
+│  │ └─ Methods:                                                           │  │
+│  │    ├─ ListVendors() → GET /api/v1/vendors                            │  │
+│  │    ├─ GetVendorProfile() → GET /api/v1/vendors/:id                   │  │
+│  │    ├─ TrackProfileView() → Middleware on GET /:id                    │  │
+│  │    ├─ RegisterVendor() → POST /api/v1/vendors/register               │  │
+│  │    ├─ UpdateVendor() → PATCH /api/v1/vendors/:id                     │  │
+│  │    └─ ToggleIdentityVerification() → PUT /admin/vendors/:id/verify   │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ VendorAnalyticsHandler                                                │  │
+│  │ ├─ File: pkg/handlers/vendor/vendor_analytics_handler.go             │  │
+│  │ ├─ Dependencies:                                                      │  │
+│  │ │  └─ VendorAnalyticsService (service layer)                         │  │
+│  │ └─ Methods:                                                           │  │
+│  │    ├─ GetVendorAnalytics() → GET /api/v1/vendors/:id/analytics       │  │
+│  │    ├─ GetVendorTrendsDetailed() → STUB (not implemented)             │  │
+│  │    ├─ GetVendorComparativeAnalytics() → STUB (not implemented)       │  │
+│  │    └─ ExportVendorAnalytics() → STUB (not implemented)               │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        SERVICE LAYER (Business Logic)                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ VendorService                                                         │  │
+│  │ ├─ File: pkg/services/vendor/vendor_services.go                      │  │
+│  │ ├─ Interface: 7 methods                                               │  │
+│  │ ├─ Dependencies:                                                      │  │
+│  │ │  └─ VendorRepository                                                │  │
+│  │ └─ Methods:                                                           │  │
+│  │    ├─ GetVendors() → FindPublicVendors()                             │  │
+│  │    ├─ GetVendorByID() → VendorRepo.GetByID()                         │  │
+│  │    ├─ GetVendorByOwnerID() → VendorRepo.GetByOwnerID()               │  │
+│  │    ├─ CreateVendor() → VendorRepo.Create()                           │  │
+│  │    ├─ UpdateVendor() → VendorRepo.UpdateFields()                     │  │
+│  │    ├─ DeleteVendor() → VendorRepo.Delete()                           │  │
+│  │    ├─ CalculateAndUpdatePVS() → Custom PVS logic                     │  │
+│  │    └─ UpdateVerificationStatus() → VendorRepo.UpdateVerificationFlag│  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ VendorAnalyticsService                                                │  │
+│  │ ├─ File: pkg/services/vendor/vendor_analytics_interface.go           │  │
+│  │ ├─ Implementation: vendorAnalyticsServiceImpl                         │  │
+│  │ ├─ Dependencies:                                                      │  │
+│  │ │  ├─ VendorCoreMetricsRepository                                    │  │
+│  │ │  ├─ VendorMetricsRepository                                        │  │
+│  │ │  └─ VendorDataRepository                                           │  │
+│  │ └─ Methods:                                                           │  │
+│  │    ├─ GetVendorAnalytics() → Orchestrates 3-phase data fetch         │  │
+│  │    ├─ ApplyTierRestrictions() → Gates analytics by subscription tier │  │
+│  │    └─ Internal helpers (calculateOverview, calculateInquiries, etc)  │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     REPOSITORY LAYER (Data Access)                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ VendorRepository (Main CRUD)                                          │  │
+│  │ ├─ Interface: pkg/repository/vendor/vendor_repo.go                   │  │
+│  │ ├─ Implementation: PostgresVendorRepository                           │  │
+│  │ ├─ Tables: vendors                                                    │  │
+│  │ └─ Methods (11):                                                      │  │
+│  │    ├─ Create(), GetByID(), GetByOwnerID()                            │  │
+│  │    ├─ UpdateFields(), IncrementField(), Delete()                     │  │
+│  │    ├─ FindPublicVendors() [with filters]                             │  │
+│  │    ├─ UpdateVerificationFlag(), UpdatePVSScore()                     │  │
+│  │    ├─ GetVendorSubscription() [joins subscriptions]                  │  │
+│  │    └─ IsRegisteredVendor()                                           │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ VendorCoreMetricsRepository                                           │  │
+│  │ ├─ Interface: pkg/repository/vendor/vendor_analytics_repo.go         │  │
+│  │ ├─ Implementation: PostgresVendorCoreMetricsRepository                │  │
+│  │ ├─ Tables: vendors, subscriptions, vendor_stats                      │  │
+│  │ └─ Methods (3):                                                       │  │
+│  │    ├─ GetVendorTrustScore() → pvs_score, review_count                │  │
+│  │    ├─ GetVendorBasicInfo() → Enriched join (vendors+subs+stats)      │  │
+│  │    └─ GetVendorTier() → Active subscription tier                     │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ VendorMetricsRepository                                               │  │
+│  │ ├─ Interface: pkg/repository/vendor/vendor_analytics_repo.go         │  │
+│  │ ├─ Implementation: PostgresVendorMetricsRepository                    │  │
+│  │ ├─ Tables: inquiries, reviews                                        │  │
+│  │ └─ Methods (4):                                                       │  │
+│  │    ├─ GetInquiryCountByPeriod(days)                                  │  │
+│  │    ├─ GetReviewMetrics() → rating distribution                       │  │
+│  │    ├─ GetReviewCountByPeriod(days)                                   │  │
+│  │    └─ GetAverageRatingByPeriod(days)                                 │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ VendorDataRepository                                                  │  │
+│  │ ├─ Interface: pkg/repository/vendor/vendor_analytics_repo.go         │  │
+│  │ ├─ Implementation: PostgresVendorDataRepository                       │  │
+│  │ ├─ Tables: inquiries, reviews                                        │  │
+│  │ └─ Methods (2):                                                       │  │
+│  │    ├─ GetRecentInquiries(limit) → Last N inquiries                   │  │
+│  │    └─ GetRecentReviews(limit) → Last N reviews                       │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ VendorPublicStatsRepository                                           │  │
+│  │ ├─ Interface: pkg/repository/vendor/vendor_analytics_repo.go         │  │
+│  │ ├─ Implementation: PostgresVendorStatsRepo                            │  │
+│  │ ├─ Tables: profile_views, subscriptions, vendors                     │  │
+│  │ └─ Methods (7):                                                       │  │
+│  │    ├─ RecordProfileView() → Inserts into profile_views               │  │
+│  │    ├─ GetProfileViewCount30d()                                       │  │
+│  │    ├─ GetCategoryRank() → Ranking within category                    │  │
+│  │    ├─ GetLocationRank() → Ranking within location                    │  │
+│  │    ├─ GetVendorTier() → Active subscription tier                     │  │
+│  │    ├─ GetBatchProfileViewCounts() → Bulk query                       │  │
+│  │    └─ GetBatchVendorTiers() → Bulk query                             │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ VendorLeaderboardRepo (NEW - Not in main.go yet!)                    │  │
+│  │ ├─ File: pkg/repository/vendor/vendor_leaderboard_repo.go            │  │
+│  │ ├─ Implementation: VendorLeaderboardRepo                              │  │
+│  │ ├─ Tables: vendor_of_the_month (materialized view)                   │  │
+│  │ └─ Methods (3):                                                       │  │
+│  │    ├─ GetTopVendorsByCategory(category, limit)                       │  │
+│  │    ├─ GetTopVendorsByLocation(state, city, limit)                    │  │
+│  │    └─ GetVendorOfTheMonth() → Top vendor overall                     │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                     ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         DATABASE LAYER (PostgreSQL)                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  Tables:                                                                      │
+│  ├─ vendors (30 columns) - Main vendor profiles                             │
+│  ├─ subscriptions (16 columns) - Subscription records                       │
+│  ├─ vendor_stats (10 columns) - Cached ranking data                         │
+│  ├─ vendor_trust_score (4 columns) - Trust metrics                          │
+│  ├─ profile_views - View tracking with anti-gaming                          │
+│  ├─ inquiries - Vendor inquiry messages                                     │
+│  └─ reviews - Vendor reviews                                                 │
+│                                                                               │
+│  Materialized Views:                                                          │
+│  └─ vendor_of_the_month - Monthly leaderboard (needs creation)              │
+│                                                                               │
+│  Triggers:                                                                    │
+│  ├─ trigger_sync_vendor_tier - Syncs vendors.subscription_tier              │
+│  └─ trigger_vendor_review_count - Auto-increments review_count              │
+│                                                                               │
+│  Functions:                                                                   │
+│  ├─ record_profile_view() - Anti-gaming view tracking                       │
+│  ├─ get_profile_view_count_30d() - View count aggregation                   │
+│  └─ sync_vendor_subscription_tier() - Tier sync logic                       │
+│                                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+

@@ -1,0 +1,275 @@
+═══════════════════════════════════════════════════════════════════════════════
+                      VENDOR DOMAIN FEATURES MATRIX
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ FEATURE 1: Vendor CRUD Operations                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Status: ✅ FULLY IMPLEMENTED                                                │
+│                                                                              │
+│ Endpoints:                                                                   │
+│ ├─ POST   /api/v1/vendors/register       [Auth Required]                   │
+│ ├─ GET    /api/v1/vendors                [Public]                           │
+│ ├─ GET    /api/v1/vendors/:id            [Public]                           │
+│ ├─ PATCH  /api/v1/vendors/:id            [Auth + Ownership]                 │
+│ └─ PUT    /admin/vendors/:id/verify      [Admin Only]                       │
+│                                                                              │
+│ Dependencies:                                                                │
+│ ├─ Handler: VendorHandler                                                   │
+│ ├─ Service: VendorService                                                   │
+│ ├─ Repo: VendorRepository                                                   │
+│ └─ Tables: vendors, users (FK)                                              │
+│                                                                              │
+│ Security:                                                                    │
+│ ├─ Registration: vNIN tamper-proof check                                    │
+│ ├─ Updates: Owner verification                                              │
+│ ├─ Verification: Admin-only endpoint                                        │
+│ └─ Rate Limiting: Applied on write operations                               │
+│                                                                              │
+│ Data Flow:                                                                   │
+│ Client → Router → AuthMiddleware → Handler → Service → Repository → DB      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ FEATURE 2: Profile View Tracking & Anti-Gaming                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Status: ✅ IMPLEMENTED (Middleware-based)                                   │
+│                                                                              │
+│ Trigger: GET /api/v1/vendors/:id                                            │
+│                                                                              │
+│ Flow:                                                                        │
+│ 1. Request hits TrackProfileView middleware                                 │
+│ 2. Extracts: vendor_id, viewer_id, IP, session_id, user_agent              │
+│ 3. Async call to VendorStatsRepo.RecordProfileView()                        │
+│ 4. Database function checks for duplicates (5-min window)                   │
+│ 5. Inserts into profile_views if unique                                     │
+│ 6. Request continues to GetVendorProfile handler                            │
+│                                                                              │
+│ Anti-Gaming Logic:                                                           │
+│ ├─ Same IP + vendor_id within 5 mins → Rejected                            │
+│ ├─ Same session_id + vendor_id within 5 mins → Rejected                    │
+│ └─ Database function: record_profile_view()                                 │
+│                                                                              │
+│ Performance:                                                                 │
+│ ├─ Async execution (doesn't block response)                                 │
+│ ├─ 3-second timeout on tracking                                             │
+│ └─ Failures logged but don't affect user experience                         │
+│                                                                              │
+│ Dependencies:                                                                │
+│ ├─ Middleware: TrackProfileView                                             │
+│ ├─ Repo: VendorPublicStatsRepository                                        │
+│ ├─ Table: profile_views                                                     │
+│ └─ DB Function: record_profile_view()                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ FEATURE 3: Vendor Analytics Dashboard (Tier-Gated)                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Status: ✅ IMPLEMENTED with Tier Restrictions                               │
+│                                                                              │
+│ Endpoint: GET /api/v1/vendors/:id/analytics/overview                        │
+│                                                                              │
+│ Authentication:                                                              │
+│ ├─ Requires: Valid JWT token                                                │
+│ ├─ Ownership Check: user_id must match vendor's owner_id                   │
+│ └─ Timeout: 15-second context timeout                                       │
+│                                                                              │
+│ Data Fetching (3 Phases):                                                   │
+│                                                                              │
+│ Phase 1: Core Data (Sequential)                                             │
+│ ├─ GetVendorBasicInfo()                                                     │
+│ │  └─ Tables: vendors + subscriptions + vendor_stats (LEFT JOINs)          │
+│ └─ GetVendorTrustScore()                                                    │
+│    └─ Table: vendors (pvs_score, review_count)                              │
+│                                                                              │
+│ Phase 2: Detailed Metrics (5 Concurrent Goroutines)                         │
+│ ├─ Goroutine 1: GetReviewMetrics() → reviews table                         │
+│ ├─ Goroutine 2: GetRecentReviews(limit: 5) → reviews table                 │
+│ ├─ Goroutine 3: GetRecentInquiries(limit: 5) → inquiries table             │
+│ ├─ Goroutine 4: 7-day metrics → inquiries + reviews                        │
+│ └─ Goroutine 5: 30-day metrics → inquiries + reviews                       │
+│                                                                              │
+│ Phase 3: Tier-Based Gating                                                  │
+│ ├─ GetVendorTier() → Active subscription tier                              │
+│ ├─ Free Tier:                                                               │
+│ │  ├─ Shows: Basic overview, total counts, rating distribution             │
+│ │  ├─ Hides: Detailed inquiries, trends, performance metrics               │
+│ │  └─ Adds: Upsell message with missing features list                      │
+│ ├─ Premium Tier:                                                            │
+│ │  ├─ Shows: Full analytics                                                 │
+│ │  └─ Adds: Upgrade to Featured suggestion                                 │
+│ └─ Featured Tier:                                                           │
+│    └─ Shows: Full analytics, no restrictions                               │
+│                                                                              │
+│ Response Structure:                                                          │
+│ {                                                                            │
+│   "vendor_id": "...",                                                        │
+│   "vendor_name": "...",                                                      │
+│   "category": "...",                                                         │
+│   "overview": {                                                              │
+│     "current_pvs_score": 85,                                                │
+│     "total_reviews": 42,                                                    │
+│     "average_rating": 4.6,                                                  │
+│     "profile_completion": 95.5,                                             │
+│     "total_inquiries": 128,  ← Free tier: visible                          │
+│     "total_views": 1543      ← Free tier: hidden                           │
+│   },                                                                         │
+│   "inquiries": {                                                             │
+│     "total": 128,                                                           │
+│     "recent_inquiries": [...] ← Free tier: hidden                          │
+│   },                                                                         │
+│   "reviews": {                                                               │
+│     "total_reviews": 42,                                                    │
+│     "rating_distribution": {...},                                           │
+│     "recent_reviews": [...] ← Free tier: hidden                            │
+│   },                                                                         │
+│   "trends": {...}  ← Free tier: null                                        │
+│   "performance": {...}  ← Free tier: null                                   │
+│   "restrictions": {  ← Only if not featured tier                            │
+│     "tier": "free",                                                          │
+│     "message": "🔒 Upgrade to Premium to unlock...",                        │
+│     "missing_features": [...]                                               │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ Performance:                                                                 │
+│ ├─ Concurrent queries: 5 (Phase 2)                                          │
+│ ├─ Average response time: 200-300ms                                         │
+│ └─ Caching opportunity: Core metrics (future optimization)                  │
+│                                                                              │
+│ Dependencies:                                                                │
+│ ├─ Handler: VendorAnalyticsHandler                                          │
+│ ├─ Service: VendorAnalyticsService                                          │
+│ ├─ Repos: CoreMetrics, Metrics, Data                                        │
+│ └─ Tables: vendors, subscriptions, vendor_stats, reviews, inquiries         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ FEATURE 4: Subscription-Vendor Tier Synchronization                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Status: ✅ IMPLEMENTED (Database Trigger)                                   │
+│                                                                              │
+│ Purpose: Keep vendors.subscription_tier in sync with active subscriptions   │
+│                                                                              │
+│ Trigger: trigger_sync_vendor_tier                                           │
+│ ├─ Event: AFTER INSERT OR UPDATE ON subscriptions                          │
+│ ├─ Function: sync_vendor_subscription_tier()                                │
+│ └─ Scope: FOR EACH ROW                                                      │
+│                                                                              │
+│ Logic:                                                                       │
+│ IF subscription becomes active:                                              │
+│   UPDATE vendors                                                             │
+│   SET subscription_tier = NEW.tier,                                          │
+│       updated_at = NOW()                                                     │
+│   WHERE id = NEW.vendor_id                                                   │
+│                                                                              │
+│ IF subscription expires/cancelled:                                           │
+│   IF no other active subscription exists:                                    │
+│     UPDATE vendors                                                           │
+│     SET subscription_tier = 'free',                                          │
+│         updated_at = NOW()                                                   │
+│     WHERE id = NEW.vendor_id                                                 │
+│                                                                              │
+│ Affected Systems:                                                            │
+│ ├─ Analytics tier gating (immediate effect)                                 │
+│ ├─ Search result boosting (next query)                                      │
+│ ├─ Leaderboard eligibility (next refresh)                                   │
+│ └─ Feature access control (immediate)                                       │
+│                                                                              │
+│ Validation Query:                                                            │
+│ SELECT                                                                       │
+│   v.id,                                                                      │
+│   v.subscription_tier as vendor_tier,                                        │
+│   s.tier as subscription_tier,                                               │
+│   s.status,                                                                  │
+│   CASE WHEN v.subscription_tier = COALESCE(s.tier, 'free')                  │
+│        THEN '✅ SYNCED' ELSE '❌ OUT OF SYNC' END                           │
+│ FROM vendors v                                                               │
+│ LEFT JOIN subscriptions s ON v.id = s.vendor_id                             │
+│   AND s.status = 'active'                                                    │
+│   AND (s.expires_at IS NULL OR s.expires_at > NOW())                        │
+│                                                                              │
+│ Performance:                                                                 │
+│ ├─ Automatic (no application code)                                          │
+│ ├─ ACID compliant                                                            │
+│ └─ ~1-2ms per subscription change                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ FEATURE 5: Vendor Leaderboards (Month/Category/Location)                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Status: ⚠️  PARTIALLY IMPLEMENTED                                           │
+│                                                                              │
+│ What Exists:                                                                 │
+│ ├─ Repository: VendorLeaderboardRepo                                        │
+│ │  ├─ GetTopVendorsByCategory(category, limit)                             │
+│ │  ├─ GetTopVendorsByLocation(state, city, limit)                          │
+│ │  └─ GetVendorOfTheMonth()                                                 │
+│ └─ Model: VendorRanking                                                     │
+│                                                                              │
+│ What's Missing:                                                              │
+│ ├─ ❌ Materialized view: vendor_of_the_month                                │
+│ ├─ ❌ Handler endpoints                                                      │
+│ ├─ ❌ Service layer                                                          │
+│ ├─ ❌ Router configuration                                                   │
+│ └─ ❌ Refresh cron job                                                       │
+│                                                                              │
+│ Proposed Endpoints:                                                          │
+│ ├─ GET /api/v1/leaderboard/vendor-of-month                                 │
+│ ├─ GET /api/v1/leaderboard/category/:category?limit=10                     │
+│ └─ GET /api/v1/leaderboard/location/:state/:city?limit=10                  │
+│                                                                              │
+│ Ranking Algorithm:                                                           │
+│ composite_score = (normalized_views * 0.4) + (pvs_score * 0.6)              │
+│ WHERE:                                                                       │
+│   normalized_views = (vendor_views / max_views_in_group) * 100              │
+│   pvs_score = vendor's trust score (0-100)                                  │
+│                                                                              │
+│ Eligibility:                                                                 │
+│ ├─ status = 'active'                                                         │
+│ └─ subscription_tier IN ('premium', 'featured')                             │
+│                                                                              │
+│ Next Steps:                                                                  │
+│ 1. Run migration to create vendor_of_the_month view                         │
+│ 2. Create VendorLeaderboardService                                          │
+│ 3. Create LeaderboardHandler                                                │
+│ 4. Add routes to router.go                                                   │
+│ 5. Schedule hourly refresh job                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ FEATURE 6: Review Count Auto-Increment                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Status: ⚠️  NEEDS DATABASE TRIGGER                                          │
+│                                                                              │
+│ Current Issue:                                                               │
+│ ├─ VendorRepository.IncrementField() supports "review_count"               │
+│ └─ But it's never called when reviews are created                           │
+│                                                                              │
+│ Recommended Fix: Database Trigger                                            │
+│                                                                              │
+│ CREATE TRIGGER trigger_vendor_review_count                                   │
+│   AFTER INSERT OR DELETE ON reviews                                          │
+│   FOR EACH ROW                                                                │
+│   EXECUTE FUNCTION increment_vendor_review_count()                           │
+│                                                                              │
+│ Function Logic:                                                              │
+│ IF INSERT:                                                                   │
+│   UPDATE vendors                                                             │
+│   SET review_count = review_count + 1,                                       │
+│       updated_at = NOW()                                                     │
+│   WHERE id = NEW.vendor_id                                                   │
+│                                                                              │
+│ IF DELETE:                                                                   │
+│   UPDATE vendors                                                             │
+│   SET review_count = GREATEST(review_count - 1, 0),                          │
+│       updated_at = NOW()                                                     │
+│   WHERE id = OLD.vendor_id                                                   │
+│                                                                              │
+│ Why Trigger > Application Code:                                             │
+│ ├─ Always consistent (can't forget to call)                                 │
+│ ├─ Handles bulk operations                                                  │
+│ ├─ Works even if review created via SQL                                     │
+│ └─ No race conditions                                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+

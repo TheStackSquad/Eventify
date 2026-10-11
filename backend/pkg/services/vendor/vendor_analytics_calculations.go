@@ -1,0 +1,145 @@
+//backend/pkg/services/vendor/vendor_analytics_calculations.go
+package vendor
+
+import (
+	//"fmt"
+	"math"
+	"time"
+
+	"github.com/eventify/backend/pkg/models"
+)
+
+// calculateOverview uses the cached PVS score and tracks core KPIs
+func (s *vendorAnalyticsServiceImpl) calculateOverview(
+	vendorInfo *models.VendorBasicInfo,
+	trustScore *models.VendorTrustScore,
+) models.VendorOverview {
+	return models.VendorOverview{
+		CurrentPVSScore:   int(trustScore.TotalTrustWeight),
+		TotalInquiries:    vendorInfo.InquiryCount,
+		TotalViews:        vendorInfo.ViewsTotal,
+		ProfileCompletion: roundToTwoDecimals(float64(vendorInfo.ProfileCompletion)),
+		AverageRating:     0.0, // Usually updated by reviews calculation
+		TotalReviews:      int(trustScore.ReviewCount),
+		IsVerified:        vendorInfo.IsIdentityVerified,
+	}
+}
+
+// calculateInquiries computes inquiry-related metrics and trends
+func (s *vendorAnalyticsServiceImpl) calculateInquiries(
+	recentInquiries []models.RecentInquiry,
+	inquiries7d int,
+	inquiries30d int,
+) models.VendorInquiries {
+	trend := "stable"
+	if inquiries30d > 0 {
+		weeklyAvg := float64(inquiries7d)
+		monthlyAvg := float64(inquiries30d) / 4.3 // Avg weeks in a month
+		if weeklyAvg > monthlyAvg*1.2 {
+			trend = "increasing"
+		} else if weeklyAvg < monthlyAvg*0.8 {
+			trend = "decreasing"
+		}
+	}
+
+	return models.VendorInquiries{
+		Total:               inquiries30d,
+		Pending:             0,
+		Responded:           0,
+		Closed:              0,
+		ResponseRate:        0.0, 
+		AverageResponseTime: "N/A",
+		RecentInquiries:     recentInquiries,
+		InquiryTrend:        trend,
+	}
+}
+
+// calculateReviews computes review metrics and rating distribution
+func (s *vendorAnalyticsServiceImpl) calculateReviews(
+	metrics *models.ReviewMetricsRaw,
+	recentReviews []models.RecentReview,
+) models.VendorReviews {
+	distribution := models.RatingDistribution{
+		FiveStar:  metrics.RatingCounts[5],
+		FourStar:  metrics.RatingCounts[4],
+		ThreeStar: metrics.RatingCounts[3],
+		TwoStar:   metrics.RatingCounts[2],
+		OneStar:   metrics.RatingCounts[1],
+		AvgRating: roundToTwoDecimals(metrics.AverageRating),
+	}
+
+	sentimentTrend := "stable"
+	if metrics.AverageRating >= 4.5 {
+		sentimentTrend = "improving"
+	} else if metrics.AverageRating < 3.0 {
+		sentimentTrend = "declining"
+	}
+
+	return models.VendorReviews{
+		TotalReviews:       metrics.TotalReviews,
+		ApprovedReviews:    metrics.TotalReviews,
+		PendingReviews:     0,
+		AverageRating:      roundToTwoDecimals(metrics.AverageRating),
+		RatingDistribution: distribution,
+		RecentReviews:      recentReviews,
+		SentimentTrend:     sentimentTrend,
+	}
+}
+
+// calculateTrends computes trend metrics for 7-day and 30-day periods
+func (s *vendorAnalyticsServiceImpl) calculateTrends(
+	inquiries7d, reviews7d int, avgRating7d float64,
+	inquiries30d, reviews30d int, avgRating30d float64,
+) models.VendorTrends {
+	return models.VendorTrends{
+		Last7Days: models.PeriodMetrics{
+			InquiryCount:  inquiries7d,
+			NewReviews:    reviews7d,
+			AverageRating: roundToTwoDecimals(avgRating7d),
+		},
+		Last30Days: models.PeriodMetrics{
+			InquiryCount:  inquiries30d,
+			NewReviews:    reviews30d,
+			AverageRating: roundToTwoDecimals(avgRating30d),
+		},
+	}
+}
+
+// calculatePerformance computes vendor performance metrics
+func (s *vendorAnalyticsServiceImpl) calculatePerformance(
+	vendorInfo *models.VendorBasicInfo,
+	trustScore *models.VendorTrustScore,
+) models.VendorPerformance {
+	daysOnPlatform := int(time.Since(vendorInfo.CreatedAt).Hours() / 24)
+
+	accountStatus := "active"
+	if daysOnPlatform < 30 {
+		accountStatus = "new"
+	} else if time.Since(vendorInfo.UpdatedAt).Hours() > 30*24 {
+		accountStatus = "inactive"
+	}
+
+	pvsScoreTrend := "stable"
+	pvs := int(trustScore.TotalTrustWeight)
+	if pvs >= 80 {
+		pvsScoreTrend = "improving"
+	} else if pvs < 50 {
+		pvsScoreTrend = "declining"
+	}
+
+	return models.VendorPerformance{
+		IsIdentityVerified:  vendorInfo.IsIdentityVerified,
+		DaysOnPlatform:      daysOnPlatform,
+		LastProfileUpdate:   vendorInfo.UpdatedAt,
+		AccountStatus:       accountStatus,
+		ProfileCompleteness: roundToTwoDecimals(float64(vendorInfo.ProfileCompletion)),
+		PVSScoreTrend:       pvsScoreTrend,
+	}
+}
+
+// --- Internal Helper Utilities ---
+
+
+func roundToTwoDecimals(value float64) float64 {
+	return math.Round(value*100) / 100
+}

@@ -1,0 +1,256 @@
+================================================================
+EVENTIFY DOCKER COMMAND REFERENCE
+================================================================
+Registry:
+  Docker Hub  -> staccsessions/eventify-backend
+                 staccsessions/eventify-frontend
+  GHCR        -> ghcr.io/thestacksquad/eventify-backend
+                 ghcr.io/thestacksquad/eventify-frontend
+
+URLs when running:
+  Frontend    -> http://localhost:3000
+  Backend     -> http://localhost:8081
+  Postgres    -> localhost:5432
+================================================================
+
+
+----------------------------------------------------------------
+1. FIRST TIME SETUP
+----------------------------------------------------------------
+
+# Copy env file and fill in your values
+cp .env.example .env
+
+# Start everything (builds images + starts containers)
+docker compose up -d --build
+
+# Verify all three containers are running
+docker compose ps
+
+
+----------------------------------------------------------------
+2. DAILY START / STOP
+----------------------------------------------------------------
+
+# Start all containers (already built)
+docker compose up -d
+
+# Stop all containers (data is preserved)
+docker compose down
+
+# Restart all containers
+docker compose restart
+
+# Restart a single container
+docker compose restart backend
+docker compose restart frontend
+docker compose restart postgres
+
+
+----------------------------------------------------------------
+3. DEVELOPMENT MODE (hot reload)
+----------------------------------------------------------------
+
+# Start with hot reload — backend (Air) + frontend (Next.js dev)
+docker compose -f docker-compose.dev.yml up --build
+
+# Stop dev containers
+docker compose -f docker-compose.dev.yml down
+
+
+----------------------------------------------------------------
+4. BUILD
+----------------------------------------------------------------
+
+# Build all images
+docker compose build
+
+# Build a single service
+docker compose build backend
+docker compose build frontend
+
+# Build with no cache (full clean rebuild)
+docker compose build --no-cache
+
+# Build + start in one command
+docker compose up -d --build
+
+
+----------------------------------------------------------------
+5. LOGS & DEBUGGING
+----------------------------------------------------------------
+
+# Tail all container logs
+docker compose logs -f
+
+# Tail a specific container
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f postgres
+
+# Last 50 lines from backend
+docker compose logs --tail=50 backend
+
+# Show container status
+docker compose ps
+
+# Inspect a running container
+docker inspect eventify-backend
+docker inspect eventify-frontend
+docker inspect eventify-postgres
+
+# Check container resource usage (CPU, memory)
+docker stats
+
+# Open a shell inside a container (dev only — prod backend has no shell)
+docker compose exec frontend sh
+docker compose exec postgres sh
+
+# Open PostgreSQL shell directly
+docker compose exec postgres psql -U astronautdesh -d Eventify
+
+# Test backend is responding
+curl http://localhost:8081/health
+
+# Test frontend is responding
+curl http://localhost:3000
+
+
+----------------------------------------------------------------
+6. COMMON ERRORS & FIXES
+----------------------------------------------------------------
+
+# Error: port already in use
+# Find what is using the port and kill it
+netstat -ano | findstr :8081
+taskkill /PID <pid> /F
+
+# Error: container not starting — check logs
+docker compose logs backend
+docker compose logs postgres
+
+# Error: DB connection refused
+# Make sure postgres is healthy before backend starts
+docker compose ps
+# If postgres shows "starting" wait 10 seconds and try again
+
+# Error: image not found
+# Rebuild the images
+docker compose build
+
+# Error: permission denied on init.sql
+# Make sure the file exists at postgres/init.sql
+ls postgres/
+
+# Fresh start — wipe everything and start over
+docker compose down -v
+docker compose up -d --build
+
+
+----------------------------------------------------------------
+7. DATABASE
+----------------------------------------------------------------
+
+# Open PostgreSQL shell
+docker compose exec postgres psql -U astronautdesh -d Eventify
+
+# Backup database to backups/ folder
+mkdir -p backups
+docker compose exec -T postgres pg_dump -U astronautdesh Eventify > backups/backup_$(date +%Y%m%d_%H%M%S).sql
+
+# Restore database from a backup file
+docker compose exec -T postgres psql -U astronautdesh Eventify < backups/your_backup_file.sql
+
+# Reset database (DELETES ALL DATA — re-runs init.sql on next boot)
+docker compose down -v
+docker compose up -d
+
+
+----------------------------------------------------------------
+8. IMAGES — BUILD, TAG, PUSH
+----------------------------------------------------------------
+
+# Build production images
+docker compose build
+
+# --- Docker Hub ---
+docker tag eventify-backend:latest  staccsessions/eventify-backend:latest
+docker tag eventify-frontend:latest staccsessions/eventify-frontend:latest
+docker push staccsessions/eventify-backend:latest
+docker push staccsessions/eventify-frontend:latest
+
+# --- GHCR ---
+docker tag eventify-backend:latest  ghcr.io/thestacksquad/eventify-backend:latest
+docker tag eventify-frontend:latest ghcr.io/thestacksquad/eventify-frontend:latest
+docker push ghcr.io/thestacksquad/eventify-backend:latest
+docker push ghcr.io/thestacksquad/eventify-frontend:latest
+
+# List all local images
+docker images | grep eventify
+
+# Remove a specific local image
+docker rmi eventify-backend:latest
+docker rmi eventify-frontend:latest
+
+# Remove all unused images (free up disk space)
+docker image prune -a
+
+
+----------------------------------------------------------------
+9. SHARING WITH RECRUITERS / INVESTORS
+----------------------------------------------------------------
+
+# Anyone can run Eventify locally with these three commands:
+git clone https://github.com/TheStackSquad/Eventify.git
+cd Eventify
+cp .env.example .env
+# fill in .env values, then:
+docker compose up -d --build
+
+# Or pull pre-built images directly (no clone needed):
+docker pull staccsessions/eventify-backend:latest
+docker pull staccsessions/eventify-frontend:latest
+
+# Direct links to share:
+# https://hub.docker.com/r/staccsessions/eventify-backend
+# https://hub.docker.com/r/staccsessions/eventify-frontend
+# https://github.com/TheStackSquad/Eventify
+
+
+----------------------------------------------------------------
+10. LOGIN TO REGISTRIES (one time per machine)
+----------------------------------------------------------------
+
+# Docker Hub
+docker login -u staccsessions
+# enter your Docker Hub access token when prompted
+
+# GHCR
+docker login ghcr.io -u thestacksquad
+# enter your GitHub PAT when prompted
+
+# Logout (if switching accounts)
+docker logout
+docker logout ghcr.io
+
+
+----------------------------------------------------------------
+11. CLEANUP
+----------------------------------------------------------------
+
+# Stop and remove containers (keep volumes/data)
+docker compose down
+
+# Stop and remove containers + volumes (DELETES DB DATA)
+docker compose down -v
+
+# Remove all containers, images, and volumes
+docker compose down --rmi all -v --remove-orphans
+
+# Full Docker system cleanup (removes everything not in use)
+docker system prune -a
+
+# Check disk usage
+docker system df
+
+<your-github-pat>

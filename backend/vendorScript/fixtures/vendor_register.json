@@ -1,0 +1,14 @@
+
+{
+  "name": "Script Test Vendor",
+  "category": "photographer",
+  "state": "Lagos",
+  "city": "Ikeja",
+  "phoneNumber": "08099999999",
+  "vnin": "ZE999999999999ZZ",
+  "verifiedVNIN": "ZE999999999999ZZ",
+  "firstName": "Script",
+  "lastName": "Tester",
+  "description": "Created by bash test suite",
+  "email": "scripttester@eventify.test"
+}

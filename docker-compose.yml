@@ -1,0 +1,105 @@
+# Docker Compose configuration for Eventify application
+# Eventify/docker-compose.yml
+
+# =============================================================================
+# Eventify — Production Docker Compose
+# Usage: docker compose up -d
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — boots first, schema auto-applied from postgres/init.sql
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: eventify-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${DB_USER:-astronautdesh}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB:       ${DB_NAME:-Eventify}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - eventify-data:/var/lib/postgresql/data
+      # init.sql runs automatically on first boot (empty volume only)
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-astronautdesh} -d ${DB_NAME:-Eventify}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - eventify-network
+
+  # ---------------------------------------------------------------------------
+  # Go backend API
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${DOCKER_REGISTRY:-eventify}/eventify-backend:${IMAGE_TAG:-latest}
+    container_name: eventify-backend
+    restart: unless-stopped
+    environment:
+      PORT:                  ${BACKEND_PORT:-8081}
+      # 'postgres' resolves to the postgres container inside the Docker network
+      POSTGRES_URI:          postgres://${DB_USER:-astronautdesh}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-Eventify}?sslmode=disable
+      GIN_MODE:              release
+      JWT_ACCESS_SECRET:     ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET:    ${JWT_REFRESH_SECRET}
+      PAYSTACK_SECRET_KEY:   ${PAYSTACK_SECRET_KEY}
+      # Frontend URL used for CORS — must be the public-facing URL
+      FRONTEND_URL:          ${FRONTEND_URL:-http://localhost:3000}
+    ports:
+      - "${BACKEND_PORT:-8081}:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - eventify-network
+
+  # ---------------------------------------------------------------------------
+  # Next.js frontend
+  # NEXT_PUBLIC_* vars must be baked in at build time (Next.js requirement).
+  # Runtime-only vars (NEXTAUTH_*, JWT_*) are passed via environment.
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Inside Docker, the browser talks to backend via the host machine.
+        # localhost:8081 works because the port is published to the host.
+        NEXT_PUBLIC_API_URL:              ${NEXT_PUBLIC_API_URL:-http://localhost:8081}
+        NEXT_PUBLIC_SITE_URL:             ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+        NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY:  ${NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY}
+        NEXT_PUBLIC_SERVICE_FEE:          ${NEXT_PUBLIC_SERVICE_FEE:-500}
+        NEXT_PUBLIC_VAT_RATE:             ${NEXT_PUBLIC_VAT_RATE:-0.075}
+    image: ${DOCKER_REGISTRY:-eventify}/eventify-frontend:${IMAGE_TAG:-latest}
+    container_name: eventify-frontend
+    restart: unless-stopped
+    environment:
+      NEXTAUTH_URL:       ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET:    ${NEXTAUTH_SECRET}
+      JWT_ACCESS_SECRET:  ${JWT_ACCESS_SECRET}
+      JWT_PUBLIC_KEY:     ${JWT_PUBLIC_KEY}
+      BLOB_READ_WRITE_TOKEN: ${BLOB_READ_WRITE_TOKEN}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - backend
+    networks:
+      - eventify-network
+
+volumes:
+  eventify-data:
+    name: eventify-data
+
+networks:
+  eventify-network:
+    name: eventify-network
+    driver: bridge

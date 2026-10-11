@@ -1,0 +1,7 @@
+.git
+*.exe
+*.log
+*.out
+*.sh
+backend
+backend-test
