@@ -21,10 +21,10 @@ import (
 )
 
 const (
-	RotationGracePeriod = 30 * time.Second
-	TokenCacheTTL       = 35 * time.Second
-	shortRefreshTTL = 3600 * 24
-	persistentRefreshTTL = 3600 * 24 * 30
+	RotationGracePeriod    = 30 * time.Second
+	TokenCacheTTL          = 35 * time.Second
+	shortRefreshTTL        = 3600 * 24
+	persistentRefreshTTL   = 3600 * 24 * 30
 )
 
 type authWriteService struct {
@@ -35,8 +35,8 @@ type authWriteService struct {
 	vendorRepo       repovendor.VendorRepository
 	eventRepo        repoevent.EventRepository
 
-	tokenCache      map[string]*cachedTokenPair
-	tokenCacheMutex sync.RWMutex
+	tokenCache       map[string]*cachedTokenPair
+	tokenCacheMutex  sync.RWMutex
 }
 
 type cachedTokenPair struct {
@@ -75,22 +75,22 @@ func NewAuthService(
 }
 
 func (s *authWriteService) evictExpiredCacheEntries() {
-    s.tokenCacheMutex.Lock()
-    defer s.tokenCacheMutex.Unlock()
-    now := time.Now()
-    for key, cached := range s.tokenCache {
-        if now.Sub(cached.CreatedAt) >= TokenCacheTTL {
-            delete(s.tokenCache, key)
-        }
-    }
+	s.tokenCacheMutex.Lock()
+	defer s.tokenCacheMutex.Unlock()
+	now := time.Now()
+	for key, cached := range s.tokenCache {
+		if now.Sub(cached.CreatedAt) >= TokenCacheTTL {
+			delete(s.tokenCache, key)
+		}
+	}
 }
 
 func (s *authWriteService) cleanupTokenCache() {
-    ticker := time.NewTicker(1 * time.Minute)
-    defer ticker.Stop()
-    for range ticker.C {
-        s.evictExpiredCacheEntries()
-    }
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.evictExpiredCacheEntries()
+	}
 }
 
 func sha256Hash(s string) []byte {
@@ -132,26 +132,36 @@ func (s *authWriteService) Login(
 	// Fetch user
 	user, err := s.authRepo.GetUserByEmail(ctx, email)
 	if err != nil {
-		s.authRepo.RecordLoginAttempt(ctx, email, false)
+		if recordErr := s.authRepo.RecordLoginAttempt(ctx, email, false); recordErr != nil {
+			log.Error().Err(recordErr).Msg("Failed to record login attempt")
+		}
 		return nil, nil, ErrInvalidCredentials
 	}
 
 	// Verify password
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
 	if err != nil {
-		s.authRepo.RecordLoginAttempt(ctx, email, false)
+		if recordErr := s.authRepo.RecordLoginAttempt(ctx, email, false); recordErr != nil {
+			log.Error().Err(recordErr).Msg("Failed to record login attempt")
+		}
 		return nil, nil, ErrInvalidCredentials
 	}
 
-	s.authRepo.RecordLoginAttempt(ctx, email, true)
-	s.authRepo.UpdateLastLogin(ctx, user.ID)
-
-	refreshTTL := shortRefreshTTL
-	if rememberMe {
-		refreshTTL = persistentRefreshTTL
+	if recordErr := s.authRepo.RecordLoginAttempt(ctx, email, true); recordErr != nil {
+		log.Error().Err(recordErr).Msg("Failed to record login attempt")
+	}
+	if updateErr := s.authRepo.UpdateLastLogin(ctx, user.ID); updateErr != nil {
+		log.Error().Err(updateErr).Msg("Failed to update last login timestamp")
 	}
 
-	tokens, err := s.generateTokenPair(ctx, user.ID.String(), refreshTTL, nil, ipAddress, userAgent)
+	// Determine refresh token expiry based on rememberMe flag
+	refreshExpiry := persistentRefreshTTL
+	if !rememberMe {
+		refreshExpiry = shortRefreshTTL
+	}
+
+	// Generate token pair
+	tokens, err := s.generateTokenPair(ctx, user.ID.String(), refreshExpiry, nil, ipAddress, userAgent)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -219,9 +229,6 @@ func (s *authWriteService) RefreshToken(
 
 	userID := storedToken.UserID
 
-	// FIX: >= ensures session is rejected at exactly the timeout boundary,
-	// not one nanosecond past it. A session at exactly absoluteTimeout is
-	// expired — allowing it through is a security gap.
 	if time.Since(storedToken.CreatedAt) >= absoluteTimeout {
 		log.Info().Str("user_id", userID.String()).Msg("Session reached absolute timeout")
 		_ = s.refreshTokenRepo.RevokeRefreshToken(ctx, userID, oldTokenStr)
@@ -244,10 +251,6 @@ func (s *authWriteService) RefreshToken(
 	if storedToken.ConsumedAt != nil {
 		timeSinceConsumed := time.Since(*storedToken.ConsumedAt)
 
-		// FIX: >= ensures a token presented at exactly the grace period
-		// boundary is treated as reuse, not a legitimate concurrent request.
-		// With >, a token consumed at exactly t=30s would pass through —
-		// that is the theft detection window and must be closed.
 		if timeSinceConsumed >= RotationGracePeriod {
 			log.Warn().
 				Str("user_id", userID.String()).

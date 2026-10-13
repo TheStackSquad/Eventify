@@ -24,11 +24,11 @@ func lockoutEmail(label string) string {
 }
 
 // helper — clean up login_attempts row after test
-func cleanupLockout(t *testing.T, db interface {
-	ExecContext(ctx context.Context, query string, args ...interface{}) (interface{}, error)
-}, email string) {
-	// We use the raw db directly in cleanup — no repo needed
-}
+// func cleanupLockout(t *testing.T, db interface {
+// 	ExecContext(ctx context.Context, query string, args ...interface{}) (interface{}, error)
+// }, email string) {
+// 	// We use the raw db directly in cleanup — no repo needed
+// }
 
 // ─── TEST 1: No row → not locked ─────────────────────────────────────────────
 

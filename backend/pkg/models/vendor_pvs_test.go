@@ -18,8 +18,6 @@ import (
 //   + 5  response rate (5 * responded/inquiries)
 //   cap at 100
 
-func nullBool(b bool) sql.NullBool { return sql.NullBool{Bool: b, Valid: true} }
-
 func TestCalculatePVS(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -42,7 +40,7 @@ func TestCalculatePVS(t *testing.T) {
 			name: "business verified without identity verified adds nothing",
 			vendor: Vendor{
 				IsIdentityVerified: false,
-				IsBusinessVerified: nullBool(true),
+				IsBusinessVerified: sql.NullBool{Bool: true, Valid: true},
 			},
 			expected: 0,
 		},
@@ -50,7 +48,7 @@ func TestCalculatePVS(t *testing.T) {
 			name: "identity + business verified adds 70",
 			vendor: Vendor{
 				IsIdentityVerified: true,
-				IsBusinessVerified: nullBool(true),
+				IsBusinessVerified: sql.NullBool{Bool: true, Valid: true},
 			},
 			expected: 70,
 		},
@@ -145,7 +143,7 @@ func TestCalculatePVS(t *testing.T) {
 			name: "fully loaded vendor: identity + business + 100% profile + 20 reviews + 100% response",
 			vendor: Vendor{
 				IsIdentityVerified: true,
-				IsBusinessVerified: nullBool(true),
+				IsBusinessVerified: sql.NullBool{Bool: true, Valid: true},
 				ProfileCompletion:  100.0,
 				ReviewCount:        20,
 				InquiryCount:       10,
@@ -158,7 +156,7 @@ func TestCalculatePVS(t *testing.T) {
 			name: "theoretical overflow is capped at 100",
 			vendor: Vendor{
 				IsIdentityVerified: true,
-				IsBusinessVerified: nullBool(true),
+				IsBusinessVerified: sql.NullBool{Bool: true, Valid: true},
 				ProfileCompletion:  100.0,
 				ReviewCount:        100,
 				InquiryCount:       100,

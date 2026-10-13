@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 		panic("failed to generate test RSA key: " + err.Error())
 	}
 	testJWT = servicejwt.NewJWTService()
-  	testJWT.SetKeysForTesting(privKey, &privKey.PublicKey)
+	testJWT.SetKeysForTesting(privKey, &privKey.PublicKey)
 	m.Run()
 }
 
@@ -207,10 +207,13 @@ type mockEventRepo struct {
 func (m *mockEventRepo) HasEventsByOrganizer(_ context.Context, _ uuid.UUID) (bool, error) {
 	return m.hasEvents, m.hasEventsErr
 }
+func (m *mockEventRepo) GetEventsByOrganizer(_ context.Context, _ uuid.UUID, _ bool) (*repoevent.EventQueryResult, error) {
+	return nil, nil
+}
 func (m *mockEventRepo) GetEventByID(_ context.Context, _ uuid.UUID, _ *uuid.UUID) (*models.Event, error) {
 	return nil, nil
 }
-func (m *mockEventRepo) GetEvents(_ context.Context, _ repoevent.EventFilters) ([]*models.Event, error) {
+func (m *mockEventRepo) GetEvents(_ context.Context, _ repoevent.EventFilters) (*repoevent.EventQueryResult, error) {
 	return nil, nil
 }
 func (m *mockEventRepo) CreateEvent(_ context.Context, _ *sqlx.Tx, _ *models.Event) (uuid.UUID, error) {

@@ -26,7 +26,26 @@ func NewTestDB(t *testing.T) *sqlx.DB {
 
 	dsn := os.Getenv("POSTGRES_TEST_URI")
 	if dsn == "" {
-		dsn = "postgres://astronautdesh:astronautdesh@localhost:5432/Eventify_test?sslmode=disable"
+		// Construct safely from environment components without hardcoding passwords
+		user := os.Getenv("POSTGRES_USER")
+		if user == "" {
+			user = "postgres"
+		}
+		password := os.Getenv("POSTGRES_PASSWORD")
+		host := os.Getenv("POSTGRES_HOST")
+		if host == "" {
+			host = "localhost"
+		}
+		port := os.Getenv("POSTGRES_PORT")
+		if port == "" {
+			port = "5432"
+		}
+
+		if password != "" {
+			dsn = fmt.Sprintf("postgres://%s:%s@%s:%s/Eventify_test?sslmode=disable", user, password, host, port)
+		} else {
+			dsn = fmt.Sprintf("postgres://%s@%s:%s/Eventify_test?sslmode=disable", user, host, port)
+		}
 	}
 
 	db, err := sqlx.Connect("postgres", dsn)

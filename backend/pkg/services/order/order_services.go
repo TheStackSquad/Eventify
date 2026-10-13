@@ -4,12 +4,11 @@ package order
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"time"
-	"errors"
-	"github.com/rs/zerolog/log"
-	
+
 	"github.com/eventify/backend/pkg/models"
 
 	repoevent "github.com/eventify/backend/pkg/repository/event"
@@ -41,12 +40,12 @@ type OrderService interface {
 // IMPLEMENTATION
 
 type OrderServiceImpl struct {
-	OrderRepo       repoorder.OrderRepository
-	EventRepo       repoevent.EventRepository
-	PricingService  PricingService
-	PaystackClient  paystack.Client
+	OrderRepo         repoorder.OrderRepository
+	EventRepo         repoevent.EventRepository
+	PricingService    PricingService
+	PaystackClient    paystack.Client
 	FrontendBaseURL string
-	PaystackSecret  string
+	PaystackSecret    string
 }
 
 func NewOrderService(
@@ -56,12 +55,12 @@ func NewOrderService(
 	psClient paystack.Client,
 ) OrderService {
 	return &OrderServiceImpl{
-		OrderRepo:       orderRepo,
-		EventRepo:       eventRepo,
-		PricingService:  pricingService,
-		PaystackClient:  psClient,
+		OrderRepo:         orderRepo,
+		EventRepo:         eventRepo,
+		PricingService:    pricingService,
+		PaystackClient:    psClient,
 		FrontendBaseURL: os.Getenv("FRONTEND_BASE_URL"),
-		PaystackSecret:  os.Getenv("PAYSTACK_SECRET_KEY"),
+		PaystackSecret:    os.Getenv("PAYSTACK_SECRET_KEY"),
 	}
 }
 
@@ -185,10 +184,4 @@ func (s *OrderServiceImpl) GetOrderByReference(
 	}
 
 	return nil, errors.New("unauthorized access to order")
-}
-
-func (s *OrderServiceImpl) ReleaseExpiredStock(ctx context.Context, expiryDuration time.Duration) (int, error) {
-    log.Info().Dur("expiry", expiryDuration).Msg("Running stock release worker")
-    s.CleanupExpiredOrders(ctx, expiryDuration)
-    return 0, nil
 }

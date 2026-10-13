@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// #nosec G101 -- These are public cookie/header names, not hardcoded credentials
 const (
 	CSRFTokenCookieName = "csrf_token"
 	CSRFTokenHeaderName = "X-CSRF-Token"

@@ -41,14 +41,15 @@ func extractUserID(c *gin.Context) (uuid.UUID, error) {
 	return userID, nil
 }
 
+// REMOVE THIS BLOCK to clear the U1000 warning:
 // extractOptionalUserID extracts user ID if present (for public endpoints)
-func extractOptionalUserID(c *gin.Context) *uuid.UUID {
-	userID, err := extractUserID(c)
-	if err != nil {
-		return nil
-	}
-	return &userID
-}
+// func extractOptionalUserID(c *gin.Context) *uuid.UUID {
+// 	userID, err := extractUserID(c)
+// 	if err != nil {
+// 		return nil
+// 	}
+// 	return &userID
+// }
 
 // parseEventID parses event ID from URL parameter
 func parseEventID(c *gin.Context) (uuid.UUID, error) {

@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
-
 // CreateEvent creates a new event with associated ticket tiers
 func (s *eventService) CreateEvent(
 	ctx context.Context,
@@ -44,7 +43,7 @@ func (s *eventService) CreateEvent(
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error().Interface("panic", r).Msg("Service: PANIC. Rolling back.")
-			tx.Rollback()
+			_ = tx.Rollback() // Explicitly discard rollback error
 		}
 	}()
 
@@ -57,7 +56,7 @@ func (s *eventService) CreateEvent(
 	// Create event
 	confirmedEventID, err := s.eventRepo.CreateEvent(ctx, tx, event)
 	if err != nil {
-		tx.Rollback()
+		_ = tx.Rollback() // Explicitly discard rollback error
 		return fmt.Errorf("failed to insert event: %w", err)
 	}
 
@@ -73,7 +72,7 @@ func (s *eventService) CreateEvent(
 
 	// Create ticket tiers
 	if err := s.eventRepo.CreateTicketTiers(ctx, tx, confirmedEventID, tiers); err != nil {
-		tx.Rollback()
+		_ = tx.Rollback() // Explicitly discard rollback error
 		return fmt.Errorf("failed to insert tiers: %w", err)
 	}
 
