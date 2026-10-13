@@ -4,8 +4,8 @@ package auth
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	// "crypto/sha256"
+	// "encoding/hex"
 
 	"github.com/eventify/backend/pkg/models"
 	servicejwt "github.com/eventify/backend/pkg/services/jwt"
@@ -166,7 +166,7 @@ func (s *authReadService) GetRefreshTokenMetadata(
 }
 
 // ✅ NEW: Helper to hash token for metadata lookup
-func (s *authReadService) hashTokenForMetadata(token string) string {
-	hash := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(hash[:])
-}
+// func (s *authReadService) hashTokenForMetadata(token string) string {
+// 	hash := sha256.Sum256([]byte(token))
+// 	return hex.EncodeToString(hash[:])
+// }

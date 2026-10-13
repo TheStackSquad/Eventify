@@ -67,10 +67,12 @@ func (s *reviewServiceImpl) CreateReview(ctx context.Context, review *models.Rev
 		return fmt.Errorf("service layer failed to save: %w", err)
 	}
 
-	// 5. Update Vendor Stats (Async)
+// 5. Update Vendor Stats (Async)
+	// Use context.WithoutCancel so the background goroutine can finish updating 
+	// even after the HTTP response returns, while satisfying static analysis (G118).
+	bgCtx := context.WithoutCancel(ctx)
 	go func() {
-		// Use a background context as the request context might expire
-		_ = s.CalculateAndUpdateVendorRating(context.Background(), review.VendorID.String())
+		_ = s.CalculateAndUpdateVendorRating(bgCtx, review.VendorID.String())
 	}()
 
 	return nil

@@ -5,6 +5,7 @@ package subscription
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/eventify/backend/pkg/repository/subscription"
@@ -52,14 +53,20 @@ func (s *subscriptionServiceImpl) sendPaymentSuccessEmails(ctx context.Context) 
 
 // sendReminderEmails sends all reminder types
 func (s *subscriptionServiceImpl) sendReminderEmails(ctx context.Context) error {
-	s.sendReminderType(ctx, "7d")
-	s.sendReminderType(ctx, "3d")
-	s.sendReminderType(ctx, "1d")
+	if err := s.sendReminderType(ctx, "7d"); err != nil {
+		log.Error().Err(err).Msg("Failed to send 7d reminder emails")
+	}
+	if err := s.sendReminderType(ctx, "3d"); err != nil {
+		log.Error().Err(err).Msg("Failed to send 3d reminder emails")
+	}
+	if err := s.sendReminderType(ctx, "1d"); err != nil {
+		log.Error().Err(err).Msg("Failed to send 1d reminder emails")
+	}
 	return nil
 }
 
 // sendReminderType sends reminders for a specific day count
-func (s *subscriptionServiceImpl) sendReminderType(ctx context.Context, reminderType string) {
+func (s *subscriptionServiceImpl) sendReminderType(ctx context.Context, reminderType string) error {
 	var recipients []subscription.EmailRecipient
 	var err error
 
@@ -70,10 +77,16 @@ func (s *subscriptionServiceImpl) sendReminderType(ctx context.Context, reminder
 		recipients, err = s.subscriptionRepo.GetNeedingReminder3D(ctx)
 	case "1d":
 		recipients, err = s.subscriptionRepo.GetNeedingReminder1D(ctx)
+	default:
+		return fmt.Errorf("unknown reminder type: %s", reminderType)
 	}
 
-	if err != nil || len(recipients) == 0 {
-		return
+	if err != nil {
+		return err
+	}
+
+	if len(recipients) == 0 {
+		return nil
 	}
 
 	for _, r := range recipients {
@@ -81,6 +94,7 @@ func (s *subscriptionServiceImpl) sendReminderType(ctx context.Context, reminder
 		body := buildReminderEmail(r, reminderType)
 
 		if err := utils.MockSendEmail(r.UserEmail, subject, body); err != nil {
+			log.Error().Err(err).Str("email", r.UserEmail).Str("reminder_type", reminderType).Msg("Failed to send reminder email")
 			continue
 		}
 
@@ -96,15 +110,23 @@ func (s *subscriptionServiceImpl) sendReminderType(ctx context.Context, reminder
 			params.Reminder1DSentAt = &now
 		}
 
-		s.subscriptionRepo.UpdateEmailTracking(ctx, params)
+		if err := s.subscriptionRepo.UpdateEmailTracking(ctx, params); err != nil {
+			log.Error().Err(err).Str("reminder_type", reminderType).Msg("Failed to update email tracking for reminder")
+		}
 	}
+
+	return nil
 }
 
 // sendExpiredNotices sends expired subscription notices
 func (s *subscriptionServiceImpl) sendExpiredNotices(ctx context.Context) error {
 	recipients, err := s.subscriptionRepo.GetNeedingExpiredNotice(ctx)
-	if err != nil || len(recipients) == 0 {
+	if err != nil {
 		return err
+	}
+
+	if len(recipients) == 0 {
+		return nil
 	}
 
 	for _, r := range recipients {
@@ -112,14 +134,17 @@ func (s *subscriptionServiceImpl) sendExpiredNotices(ctx context.Context) error 
 		body := buildExpiredNoticeEmail(r)
 
 		if err := utils.MockSendEmail(r.UserEmail, subject, body); err != nil {
+			log.Error().Err(err).Str("email", r.UserEmail).Msg("Failed to send expired notice email")
 			continue
 		}
 
 		now := time.Now()
-		s.subscriptionRepo.UpdateEmailTracking(ctx, subscription.EmailTrackingParams{
+		if err := s.subscriptionRepo.UpdateEmailTracking(ctx, subscription.EmailTrackingParams{
 			SubscriptionID:      r.SubscriptionID,
 			ExpiredNoticeSentAt: &now,
-		})
+		}); err != nil {
+			log.Error().Err(err).Msg("Failed to update email tracking for expired notice")
+		}
 	}
 
 	return nil
@@ -130,7 +155,7 @@ func capitalize(s string) string {
 	if len(s) == 0 {
 		return s
 	}
-	return string(s[0]-32) + s[1:]
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 func buildPaymentSuccessEmail(r subscription.EmailRecipient) string {
@@ -150,9 +175,9 @@ Best regards,
 The Eventify Team`, r.UserName, capitalize(r.Tier), priceNaira, r.ExpiresAt.Format("Jan 2, 2006"), r.VendorName)
 }
 
-
 func buildReminderEmail(r subscription.EmailRecipient, reminderType string) string {
-	days := map[string]string{"7d": "7 days", "3d": "3 days", "1d": "1 day"}[reminderType]
+	daysMap := map[string]string{"7d": "7 days", "3d": "3 days", "1d": "1 day"}
+	days := daysMap[reminderType]
 	priceNaira := float64(r.PriceKobo) / 100
 
 	return fmt.Sprintf(`Hello %s,
@@ -169,7 +194,7 @@ The Eventify Team
 ---
 To manage email preferences, visit: https://eventify.ng/account/settings
 You will still receive important account notifications.`,
-		r.UserName, capitalize(r.Tier), days, r.ExpiresAt.Format("Jan 2 at 3:04PM"), 
+		r.UserName, capitalize(r.Tier), days, r.ExpiresAt.Format("Jan 2 at 3:04PM"),
 		priceNaira)
 }
 

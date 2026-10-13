@@ -1,20 +1,19 @@
-//backend/pkg/services/order/order_worker.go
+// backend/pkg/services/order/order_worker.go
 
 package order
 
 import (
 	"context"
 	"time"
+
 	"github.com/eventify/backend/pkg/models"
 	"github.com/jmoiron/sqlx"
-
 	"github.com/rs/zerolog/log"
 )
 
 // StartStockReleaseWorker begins a background loop to reclaim expired inventory.
 // interval: how often the worker checks for expired orders.
 // expiry: how old a pending order must be to be considered abandoned.
-
 func (s *OrderServiceImpl) StartStockReleaseWorker(ctx context.Context, interval time.Duration, expiry time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -27,25 +26,26 @@ func (s *OrderServiceImpl) StartStockReleaseWorker(ctx context.Context, interval
 			log.Info().Msg("Stock Release Worker shutting down...")
 			return
 		case <-ticker.C:
-			// Ensure this method name matches what is in your repository/service
-			s.ReleaseExpiredStock(ctx, expiry) 
+			if err := s.ReleaseExpiredStock(ctx, expiry); err != nil {
+				log.Error().Err(err).Msg("Stock release worker failed to release expired stock")
+			}
 		}
 	}
 }
 
-// CleanupExpiredOrders finds abandoned orders and returns their tickets to the available pool
-func (s *OrderServiceImpl) CleanupExpiredOrders(ctx context.Context, expiry time.Duration) {
+// ReleaseExpiredStock finds abandoned orders and returns their tickets to the available pool
+func (s *OrderServiceImpl) ReleaseExpiredStock(ctx context.Context, expiry time.Duration) error {
 	threshold := time.Now().UTC().Add(-expiry)
 
 	// 1. Fetch orders stuck in PENDING
 	expiredOrders, err := s.OrderRepo.GetExpiredPendingOrders(ctx, threshold)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to fetch expired orders")
-		return
+		return err
 	}
 
 	if len(expiredOrders) == 0 {
-		return
+		return nil
 	}
 
 	for _, order := range expiredOrders {
@@ -70,4 +70,6 @@ func (s *OrderServiceImpl) CleanupExpiredOrders(ctx context.Context, expiry time
 		}
 		log.Info().Str("ref", order.Reference).Msg("Stock reclaimed from abandoned order")
 	}
+
+	return nil
 }

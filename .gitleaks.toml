@@ -1,0 +1,8 @@
+title = "Gitleaks config"
+
+[allowlist]
+description = "Allow test files and script mocks"
+paths = [
+    '''_test\.go$''',
+    '''test_scripts/'''
+]

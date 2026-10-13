@@ -21,10 +21,10 @@ func (r *subscriptionRepository) RunInTransaction(ctx context.Context, fn func(t
 	}
 	defer func() {
 		if p := recover(); p != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			panic(p)
 		} else if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 		} else {
 			err = tx.Commit()
 		}

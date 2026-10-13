@@ -36,40 +36,7 @@ func (w *EmailWorker) Start(ctx context.Context, interval time.Duration) {
 	}
 }
 
-func (w *EmailWorker) processOutbox(ctx context.Context) {
-	// 1. Fetch pending emails and mark as 'processing' (Atomic locking)
-	var entries []models.EmailOutbox
-	query := `
-		UPDATE email_outbox 
-		SET status = 'processing' 
-		WHERE id IN (
-			SELECT id FROM email_outbox 
-			WHERE status = 'pending' 
-			ORDER BY created_at ASC 
-			LIMIT 10
-		) 
-		RETURNING *`
-	
-	err := w.db.SelectContext(ctx, &entries, query)
-	if err != nil || len(entries) == 0 {
-		return
-	}
 
-	for _, entry := range entries {
-		// 2. Actually send the email using your existing util
-		// For TICKET_DELIVERY, you'd likely want a specialized SendTicketEmail function
-		err := w.sendEmail(entry)
-
-		if err != nil {
-			log.Error().Err(err).Str("email_id", entry.ID.String()).Msg("Failed to send email")
-			w.db.ExecContext(ctx, "UPDATE email_outbox SET status = 'pending', retry_count = retry_count + 1 WHERE id = $1", entry.ID)
-			continue
-		}
-
-		// 3. Mark as sent
-		w.db.ExecContext(ctx, "UPDATE email_outbox SET status = 'sent', processed_at = NOW() WHERE id = $1", entry.ID)
-	}
-}
 
 func (w *EmailWorker) sendEmail(entry models.EmailOutbox) error {
 	// 1. Unmarshal the JSON payload we saved in finalizeOrder
@@ -97,4 +64,43 @@ func (w *EmailWorker) sendEmail(entry models.EmailOutbox) error {
 
 	// 3. Call our Mock utility (later this becomes utils.SendEmail)
 	return utils.MockSendEmail(entry.RecipientEmail, entry.Subject, body)
+}
+
+
+func (w *EmailWorker) processOutbox(ctx context.Context) {
+	// 1. Fetch pending emails and mark as 'processing' (Atomic locking)
+	var entries []models.EmailOutbox
+	query := `
+		UPDATE email_outbox 
+		SET status = 'processing' 
+		WHERE id IN (
+			SELECT id FROM email_outbox 
+			WHERE status = 'pending' 
+			ORDER BY created_at ASC 
+			LIMIT 10
+		) 
+		RETURNING *`
+	
+	err := w.db.SelectContext(ctx, &entries, query)
+	if err != nil || len(entries) == 0 {
+		return
+	}
+
+	for _, entry := range entries {
+		// 2. Actually send the email using your existing util
+		err := w.sendEmail(entry)
+
+		if err != nil {
+			log.Error().Err(err).Str("email_id", entry.ID.String()).Msg("Failed to send email")
+			if _, execErr := w.db.ExecContext(ctx, "UPDATE email_outbox SET status = 'pending', retry_count = retry_count + 1 WHERE id = $1", entry.ID); execErr != nil {
+				log.Error().Err(execErr).Str("email_id", entry.ID.String()).Msg("Failed to reset email status to pending")
+			}
+			continue
+		}
+
+		// 3. Mark as sent
+		if _, execErr := w.db.ExecContext(ctx, "UPDATE email_outbox SET status = 'sent', processed_at = NOW() WHERE id = $1", entry.ID); execErr != nil {
+			log.Error().Err(execErr).Str("email_id", entry.ID.String()).Msg("Failed to mark email as sent")
+		}
+	}
 }

@@ -1,10 +1,11 @@
 # --- Environment & Secrets ---
-.env
-.env.local
-.env.test
-*.env.*
+**/.env
+**/.env.*
 config/*.yaml
 !config/default.yaml
+**/*.pem
+**/config/keys/
+backend/config/keys/
 
 # --- Go Specific (Backend) ---
 backend/backend.exe
@@ -31,10 +32,11 @@ debug-jwt.sh
 fix_jwt_conflict.sh
 clean-ports.sh
 
-# --- IDE & OS ---
+# --- IDE, OS & Reports ---
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 backups/
 backend/tmp/
+audit/

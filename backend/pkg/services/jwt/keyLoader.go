@@ -7,13 +7,11 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"github.com/eventify/backend/pkg/utils"
-
-	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 
-	//"github.com/rs/zerolog/log"
+	"github.com/eventify/backend/pkg/utils"
 )
 
 // loadRSAKeys tries multiple strategies to load RSA keys
@@ -48,17 +46,17 @@ func loadRSAKeys() (*rsa.PrivateKey, *rsa.PublicKey, error) {
 }
 
 func loadKeysFromFiles() (*rsa.PrivateKey, *rsa.PublicKey, error) {
-	privateKeyPath := getEnvOrDefault("RSA_PRIVATE_KEY_PATH", "./config/keys/private.pem")
-	publicKeyPath := getEnvOrDefault("RSA_PUBLIC_KEY_PATH", "./config/keys/public.pem")
+	privateKeyPath := filepath.Clean(getEnvOrDefault("RSA_PRIVATE_KEY_PATH", "./config/keys/private.pem"))
+	publicKeyPath := filepath.Clean(getEnvOrDefault("RSA_PUBLIC_KEY_PATH", "./config/keys/public.pem"))
 
 	// Read private key
-	privateKeyBytes, err := ioutil.ReadFile(privateKeyPath)
+	privateKeyBytes, err := os.ReadFile(privateKeyPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read private key file: %w", err)
 	}
 
 	// Read public key
-	publicKeyBytes, err := ioutil.ReadFile(publicKeyPath)
+	publicKeyBytes, err := os.ReadFile(publicKeyPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read public key file: %w", err)
 	}
@@ -207,7 +205,7 @@ func generateAndSaveKeys() (*rsa.PrivateKey, *rsa.PublicKey, error) {
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	})
 
-	if err := ioutil.WriteFile("./config/keys/private.pem", privateKeyPEM, 0600); err != nil {
+	if err := os.WriteFile("./config/keys/private.pem", privateKeyPEM, 0600); err != nil {
 		utils.LogWarn(service, operation, "Failed to save private key to file", err)
 	}
 
@@ -223,7 +221,8 @@ func generateAndSaveKeys() (*rsa.PrivateKey, *rsa.PublicKey, error) {
 		Bytes: publicKeyBytes,
 	})
 
-	if err := ioutil.WriteFile("./config/keys/public.pem", publicKeyPEM, 0644); err != nil {
+	// #nosec G306 -- Public keys are meant to be world-readable (0644)
+	if err := os.WriteFile("./config/keys/public.pem", publicKeyPEM, 0644); err != nil {
 		utils.LogWarn(service, operation, "Failed to save public key to file", err)
 	}
 
