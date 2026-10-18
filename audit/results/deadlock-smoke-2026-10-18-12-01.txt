@@ -1,0 +1,11 @@
+# deadlock profile=smoke base=localhost:8081
+reqs=1000 rps=135.7
+overall p50=222 p95=797 p99=1240 max=1535 (ms)
+failed=0.00% checks=100.0%
+  orders_badrequest=0
+  orders_soldout=0
+  orders_5xx=0
+  orders_other=0
+  orders_accepted=1000
+  orders_ratelimited=0
+THRESHOLDS: all passed

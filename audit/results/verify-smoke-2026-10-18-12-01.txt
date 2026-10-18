@@ -1,0 +1,12 @@
+# verify profile=smoke base=localhost:8081
+reqs=200 rps=97.9
+overall p50=212 p95=854 p99=1018 max=1145 (ms)
+failed=0.00%
+  pay_race_final_bad=0
+  pay_early_final_bad=0
+  pay_early_pending=20
+  pay_init_failed=0
+  pay_race_verify_ok=20
+  pay_race_verify_other=0
+  pay_early_unprotected=0
+THRESHOLDS: all passed

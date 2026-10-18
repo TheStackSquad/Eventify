@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const MaxTicketsPerOrder int32 = 10
+
 type OrderInitializationRequest struct {
 	Email     string                        `json:"email" binding:"required,email"`
 	FirstName string                        `json:"firstName" binding:"required"`
@@ -24,6 +26,9 @@ type OrderInitializationItem struct {
 	Quantity     int32     `json:"quantity" binding:"required,min=1"`
 }
 
+// MaxTicketsPerOrder caps how many tickets one checkout can reserve. 
+// Business rule: adjust as needed.
+
 func (r *OrderInitializationRequest) Validate() error {
 	if r.Email == "" {
 		return errors.New("email is required")
@@ -37,8 +42,8 @@ func (r *OrderInitializationRequest) Validate() error {
 	if len(r.Items) == 0 {
 		return errors.New("at least one item is required")
 	}
-
-for i, item := range r.Items {
+	var total int32
+	for i, item := range r.Items {
 		if item.EventID == uuid.Nil {
 			return fmt.Errorf("item %d: eventId is required", i)
 		}
@@ -48,7 +53,13 @@ for i, item := range r.Items {
 		if item.Quantity <= 0 {
 			return fmt.Errorf("item %d: quantity must be positive", i)
 		}
+		if item.Quantity > MaxTicketsPerOrder {
+			return fmt.Errorf("item %d: at most %d tickets per order", i, MaxTicketsPerOrder)
+		}
+		total += item.Quantity
+		if total > MaxTicketsPerOrder {
+			return fmt.Errorf("an order can contain at most %d tickets", MaxTicketsPerOrder)
+		}
 	}
-
 	return nil
 }

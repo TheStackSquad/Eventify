@@ -4,7 +4,6 @@ package order
 
 import (
     "context"
-    "errors"
     "fmt"
     "time"
 
@@ -55,8 +54,8 @@ func (r *PostgresOrderRepository) UpdateOrderToPaidTx(ctx context.Context, tx *s
 	}
 	
 	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return errors.New("order not found or status was not 'pending' (already processed)")
+		if rowsAffected == 0 {
+		return fmt.Errorf("finalize order %s: %w", order.ID, ErrOrderNotPending)
 	}
 	
 	return nil

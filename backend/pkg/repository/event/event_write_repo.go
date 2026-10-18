@@ -167,7 +167,7 @@ func (r *postgresEventRepository) DecrementTicketStockTx(
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
 		// This triggers if the ID is wrong OR if available < quantity
-		return fmt.Errorf("insufficient stock or invalid tier ID (requested: %d)", quantity)
+				return fmt.Errorf("tier %s, requested %d: %w", tierID, quantity, ErrNotEnoughStock)
 	}
 
 	return nil

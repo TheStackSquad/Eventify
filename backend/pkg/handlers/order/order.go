@@ -7,9 +7,10 @@ import (
 	"time"
 	//"fmt"
 	//"os"
-	"strings"
+	"errors"
 	
 	"github.com/eventify/backend/pkg/models"
+	repoevent "github.com/eventify/backend/pkg/repository/event"
      serviceorder "github.com/eventify/backend/pkg/services/order"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -71,26 +72,34 @@ func (h *OrderHandler) InitializeOrder(c *gin.Context) {
 	}
 
 	// 2. Initialize Order via Service
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 12*time.Second)
 	defer cancel()
 
 	// NOTE: We expect InitializePendingOrder to now return the Order AND the Paystack Auth URL
 	order, authURL, err := h.OrderService.InitializePendingOrder(ctx, &req, userID, guestID)
 
 	if err != nil {
-		log.Error().Err(err).Msg("Order initialization failed")
-		
-		// Handle Sold Out / Stock issues with 409 Conflict
-		if strings.Contains(strings.ToLower(err.Error()), "stock") || 
-		   strings.Contains(strings.ToLower(err.Error()), "available") {
-			c.JSON(http.StatusConflict, gin.H{
-				"status": "error", 
-				"message": "One or more items are sold out or have insufficient stock.",
-			})
-			return
+		status, code, msg := http.StatusInternalServerError, "ORDER_FAILED", "Failed to initialize order"
+		switch {
+		case errors.Is(err, serviceorder.ErrInvalidOrder):
+			status, code, msg = http.StatusBadRequest, "INVALID_ORDER", err.Error()
+		case errors.Is(err, repoevent.ErrNotEnoughStock):
+			status, code, msg = http.StatusConflict, "SOLD_OUT", "One or more items are sold out or have insufficient stock."
+		case errors.Is(err, repoevent.ErrTierUnavailable):
+			status, code, msg = http.StatusNotFound, "TICKET_UNAVAILABLE", "This ticket type is no longer available."
+		case errors.Is(err, serviceorder.ErrCheckoutBusy):
+			c.Header("Retry-After", "2")
+			status, code, msg = http.StatusServiceUnavailable, "CHECKOUT_BUSY", "We are very busy right now. Please try again in a moment."
+		case errors.Is(err, serviceorder.ErrPaymentGatewayUnavailable):
+			c.Header("Retry-After", "5")
+			status, code, msg = http.StatusServiceUnavailable, "PAYMENT_UNAVAILABLE", "Payment service is temporarily unavailable. You have not been charged."
 		}
-
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to initialize order"})
+		ev := log.Warn()
+		if status == http.StatusInternalServerError {
+			ev = log.Error()
+		}
+		ev.Err(err).Str("code", code).Msg("Order initialization failed")
+		c.JSON(status, gin.H{"status": "error", "code": code, "message": msg})
 		return
 	}
 
