@@ -37,39 +37,40 @@ func (s *OrderServiceImpl) StartStockReleaseWorker(ctx context.Context, interval
 func (s *OrderServiceImpl) ReleaseExpiredStock(ctx context.Context, expiry time.Duration) error {
 	threshold := time.Now().UTC().Add(-expiry)
 
-	// 1. Fetch orders stuck in PENDING
 	expiredOrders, err := s.OrderRepo.GetExpiredPendingOrders(ctx, threshold)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to fetch expired orders")
 		return err
 	}
-
 	if len(expiredOrders) == 0 {
 		return nil
 	}
 
-	for _, order := range expiredOrders {
-		// 2. Atomic cleanup transaction
+	for i := range expiredOrders {
+		order := expiredOrders[i]
+		released := false
+
 		err := s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
-			// Update status to EXPIRED (This blocks any late Paystack callbacks)
-			if err := s.OrderRepo.UpdateOrderStatusTx(ctx, tx, order.ID, models.OrderSubStatusExpired); err != nil {
+			released = false
+			moved, err := s.OrderRepo.TransitionPendingOrderTx(ctx, tx, order.ID, models.OrderSubStatusExpired)
+			if err != nil {
 				return err
 			}
-
-			// Return the tickets to the event inventory
-			if err := s.releaseReservedStockTx(ctx, tx, &order); err != nil {
-				return err
+			if !moved {
+				return nil // paid or closed in the meantime: leave its stock alone
 			}
-
-			return nil
+			released = true
+			return s.releaseReservedStockTx(ctx, tx, &order)
 		})
 
-		if err != nil {
+		switch {
+		case err != nil:
 			log.Error().Err(err).Str("ref", order.Reference).Msg("Worker failed to release stock")
-			continue
+		case released:
+			log.Info().Str("ref", order.Reference).Msg("Stock reclaimed from abandoned order")
+		default:
+			log.Info().Str("ref", order.Reference).Msg("Order was paid or closed before expiry; stock left untouched")
 		}
-		log.Info().Str("ref", order.Reference).Msg("Stock reclaimed from abandoned order")
 	}
-
 	return nil
 }

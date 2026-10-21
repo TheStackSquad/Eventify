@@ -45,3 +45,7 @@ Thumbs.db
 logs/
 tmp/
 temp/vendorScript/
+audit/results/raw/
+audit/env/*.env
+audit/*.out
+audit/*.json

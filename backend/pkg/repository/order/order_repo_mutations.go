@@ -113,3 +113,17 @@ func (r *PostgresOrderRepository) UpdateOrderStatusTx(ctx context.Context, tx *s
 	}
 	return nil
 }
+
+// TransitionPendingOrderTx moves an order out of 'pending' only while it is still pending.
+// It returns false when the order already left 'pending' (for example a payment finished
+// first), so the caller must not release its stock.
+func (r *PostgresOrderRepository) TransitionPendingOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, to models.OrderStatus) (bool, error) {
+	res, err := tx.ExecContext(ctx,
+		`UPDATE orders SET status = $1, updated_at = $2 WHERE id = $3 AND status = 'pending'`,
+		to, time.Now().UTC(), orderID)
+	if err != nil {
+		return false, fmt.Errorf("failed to transition order %s: %w", orderID, err)
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
+}

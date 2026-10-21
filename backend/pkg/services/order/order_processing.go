@@ -6,8 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
+
+	repoevent "github.com/eventify/backend/pkg/repository/event"
+	repoorder "github.com/eventify/backend/pkg/repository/order"
 
 	"github.com/eventify/backend/pkg/models"
 	"github.com/eventify/backend/pkg/utils"
@@ -24,6 +28,10 @@ var (
 	ErrAlreadyProcessed = errors.New("order already processed")
 	ErrOrderNotPending  = errors.New("order is not in pending status")
 	ErrUnauthorized     = errors.New("unauthorized access to order")
+	//ErrOrderNotFound       = errors.New("order not found")
+	ErrAmountMismatch      = errors.New("AmountMismatch")
+	ErrPaymentNotCompleted = errors.New("payment not completed")
+	ErrOrderNotFulfilled   = errors.New("payment received but the order is not fulfilled")
 )
 
 // ============================================================================
@@ -37,6 +45,12 @@ type verificationLock struct {
 	mu        sync.Mutex
 	inFlight  bool
 	expiresAt time.Time
+}
+
+// applyStockReductionsTx reduces available ticket stock for purchased items
+type tierQty struct {
+	TierID   uuid.UUID
+	Quantity int32
 }
 
 // ============================================================================
@@ -90,11 +104,11 @@ func (s *OrderServiceImpl) VerifyAndProcess(ctx context.Context, reference strin
 	// Fetch order from database
 	order, err := s.OrderRepo.GetOrderByReference(ctx, reference)
 	if err != nil {
-		return nil, fmt.Errorf("order not found for reference %s: %w", reference, err)
+		return nil, fmt.Errorf("%w: reference %s: %w", ErrOrderNotFound, reference, err)
 	}
 
 	if order == nil {
-		return nil, fmt.Errorf("order not found for reference: %s", reference)
+		return nil, fmt.Errorf("%w: reference %s", ErrOrderNotFound, reference)
 	}
 
 	// Authorization check
@@ -114,21 +128,69 @@ func (s *OrderServiceImpl) VerifyAndProcess(ctx context.Context, reference strin
 	}
 
 	// Verify with Paystack API
+	// Verify with Paystack API
 	resp, err := s.PaystackClient.VerifyTransaction(ctx, reference)
 	if err != nil {
 		return nil, fmt.Errorf("paystack verification failed: %w", err)
 	}
+	if resp == nil || resp.Data == nil {
+		return nil, errors.New("paystack verification returned no data")
+	}
 
-	// Finalize order
+	// Never declare an unpaid transaction failed from the verify path. Paystack reports
+	// these statuses while the customer is still on the payment page. Only the webhook
+	// may mark a payment failed.
+	if order.Status == models.OrderStatusPending && isUnpaidInFlight(resp.Data.Status) {
+		return order, fmt.Errorf("%w: paystack status %q", ErrPaymentNotCompleted, resp.Data.Status)
+	}
+
 	order, err = s.finalizeOrder(ctx, order, resp.Data, "verification")
 
-	// Handle race condition (webhook processed first)
+	// Lost the race (webhook finished first), or the order was already closed:
+	// re-read and report what really happened.
 	if err != nil && errors.Is(err, ErrAlreadyProcessed) {
-		log.Info().Str("ref", reference).Msg("Order processed by webhook during verification")
-		return order, nil
+		return s.resolveAlreadyProcessed(ctx, reference, resp.Data.Status == "success")
 	}
 
 	return order, err
+}
+
+func isUnpaidInFlight(status string) bool {
+	switch status {
+	case "abandoned", "pending", "ongoing", "processing", "queued":
+		return true
+	}
+	return false
+}
+
+// resolveAlreadyProcessed re-reads an order that another request finished and reports
+// what actually happened to it, instead of trusting stale in-memory state.
+func (s *OrderServiceImpl) resolveAlreadyProcessed(ctx context.Context, reference string, paidUpstream bool) (*models.Order, error) {
+	fresh, err := s.OrderRepo.GetOrderByReference(ctx, reference)
+	if err != nil {
+		return nil, fmt.Errorf("re-reading order %s after concurrent processing: %w", reference, err)
+	}
+	if fresh == nil {
+		return nil, fmt.Errorf("%w: reference %s", ErrOrderNotFound, reference)
+	}
+
+	switch string(fresh.Status) {
+	case "success":
+		if err := s.OrderRepo.LoadOrderRelations(ctx, fresh); err != nil {
+			log.Warn().Err(err).Str("ref", reference).Msg("Could not hydrate order relations on idempotent verify")
+		}
+		log.Info().Str("ref", reference).Str("processed_by", fresh.ProcessedBy.String).Msg("Order already fulfilled; verification is idempotent")
+		return fresh, nil
+	case "pending", "processing":
+		return fresh, fmt.Errorf("%w: order is still %s", ErrPaymentNotCompleted, fresh.Status)
+	default: // failed, fraud, expired, refunded
+		if paidUpstream {
+			log.Error().Str("ref", reference).Str("order_status", string(fresh.Status)).
+				Msg("PAID_BUT_NOT_FULFILLED: Paystack reports success but the order is closed; needs refund or manual fulfilment")
+			return fresh, fmt.Errorf("%w: order is %s", ErrOrderNotFulfilled, fresh.Status)
+		}
+		return fresh, fmt.Errorf("order is in %s state and cannot be verified", fresh.Status)
+	}
 }
 
 // ============================================================================
@@ -187,10 +249,15 @@ func (s *OrderServiceImpl) finalizeOrder(ctx context.Context, order *models.Orde
 	// Payment status check
 	if data.Status != "success" {
 		log.Warn().Str("ref", order.Reference).Msg("Transaction failed upstream.")
-		_ = s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
-			_ = s.OrderRepo.UpdateOrderStatusTx(ctx, tx, order.ID, models.OrderStatusFailed)
+		if err := s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
+			moved, err := s.OrderRepo.TransitionPendingOrderTx(ctx, tx, order.ID, models.OrderStatusFailed)
+			if err != nil || !moved {
+				return err
+			}
 			return s.releaseReservedStockTx(ctx, tx, order)
-		})
+		}); err != nil {
+			log.Error().Err(err).Str("ref", order.Reference).Msg("Failed to close order after upstream failure")
+		}
 		return order, errors.New("transaction verification failed")
 	}
 
@@ -201,12 +268,16 @@ func (s *OrderServiceImpl) finalizeOrder(ctx context.Context, order *models.Orde
 			_ = s.OrderRepo.UpdateOrderStatusTx(ctx, tx, order.ID, models.OrderStatusFraud)
 			return s.releaseReservedStockTx(ctx, tx, order)
 		})
-		return order, fmt.Errorf("AmountMismatch: expected %d, received %d", order.FinalTotal, data.Amount)
+		return order, fmt.Errorf("%w: expected %d, received %d", ErrAmountMismatch, order.FinalTotal, data.Amount)
 	}
 
 	// Prepare order data
 	order.AmountPaid = int64(data.Amount)
-	order.ServiceFee = int64(data.Fees)
+	//order.ServiceFee = int64(data.Fees)
+	if data.Fees > 0 {
+		order.PaystackFee = int64(data.Fees)
+		order.AppProfit = order.ServiceFee + order.VATAmount - order.PaystackFee
+	}
 	order.PaymentChannel = models.ToNullString(data.Channel)
 
 	var paidAt time.Time
@@ -249,20 +320,20 @@ func (s *OrderServiceImpl) finalizeOrder(ctx context.Context, order *models.Orde
 
 		firstItem := order.Items[0]
 		payload := map[string]interface{}{
-			"user_name":    order.CustomerFirstName,
-			"event_title":  firstItem.EventTitle,
-			"event_venue":  func() string {
-    if firstItem.EventVenue != nil {
-        return *firstItem.EventVenue
-    }
-    return "TBD"
-}(),
+			"user_name":   order.CustomerFirstName,
+			"event_title": firstItem.EventTitle,
+			"event_venue": func() string {
+				if firstItem.EventVenue != nil {
+					return *firstItem.EventVenue
+				}
+				return "TBD"
+			}(),
 			"event_date": func() string {
-    if firstItem.EventStartDate != nil {
-        return firstItem.EventStartDate.Format("Monday, Jan 02, 2006")
-    }
-    return "TBD"
-}(),
+				if firstItem.EventStartDate != nil {
+					return firstItem.EventStartDate.Format("Monday, Jan 02, 2006")
+				}
+				return "TBD"
+			}(),
 			"order_ref":    order.Reference,
 			"total_amount": order.FinalTotal,
 			"ticket_codes": ticketCodes,
@@ -282,6 +353,12 @@ func (s *OrderServiceImpl) finalizeOrder(ctx context.Context, order *models.Orde
 	})
 
 	if err != nil {
+		// Lost the race: another request finalized this order between our status check
+		// and our UPDATE. Nothing was written; the transaction rolled back.
+		if errors.Is(err, repoorder.ErrOrderNotPending) {
+			log.Info().Str("ref", order.Reference).Str("attempted_by", processedBy).Msg("Order finalized concurrently by another request")
+			return order, ErrAlreadyProcessed
+		}
 		return order, fmt.Errorf("atomic finalization failed: %w", err)
 	}
 
@@ -321,35 +398,44 @@ func (s *OrderServiceImpl) generateTicketsForOrder(ctx context.Context, order *m
 	return tickets, nil
 }
 
-// applyStockReductionsTx reduces available ticket stock for purchased items
-func (s *OrderServiceImpl) applyStockReductionsTx(ctx context.Context, tx *sqlx.Tx, order *models.Order) error {
-	reductions := make(map[uuid.UUID]int32)
-
-	for _, item := range order.Items {
-		reductions[item.TicketTierID] += item.Quantity
+// sortedTierQuantities merges items per tier and sorts by tier ID. Every transaction that
+// touches several tiers must lock them in this same order, or two orders can deadlock.
+func sortedTierQuantities(items []models.OrderItem) []tierQty {
+	byTier := make(map[uuid.UUID]int32, len(items))
+	for _, it := range items {
+		byTier[it.TicketTierID] += it.Quantity
 	}
+	out := make([]tierQty, 0, len(byTier))
+	for id, q := range byTier {
+		out = append(out, tierQty{id, q})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].TierID.String() < out[j].TierID.String() })
+	return out
+}
 
-	for tierID, quantity := range reductions {
-		err := s.EventRepo.DecrementTicketStockTx(ctx, tx, tierID, quantity)
-		if err != nil {
-			log.Error().Err(err).Str("tier_id", tierID.String()).Int32("quantity", quantity).Msg("OrderService: Failed to decrement stock during order processing")
-			return fmt.Errorf("stock reduction failed for tier %s: %w", tierID, err)
+func (s *OrderServiceImpl) applyStockReductionsTx(ctx context.Context, tx *sqlx.Tx, order *models.Order) error {
+	for _, tq := range sortedTierQuantities(order.Items) {
+		if err := s.EventRepo.DecrementTicketStockTx(ctx, tx, tq.TierID, tq.Quantity); err != nil {
+			ev := log.Error()
+			if errors.Is(err, repoevent.ErrNotEnoughStock) {
+				ev = log.Warn() // a normal sold-out is not an error
+			}
+			ev.Err(err).Str("tier_id", tq.TierID.String()).Int32("quantity", tq.Quantity).Msg("OrderService: could not reserve stock")
+			return fmt.Errorf("stock reduction failed for tier %s: %w", tq.TierID, err)
 		}
 	}
-
 	return nil
 }
 
-// releaseReservedStockTx restores stock for failed/abandoned orders
+// releaseReservedStockTx restores stock for failed/abandoned orders using deterministic sorting
+// releaseReservedStockTx restores stock for failed or abandoned orders, locking tiers in a fixed order.
 func (s *OrderServiceImpl) releaseReservedStockTx(ctx context.Context, tx *sqlx.Tx, order *models.Order) error {
-	for _, item := range order.Items {
-		err := s.EventRepo.IncrementTicketStockTx(ctx, tx, item.TicketTierID, item.Quantity)
-		if err != nil {
-			log.Error().Err(err).Str("tier_id", item.TicketTierID.String()).Int32("qty", item.Quantity).Msg("Failed to restore stock for abandoned/failed order")
-			return fmt.Errorf("failed to restore stock for tier %s: %w", item.TicketTierID, err)
+	for _, tq := range sortedTierQuantities(order.Items) {
+		if err := s.EventRepo.IncrementTicketStockTx(ctx, tx, tq.TierID, tq.Quantity); err != nil {
+			log.Error().Err(err).Str("tier_id", tq.TierID.String()).Int32("qty", tq.Quantity).Msg("Failed to restore stock for abandoned/failed order")
+			return fmt.Errorf("failed to restore stock for tier %s: %w", tq.TierID, err)
 		}
 	}
-
 	log.Info().Str("order_ref", order.Reference).Int("items_restored", len(order.Items)).Msg("Inventory successfully restored for failed/expired order")
 	return nil
 }

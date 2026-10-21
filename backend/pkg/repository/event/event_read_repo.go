@@ -14,6 +14,11 @@ import (
 	"github.com/lib/pq"
 )
 
+const(
+	txMaxAttempts = 3
+	txLockTimeout = "3s"
+)
+
 // GetEventByID retrieves an event with its ticket tiers 
 func (r *postgresEventRepository) GetEventByID(
 	ctx context.Context,
@@ -364,7 +369,7 @@ func (r *postgresEventRepository) GetTierDetailsByID(ctx context.Context, tierID
     err := r.db.GetContext(ctx, &details, query, tierID)
     if err != nil {
         if err == sql.ErrNoRows {
-            return nil, fmt.Errorf("ticket tier not found or event inactive")
+            		return nil, ErrTierUnavailable
         }
         return nil, fmt.Errorf("failed to get tier details by ID: %w", err)
     }

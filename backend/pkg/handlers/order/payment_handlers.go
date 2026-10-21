@@ -7,9 +7,10 @@ import (
 	"io"
 	"net/http"
 	"time"
-	"strings"
+	"errors"
 
 	"github.com/eventify/backend/pkg/models"
+    serviceorder "github.com/eventify/backend/pkg/services/order"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -18,47 +19,40 @@ import (
 // VerifyPayment handles client-initiated payment verification
 // VerifyPayment handles payment verification for both initial verification and retries
 func (h *OrderHandler) VerifyPayment(c *gin.Context) {
-    reference := c.Param("reference")
-    if reference == "" {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "status":  "error",
-            "message": "Payment reference is required",
-        })
-        return
-    }
+	reference := c.Param("reference")
+	if reference == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Payment reference is required"})
+		return
+	}
 
-    guestID, _ := c.Cookie("guest_id")
-    order, err := h.OrderService.VerifyAndProcess(c.Request.Context(), reference, guestID)
+	guestID, _ := c.Cookie("guest_id")
+	order, err := h.OrderService.VerifyAndProcess(c.Request.Context(), reference, guestID)
 
-    if err != nil {
-        log.Error().Err(err).Str("ref", reference).Msg("Verification failed")
-        
-        statusCode := http.StatusPaymentRequired
-        if strings.Contains(err.Error(), "not found") {
-            statusCode = http.StatusNotFound
-        } else if strings.Contains(err.Error(), "AmountMismatch") {
-            statusCode = http.StatusConflict
-        }
+	if err != nil {
+		status, code, msg := http.StatusPaymentRequired, "VERIFY_FAILED", "Payment verification failed"
+		switch {
+		case errors.Is(err, serviceorder.ErrOrderNotFound):
+			status, code, msg = http.StatusNotFound, "ORDER_NOT_FOUND", "Order not found"
+		case errors.Is(err, serviceorder.ErrAmountMismatch):
+			status, code, msg = http.StatusConflict, "AMOUNT_MISMATCH", "Payment amount does not match the order"
+		case errors.Is(err, serviceorder.ErrOrderNotFulfilled):
+			status, code, msg = http.StatusConflict, "PAID_NOT_FULFILLED", "Payment received but this order could not be completed. Please contact support with your reference."
+		case errors.Is(err, serviceorder.ErrPaymentNotCompleted):
+			status, code, msg = http.StatusPaymentRequired, "PAYMENT_PENDING", "Payment has not been completed yet"
+		}
 
-        c.JSON(statusCode, gin.H{
-            "status":  "error",
-            "message": "Payment verification failed",
-            "error":   err.Error(),
-        })
-        return
-    }
+		ev := log.Warn()
+		if code == "VERIFY_FAILED" {
+			ev = log.Error()
+		}
+		ev.Err(err).Str("ref", reference).Str("code", code).Msg("Verification failed")
 
-    // ✅ Success - whether newly processed or already processed
-    log.Info().
-        Str("ref", reference).
-        Str("status", string(order.Status)).
-        Msg("Payment verification successful")
+		c.JSON(status, gin.H{"status": "error", "code": code, "message": "Payment verification failed", "error": msg})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{
-        "status":  "success",
-        "message": "Payment verified successfully",
-        "data":    order,
-    })
+	log.Info().Str("ref", reference).Str("status", string(order.Status)).Msg("Payment verification successful")
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Payment verified successfully", "data": order})
 }
 
 // HandlePaystackWebhook handles notifications from Paystack
@@ -82,7 +76,7 @@ func (h *OrderHandler) HandlePaystackWebhook(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
 	if err := h.OrderService.ProcessWebhook(ctx, &webhook, signature); err != nil {

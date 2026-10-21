@@ -39,11 +39,11 @@ export default function Hero() {
       {/* Main Content Container */}
       <div className="relative max-w-7xl mx-auto px-4 md:px-6 lg:px-8 z-10">
         {/* Hero Content - Two-Column Responsive Layout */}
-        <div className="flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-16">
+        <div className="flex flex-col lg:flex-row items-center justify-between gap-7 lg:gap-10">
           {/* Left Column: Text & CTA */}
           <div className="flex-1 max-w-full lg:max-w-xl xl:max-w-2xl space-y-6 md:space-y-8 hero-fade-in order-2 lg:order-1">
             {/* ✅ OPTIMIZED: Link instead of <a>, lucide icons */}
-            <div className="flex justify-start">
+            {/* <div className="flex justify-start">
               <Link
                 href=""
                 className="group inline-flex items-center gap-2.5 px-6 py-3 md:px-7 md:py-3.5 text-sm md:text-base font-bold text-red-600 bg-gradient-to-r from-red-50 to-red-100 rounded-full shadow-lg shadow-red-200/50 transition-all duration-300 hover:shadow-xl hover:shadow-red-300/60 hover:from-red-100 hover:to-red-200 active:scale-95 border border-red-200/80"
@@ -81,7 +81,7 @@ export default function Hero() {
                   />
                 </svg>
               </Link>
-            </div>
+            </div> */}
 
             {/* Main Heading - OPTIMIZED: Removed unnecessary spans */}
             <h1 className="text-gray-900 text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-black leading-[1.1] tracking-tight">

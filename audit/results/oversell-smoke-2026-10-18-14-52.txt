@@ -1,0 +1,11 @@
+# oversell profile=smoke base=localhost:8081
+reqs=50 rps=58.2
+overall p50=703 p95=806 p99=825 max=840 (ms)
+failed=0.00% checks=100.0%
+  orders_badrequest=0
+  orders_soldout=40
+  orders_accepted=10
+  orders_5xx=0
+  orders_ratelimited=0
+  orders_other=0
+THRESHOLDS: all passed

@@ -1,4 +1,4 @@
-// backend/pkg/services/pricing/pricing_service.
+// backend/pkg/services/pricing/pricing_service.go
 
 package pricing
 
@@ -43,7 +43,7 @@ func (s *PricingServiceImpl) CalculateAuthoritativeOrder(
 		}
 		// 2. Validate stock availability
 		if clientItem.Quantity > tierDetails.Available {
-			return nil, fmt.Errorf("insufficient stock for %s: requested %d, only %d available", tierDetails.TierName, clientItem.Quantity, tierDetails.Available)
+						return nil, fmt.Errorf("%w: %s requested %d, only %d available", repoevent.ErrNotEnoughStock, tierDetails.TierName, clientItem.Quantity, tierDetails.Available)
 		}
 		// 3. Calculate Item Subtotals
 		unitPrice := int64(tierDetails.PriceKobo)

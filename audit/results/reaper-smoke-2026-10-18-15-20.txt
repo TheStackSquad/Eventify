@@ -1,0 +1,6 @@
+# reaper profile=smoke base=localhost:8081
+reqs=300 rps=3.3
+overall p50=17 p95=247 p99=258 max=377 (ms)
+failed=0.00%
+  pay_init_failed=0
+THRESHOLDS: all passed

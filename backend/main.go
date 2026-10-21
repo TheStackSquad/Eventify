@@ -182,7 +182,7 @@ vendorAnalyticsService := servicevendor.NewVendorAnalyticsService(
 
 paystackClient := servicepaystack.NewClient(
     os.Getenv("PAYSTACK_SECRET_KEY"),
-    &http.Client{Timeout: 30 * time.Second},
+    &http.Client{Timeout: 10 * time.Second},
 )
 
 	pricingService := servicepricing.NewPricingService(eventRepo)
@@ -270,8 +270,9 @@ router := routes.ConfigureRouter(
 		Addr:         serverAddr,
 		Handler:      router,
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		WriteTimeout: 20 * time.Second,
 		IdleTimeout:  60 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	// Start server in goroutine

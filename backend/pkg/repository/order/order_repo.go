@@ -7,7 +7,10 @@ import (
 	"errors"
 	"time"
 	"fmt"
+	"math/rand" 
 	
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/rs/zerolog/log"
 	"github.com/eventify/backend/pkg/models"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -30,6 +33,7 @@ type OrderRepository interface {
 	IncrementWebhookAttempts(ctx context.Context, reference string) error
 	SavePendingOrder(ctx context.Context, order *models.Order) (uuid.UUID, error)
 	GetExpiredPendingOrders(ctx context.Context, threshold time.Time) ([]models.Order, error)
+	TransitionPendingOrderTx(ctx context.Context, tx *sqlx.Tx, orderID uuid.UUID, to models.OrderStatus) (bool, error)
 
 	SavePendingOrderTx(ctx context.Context, tx *sqlx.Tx, order *models.Order) (uuid.UUID, error)
 	UpdateOrderToPaidTx(ctx context.Context, tx *sqlx.Tx, order *models.Order) error
@@ -50,8 +54,39 @@ func NewPostgresOrderRepository(db *sqlx.DB) *PostgresOrderRepository {
 }
 
 // --- IMPLEMENTATIONS ---
+const (
+	txMaxAttempts = 3
+	txLockTimeout = "3s"
+)
+
+// isRetryableTxError: Postgres deadlock (40P01) and serialization (40001) failures.
+// The server already rolled the transaction back, so it is safe to run again.
+func isRetryableTxError(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "40P01" || pgErr.Code == "40001"
+	}
+	return false
+}
 
 func (r *PostgresOrderRepository) RunInTransaction(ctx context.Context, fn func(tx *sqlx.Tx) error) error {
+	var err error
+	for attempt := 1; attempt <= txMaxAttempts; attempt++ {
+		err = r.runTxOnce(ctx, fn)
+		if err == nil || !isRetryableTxError(err) || attempt == txMaxAttempts {
+			return err
+		}
+		log.Warn().Err(err).Int("attempt", attempt).Msg("Transaction hit a deadlock or serialization failure; retrying")
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(time.Duration(10*attempt+rand.Intn(20)) * time.Millisecond): // #nosec G404 -- retry jitter only
+		}
+	}
+	return err
+}
+// runTxOnce uses a NAMED result so a failed Commit is actually returned (F-011).
+func (r *PostgresOrderRepository) runTxOnce(ctx context.Context, fn func(tx *sqlx.Tx) error) (err error) {
 	tx, err := r.DB.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -60,14 +95,18 @@ func (r *PostgresOrderRepository) RunInTransaction(ctx context.Context, fn func(
 		if p := recover(); p != nil {
 			_ = tx.Rollback()
 			panic(p)
-		} else if err != nil {
-			_ = tx.Rollback()
-		} else {
-			err = tx.Commit()
 		}
+		if err != nil {
+			_ = tx.Rollback()
+			return
+		}
+		err = tx.Commit()
 	}()
-	err = fn(tx)
-	return err
+	// Fail fast instead of waiting on a row lock until the request times out.
+	if _, err = tx.ExecContext(ctx, "SET LOCAL lock_timeout = '"+txLockTimeout+"'"); err != nil {
+		return err
+	}
+	return fn(tx)
 }
 
 func (r *PostgresOrderRepository) SavePendingOrderTx(ctx context.Context, tx *sqlx.Tx, order *models.Order) (uuid.UUID, error) {
@@ -85,12 +124,12 @@ func (r *PostgresOrderRepository) SavePendingOrderTx(ctx context.Context, tx *sq
 	insertQuery := `
         INSERT INTO orders (
             id, user_id, guest_id, reference, status, subtotal, service_fee, vat_amount, 
-            final_total, amount_paid, customer_email, customer_first_name, customer_last_name, 
+			final_total, amount_paid, paystack_fee, app_profit, customer_email, customer_first_name, customer_last_name,
             customer_phone, ip_address, user_agent, processed_by, webhook_attempts,
             created_at, updated_at
         ) VALUES (
-            :id, :user_id, :guest_id, :reference, :status, :subtotal, :service_fee, :vat_amount, 
-            :final_total, :amount_paid, :customer_email, :customer_first_name, :customer_last_name, 
+            :id, :user_id, :guest_id, :reference, :status, :subtotal, :service_fee, :vat_amount,
+			:final_total, :amount_paid, :paystack_fee, :app_profit, :customer_email, :customer_first_name, :customer_last_name,
             :customer_phone, :ip_address, :user_agent, :processed_by, :webhook_attempts,
             :created_at, :updated_at
         )`

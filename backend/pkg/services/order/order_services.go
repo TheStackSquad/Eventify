@@ -11,6 +11,9 @@ import (
 
 	"github.com/eventify/backend/pkg/models"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/rs/zerolog/log"
+
 	repoevent "github.com/eventify/backend/pkg/repository/event"
 	repoorder "github.com/eventify/backend/pkg/repository/order"
 	"github.com/eventify/backend/pkg/services/paystack"
@@ -20,6 +23,12 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+var (
+	ErrInvalidOrder              = errors.New("invalid order")
+	ErrCheckoutBusy              = errors.New("checkout is busy, please retry")
+	ErrPaymentGatewayUnavailable = errors.New("payment gateway unavailable")
+	ErrOrderNotFound             = errors.New("order not found")
+)
 
 // INTERFACES
 
@@ -36,16 +45,15 @@ type OrderService interface {
 	StartStockReleaseWorker(ctx context.Context, interval time.Duration, expiry time.Duration)
 }
 
-
 // IMPLEMENTATION
 
 type OrderServiceImpl struct {
-	OrderRepo         repoorder.OrderRepository
-	EventRepo         repoevent.EventRepository
-	PricingService    PricingService
-	PaystackClient    paystack.Client
+	OrderRepo       repoorder.OrderRepository
+	EventRepo       repoevent.EventRepository
+	PricingService  PricingService
+	PaystackClient  paystack.Client
 	FrontendBaseURL string
-	PaystackSecret    string
+	PaystackSecret  string
 }
 
 func NewOrderService(
@@ -55,15 +63,14 @@ func NewOrderService(
 	psClient paystack.Client,
 ) OrderService {
 	return &OrderServiceImpl{
-		OrderRepo:         orderRepo,
-		EventRepo:         eventRepo,
-		PricingService:    pricingService,
-		PaystackClient:    psClient,
+		OrderRepo:       orderRepo,
+		EventRepo:       eventRepo,
+		PricingService:  pricingService,
+		PaystackClient:  psClient,
 		FrontendBaseURL: os.Getenv("FRONTEND_BASE_URL"),
-		PaystackSecret:    os.Getenv("PAYSTACK_SECRET_KEY"),
+		PaystackSecret:  os.Getenv("PAYSTACK_SECRET_KEY"),
 	}
 }
-
 
 func (s *OrderServiceImpl) VerifyWebhookSignature(body []byte, signature string) bool {
 	return paystack.VerifyWebhookSignature(body, signature, s.PaystackSecret)
@@ -77,8 +84,9 @@ func (s *OrderServiceImpl) InitializePendingOrder(
 	guestID string,
 ) (*models.Order, string, error) {
 	// 1. REQUEST VALIDATION
+	// 1. validation
 	if err := req.Validate(); err != nil {
-		return nil, "", fmt.Errorf("validation failed: %w", err)
+		return nil, "", fmt.Errorf("%w: %w", ErrInvalidOrder, err)
 	}
 
 	// 2. AUTHORITATIVE PRICING CALCULATION
@@ -154,7 +162,7 @@ func (s *OrderServiceImpl) InitializePendingOrder(
 	)
 
 	if err != nil {
-		// Note: We don't rollback the DB here. If Paystack fails, the order stays 'pending' 
+		// Note: We don't rollback the DB here. If Paystack fails, the order stays 'pending'
 		// and the StockReleaseWorker will recover the stock after the timeout.
 		return nil, "", fmt.Errorf("payment gateway initialization failed: %w", err)
 	}
@@ -169,8 +177,11 @@ func (s *OrderServiceImpl) GetOrderByReference(
 	guestID string,
 ) (*models.Order, error) {
 	order, err := s.OrderRepo.GetOrderByReference(ctx, reference)
-	if err != nil || order == nil {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("loading order %s: %w", reference, err)
+	}
+	if order == nil {
+		return nil, fmt.Errorf("%w: reference %s", ErrOrderNotFound, reference)
 	}
 
 	// AUTHENTICATED USER ACCESS
@@ -184,4 +195,38 @@ func (s *OrderServiceImpl) GetOrderByReference(
 	}
 
 	return nil, errors.New("unauthorized access to order")
+}
+
+// isTransientDBError: lock wait exceeded (55P03), deadlock (40P01), serialization failure (40001), or timeout.
+func isTransientDBError(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "55P03", "40P01", "40001":
+			return true
+		}
+	}
+	return errors.Is(err, context.DeadlineExceeded)
+}
+
+// releaseFailedInitialization returns the tickets right away when Paystack never produced a
+// payment link (nobody can pay for this order) instead of holding them for 15 minutes.
+func (s *OrderServiceImpl) releaseFailedInitialization(order *models.Order) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
+		moved, err := s.OrderRepo.TransitionPendingOrderTx(ctx, tx, order.ID, models.OrderStatusFailed)
+		if err != nil || !moved {
+			return err
+		}
+		return s.releaseReservedStockTx(ctx, tx, order)
+	})
+
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("ref", order.Reference).
+			Msg("Could not release stock after gateway failure; the reaper will reclaim it")
+	}
 }

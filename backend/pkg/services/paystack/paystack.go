@@ -1,4 +1,5 @@
 // backend/pkg/services/paystack/paystack.go
+
 package paystack
 
 import (
@@ -11,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/eventify/backend/pkg/models"
@@ -34,6 +36,15 @@ type Client interface {
 type ClientImpl struct {
 	SecretKey  string
 	HTTPClient *http.Client
+	BaseURL    string
+}
+
+// base returns the custom base URL if configured, otherwise falls back to production Paystack.
+func (c *ClientImpl) base() string {
+	if c.BaseURL != "" {
+		return c.BaseURL
+	}
+	return "https://api.paystack.co"
 }
 
 // NewClient constructs a PaystackClient with the provided secret key.
@@ -45,6 +56,7 @@ func NewClient(secretKey string, httpClient *http.Client) Client {
 	return &ClientImpl{
 		SecretKey:  secretKey,
 		HTTPClient: httpClient,
+		BaseURL:    strings.TrimRight(os.Getenv("PAYSTACK_BASE_URL"), "/"),
 	}
 }
 
@@ -72,7 +84,7 @@ type initializeResponse struct {
 }
 
 func (c *ClientImpl) InitializeTransaction(ctx context.Context, email string, amountKobo int64, reference string, metadata map[string]string, callbackURL string) (string, error) {
-	url := "https://api.paystack.co/transaction/initialize"
+	url := c.base() + "/transaction/initialize"
 
 	body := initializeRequest{
 		Email:       email,
@@ -123,7 +135,7 @@ func (c *ClientImpl) InitializeTransaction(ctx context.Context, email string, am
 // ---------------------------------------------------------------------------
 
 func (c *ClientImpl) VerifyTransaction(ctx context.Context, reference string) (*models.PaystackVerificationResponse, error) {
-	url := fmt.Sprintf("https://api.paystack.co/transaction/verify/%s", reference)
+	url := fmt.Sprintf("%s/transaction/verify/%s", c.base(), reference)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
