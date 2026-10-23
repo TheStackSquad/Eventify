@@ -14,7 +14,7 @@ import (
 )
 
 // 1. Add the Transaction Helper to your Subscription Repo
-func (r *subscriptionRepository) RunInTransaction(ctx context.Context, fn func(tx *sqlx.Tx) error) error {
+func (r *subscriptionRepository) RunInTransaction(ctx context.Context, fn func(tx *sqlx.Tx) error) (err error) {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -23,16 +23,15 @@ func (r *subscriptionRepository) RunInTransaction(ctx context.Context, fn func(t
 		if p := recover(); p != nil {
 			_ = tx.Rollback()
 			panic(p)
-		} else if err != nil {
-			_ = tx.Rollback()
-		} else {
-			err = tx.Commit()
 		}
+		if err != nil {
+			_ = tx.Rollback()
+			return
+		}
+		err = tx.Commit() // now visible to the caller
 	}()
-	err = fn(tx)
-	return err
+	return fn(tx)
 }
-
 // 2. Updated Atomic Update Method
 func (r *subscriptionRepository) UpdateAfterPayment(ctx context.Context, id uuid.UUID, params PaymentUpdateParams) error {
     return r.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
@@ -175,24 +174,26 @@ func (r *subscriptionRepository) GetByID(ctx context.Context, id uuid.UUID) (*mo
 }
 
 func (r *subscriptionRepository) IncrementWebhookAttempts(ctx context.Context, reference string) error {
-	// Using payment_reference since that's what Paystack sends back
-	query := `
-		UPDATE subscriptions SET 
-			webhook_attempts = COALESCE(webhook_attempts, 0) + 1,
-			updated_at = $1
-		WHERE payment_reference = $2
-	`
-
-	result, err := r.db.ExecContext(ctx, query, time.Now().UTC(), reference)
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE subscription_payments SET webhook_attempts = webhook_attempts + 1
+		WHERE reference = $1`, reference)
 	if err != nil {
 		return fmt.Errorf("failed to increment webhook attempts: %w", err)
 	}
-
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return fmt.Errorf("subscription reference %s not found", reference)
+	if n, _ := res.RowsAffected(); n > 0 {
+		return nil
 	}
 
+	// Legacy: payments initiated before the ledger are keyed by payment_reference.
+	res, err = r.db.ExecContext(ctx, `
+		UPDATE subscriptions SET webhook_attempts = COALESCE(webhook_attempts, 0) + 1, updated_at = $1
+		WHERE payment_reference = $2`, time.Now().UTC(), reference)
+	if err != nil {
+		return fmt.Errorf("failed to increment webhook attempts: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("subscription reference %s not found", reference)
+	}
 	return nil
 }
 

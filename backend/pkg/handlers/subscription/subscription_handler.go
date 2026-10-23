@@ -2,7 +2,7 @@
 package handlers
 
 import (
-	"io"
+	//"io"
 	"net/http"
 	"strings"
 
@@ -60,7 +60,7 @@ func (h *SubscriptionHandler) InitiateSubscription(c *gin.Context) {
 	log.Info().
 		Str("vendorID", vendorID.String()).
 		Str("tier", string(req.Tier)).
-		Str("subscriptionID", resp.SubscriptionID.String()).
+		Str("reference", resp.Reference).
 		Msg("Subscription initiated successfully")
 
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "data": resp})
@@ -100,42 +100,42 @@ func (h *SubscriptionHandler) VerifySubscription(c *gin.Context) {
 }
 
 // HandleWebhook — POST /subscription/webhook
-func (h *SubscriptionHandler) HandleWebhook(c *gin.Context) {
-	log.Info().
-		Str("method", c.Request.Method).
-		Str("path", c.Request.URL.Path).
-		Str("source_ip", c.ClientIP()).
-		Msg("Webhook received")
+// func (h *SubscriptionHandler) HandleWebhook(c *gin.Context) {
+// 	log.Info().
+// 		Str("method", c.Request.Method).
+// 		Str("path", c.Request.URL.Path).
+// 		Str("source_ip", c.ClientIP()).
+// 		Msg("Webhook received")
 
-	signature := c.GetHeader("X-Paystack-Signature")
-	if signature == "" {
-		log.Warn().Msg("Webhook rejected: missing signature")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing signature"})
-		return
-	}
+// 	signature := c.GetHeader("X-Paystack-Signature")
+// 	if signature == "" {
+// 		log.Warn().Msg("Webhook rejected: missing signature")
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing signature"})
+// 		return
+// 	}
 
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to read webhook body")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read body"})
-		return
-	}
+// 	body, err := io.ReadAll(c.Request.Body)
+// 	if err != nil {
+// 		log.Error().Err(err).Msg("Failed to read webhook body")
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read body"})
+// 		return
+// 	}
 
-	if err := h.Service.HandleWebhook(c.Request.Context(), body, signature); err != nil {
-		status := http.StatusInternalServerError
-		if err.Error() == "invalid webhook signature" || err.Error() == "invalid signature" {
-    status = http.StatusUnauthorized
-			log.Warn().Msg("Webhook rejected: invalid signature")
-		} else {
-			log.Error().Err(err).Msg("Webhook processing failed")
-		}
-		c.JSON(status, gin.H{"error": err.Error()})
-		return
-	}
+// 	if err := h.Service.HandleWebhook(c.Request.Context(), body, signature); err != nil {
+// 		status := http.StatusInternalServerError
+// 		if err.Error() == "invalid webhook signature" || err.Error() == "invalid signature" {
+//     status = http.StatusUnauthorized
+// 			log.Warn().Msg("Webhook rejected: invalid signature")
+// 		} else {
+// 			log.Error().Err(err).Msg("Webhook processing failed")
+// 		}
+// 		c.JSON(status, gin.H{"error": err.Error()})
+// 		return
+// 	}
 
-	log.Info().Msg("Webhook processed successfully")
-	c.Status(http.StatusOK)
-}
+// 	log.Info().Msg("Webhook processed successfully")
+// 	c.Status(http.StatusOK)
+// }
 
 // GetMySubscription — GET /api/subscription/me
 func (h *SubscriptionHandler) GetMySubscription(c *gin.Context) {
@@ -209,4 +209,10 @@ func handleServiceError(c *gin.Context, err error, vID string) {
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 	}
+}
+
+// GetPlans: GET /api/v1/subscription/plans (public)
+func (h *SubscriptionHandler) GetPlans(c *gin.Context) {
+	c.Header("Cache-Control", "public, max-age=300")
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": models.GetPlans()})
 }

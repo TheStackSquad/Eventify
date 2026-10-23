@@ -1,4 +1,4 @@
-//backend/pkg/services/subscription/subscription_payment_test.go
+//backend/pkg/services/subscription/subscription_payment_verify_test.go
 
 package subscription
 
@@ -8,16 +8,19 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"errors"
-	"fmt"
+//	"fmt"
 	"testing"
 	"time"
 
 	"github.com/eventify/backend/pkg/models"
+//	repoauth "github.com/eventify/backend/pkg/repository/auth"
 	reposub "github.com/eventify/backend/pkg/repository/subscription"
+//	repovendor "github.com/eventify/backend/pkg/repository/vendor"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+//	"github.com/stretchr/testify/require"
 )
 
 // ── Mock: Paystack Client ─────────────────────────────────────────────────────
@@ -105,11 +108,52 @@ func (m *mockSubRepo) GetActiveByVendorID(ctx context.Context, vendorID uuid.UUI
 func (m *mockSubRepo) UpdateEmailTracking(ctx context.Context, params reposub.EmailTrackingParams) error {
 	return m.Called(ctx, params).Error(0)
 }
+func (m *mockSubRepo) CreatePayment(ctx context.Context, p *models.SubscriptionPayment) error {
+	return m.Called(ctx, p).Error(0)
+}
+func (m *mockSubRepo) GetPaymentByReference(ctx context.Context, ref string) (*models.SubscriptionPayment, error) {
+	registered := false
+	for _, c := range m.ExpectedCalls {
+		if c.Method == "GetPaymentByReference" {
+			registered = true
+			break
+		}
+	}
+	if !registered {
+		return nil, reposub.ErrPaymentNotFound // legacy tests: no ledger row
+	}
+	args := m.Called(ctx, ref)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.SubscriptionPayment), args.Error(1)
+}
+
+func (m *mockSubRepo) MarkPaymentFailed(ctx context.Context, ref, reason string) error {
+	return m.Called(ctx, ref, reason).Error(0)
+}
+func (m *mockSubRepo) QueueEmailOnce(ctx context.Context, to, subject, template, payloadJSON, dedupeKey string) error {
+	args := m.Called(ctx, to, subject, template, payloadJSON, dedupeKey)
+	return args.Error(0)
+}
+
+func (m *mockSubRepo) ListInitiatedBetween(ctx context.Context, after, before time.Time, limit int) ([]string, error) {
+	args := m.Called(ctx, after, before, limit)
+	return args.Get(0).([]string), args.Error(1)
+}
+func (m *mockSubRepo) AbandonStalePayments(ctx context.Context, before time.Time) (int64, error) {
+	args := m.Called(ctx, before)
+	return args.Get(0).(int64), args.Error(1)
+}
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
-// buildService constructs a bare subscriptionServiceImpl for payment tests.
-// vendorRepo and authRepo are nil — VerifyAndFinalize does not use them.
+
+func (m *mockSubRepo) SettlePayment(ctx context.Context, in reposub.SettleInput) (reposub.SettleOutcome, error) {
+	args := m.Called(ctx, in)
+	return args.Get(0).(reposub.SettleOutcome), args.Error(1)
+}
+
 func buildService(ps *mockPaystackClient, sr *mockSubRepo) *subscriptionServiceImpl {
 	return &subscriptionServiceImpl{
 		paystack:         ps,
@@ -118,15 +162,12 @@ func buildService(ps *mockPaystackClient, sr *mockSubRepo) *subscriptionServiceI
 	}
 }
 
-// signWebhook computes HMAC-SHA512 over body using the given secret.
-// Mirrors paystack.VerifyWebhookSignature so tests can produce valid signatures.
 func signWebhook(secret string, body []byte) string {
 	mac := hmac.New(sha512.New, []byte(secret))
 	mac.Write(body)
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// validPaystackResponse returns a successful Paystack verification for a given sub+vendor.
 func validPaystackResponse(subID, vendorID uuid.UUID, amountKobo int) *models.PaystackVerificationResponse {
 	return &models.PaystackVerificationResponse{
 		Status:  true,
@@ -144,7 +185,6 @@ func validPaystackResponse(subID, vendorID uuid.UUID, amountKobo int) *models.Pa
 	}
 }
 
-// pendingSub returns a pending subscription with the given price.
 func pendingSub(subID, vendorID uuid.UUID, priceKobo int64) *models.Subscription {
 	return &models.Subscription{
 		ID:       subID,
@@ -258,7 +298,7 @@ func TestVerifyAndFinalize_AmountMismatch_CancelsFraudAndErrors(t *testing.T) {
 	subID := uuid.New()
 	vendorID := uuid.New()
 	const expectedKobo = 1_000_000
-	const tamperedKobo = 100 // attacker sends less
+	const tamperedKobo = 100
 
 	ps.On("VerifyTransaction", mock.Anything, subID.String()).
 		Return(validPaystackResponse(subID, vendorID, tamperedKobo), nil)
@@ -328,63 +368,4 @@ func TestVerifyAndFinalize_SetsExpiryOneMonthFromNow(t *testing.T) {
 	expectedExpiry := before.AddDate(0, 1, 0)
 	tolerance := after.Sub(before) + time.Second
 	assert.WithinDuration(t, expectedExpiry, captured.ExpiresAt, tolerance)
-}
-
-// ── HandleWebhook tests ───────────────────────────────────────────────────────
-
-func TestHandleWebhook_InvalidSignature_Rejected(t *testing.T) {
-	ps := &mockPaystackClient{}
-	sr := &mockSubRepo{}
-	svc := buildService(ps, sr)
-
-	body := []byte(`{"event":"charge.success","data":{"reference":"ref-001"}}`)
-
-	err := svc.HandleWebhook(context.Background(), body, "bad-signature")
-
-	assert.ErrorContains(t, err, "invalid signature")
-	ps.AssertNotCalled(t, "VerifyTransaction")
-}
-
-func TestHandleWebhook_NonSuccessEvent_SilentlySkipped(t *testing.T) {
-	ps := &mockPaystackClient{}
-	sr := &mockSubRepo{}
-	svc := buildService(ps, sr)
-
-	body := []byte(`{"event":"charge.failed","data":{"reference":"ref-001","status":"failed"}}`)
-	sig := signWebhook("test-webhook-secret", body)
-
-	err := svc.HandleWebhook(context.Background(), body, sig)
-
-	assert.NoError(t, err)
-	ps.AssertNotCalled(t, "VerifyTransaction")
-}
-
-func TestHandleWebhook_ValidSignature_CallsVerifyAndFinalize(t *testing.T) {
-	ps := &mockPaystackClient{}
-	sr := &mockSubRepo{}
-	svc := buildService(ps, sr)
-
-	subID := uuid.New()
-	vendorID := uuid.New()
-	const priceKobo = 1_000_000
-
-	body := []byte(fmt.Sprintf(
-		`{"event":"charge.success","data":{"reference":%q,"status":"success","amount":%d,"metadata":{"subscription_id":%q,"vendor_id":%q},"authorization":{"channel":"card"}}}`,
-		subID.String(), priceKobo, subID.String(), vendorID.String(),
-	))
-	sig := signWebhook("test-webhook-secret", body)
-
-	sr.On("IncrementWebhookAttempts", mock.Anything, subID.String()).Return(nil)
-	ps.On("VerifyTransaction", mock.Anything, subID.String()).
-		Return(validPaystackResponse(subID, vendorID, priceKobo), nil)
-	sr.On("GetByID", mock.Anything, subID).
-		Return(pendingSub(subID, vendorID, priceKobo), nil)
-	sr.On("UpdateAfterPayment", mock.Anything, subID, mock.AnythingOfType("subscription.PaymentUpdateParams")).
-		Return(nil)
-
-	err := svc.HandleWebhook(context.Background(), body, sig)
-
-	assert.NoError(t, err)
-	ps.AssertExpectations(t)
-	sr.AssertExpectations(t)
 }

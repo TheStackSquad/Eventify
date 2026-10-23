@@ -152,24 +152,63 @@ func GetFeatures(tier SubscriptionTier) SubscriptionFeatures {
 // ---------------------------------------------------------------------------
 // Tier pricing (in Kobo)
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Tier pricing: single source of truth (kobo)
+// ---------------------------------------------------------------------------
 
+// monthlyPriceKobo is the one authoritative monthly price per paid tier.
+// Amounts sent to Paystack and amounts shown to users both derive from here.
+var monthlyPriceKobo = map[SubscriptionTier]int64{
+	TierBasic:    350_000,   // ₦3,500
+	TierPremium:  1_000_000, // ₦10,000
+	TierFeatured: 2_500_000, // ₦25,000
+}
+
+// PriceKobo returns the monthly price of a paid tier. ok is false for the
+// free tier and for unknown tiers, which can never be purchased.
+func PriceKobo(tier SubscriptionTier) (kobo int64, ok bool) {
+	kobo, ok = monthlyPriceKobo[tier]
+	return kobo, ok
+}
+
+// PaidTiers lists purchasable tiers, cheapest first.
+func PaidTiers() []SubscriptionTier {
+	return []SubscriptionTier{TierBasic, TierPremium, TierFeatured}
+}
+
+// Plan is the public, display-ready description of a purchasable tier.
+type Plan struct {
+	Tier         SubscriptionTier     `json:"tier"`
+	PriceKobo    int64                `json:"priceKobo"`
+	Currency     string               `json:"currency"`
+	BillingCycle string               `json:"billingCycle"`
+	Features     SubscriptionFeatures `json:"features"`
+}
+
+// GetPlans returns every purchasable plan, cheapest first.
+func GetPlans() []Plan {
+	tiers := PaidTiers()
+	plans := make([]Plan, 0, len(tiers))
+	for _, t := range tiers {
+		price, _ := PriceKobo(t)
+		plans = append(plans, Plan{
+			Tier: t, PriceKobo: price, Currency: "NGN",
+			BillingCycle: "month", Features: GetFeatures(t),
+		})
+	}
+	return plans
+}
+
+// Deprecated: use PriceKobo. Remove once no callers remain.
 type TierPricing struct {
 	MinKobo int64 `json:"minKobo"`
 	MaxKobo int64 `json:"maxKobo"`
 }
 
-var tierPrices = map[SubscriptionTier]TierPricing{
-	TierFree:     {MinKobo: 0, MaxKobo: 0},
-	TierBasic:    {MinKobo: 200_000, MaxKobo: 350_000},
-	TierPremium:  {MinKobo: 700_000, MaxKobo: 1_000_000},
-	TierFeatured: {MinKobo: 1_800_000, MaxKobo: 2_500_000},
-}
-
+// Deprecated: use PriceKobo.
 func GetPricing(tier SubscriptionTier) TierPricing {
-	if p, ok := tierPrices[tier]; ok {
-		return p
-	}
-	return TierPricing{}
+	p, _ := PriceKobo(tier)
+	return TierPricing{MinKobo: p, MaxKobo: p}
 }
 
 // ---------------------------------------------------------------------------

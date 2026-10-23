@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/eventify/backend/pkg/repository/subscription"
-	"github.com/eventify/backend/pkg/utils"
+	//"github.com/eventify/backend/pkg/utils"
+	serviceemail "github.com/eventify/backend/pkg/services/email"
 	"github.com/rs/zerolog/log"
 )
 
@@ -19,35 +20,25 @@ func (s *subscriptionServiceImpl) sendPaymentSuccessEmails(ctx context.Context) 
 	if err != nil {
 		return err
 	}
-
-	if len(recipients) == 0 {
-		return nil
-	}
-
-	successCount := 0
+	queued := 0
 	for _, r := range recipients {
-		subject := fmt.Sprintf("Payment Successful - Welcome to %s Plan!", capitalize(r.Tier))
-		body := buildPaymentSuccessEmail(r)
-
-		if err := utils.MockSendEmail(r.UserEmail, subject, body); err != nil {
-			log.Error().Err(err).Str("email", r.UserEmail).Msg("Failed to send payment email")
+		if err := s.queueSubscriptionEmail(ctx, serviceemail.TplSubPaymentSuccess, r); err != nil {
+			log.Error().Err(err).Str("subscription_id", fmt.Sprint(r.SubscriptionID)).Msg("Failed to queue payment email")
 			continue
 		}
-
-		// Mark as sent
 		now := time.Now()
 		if err := s.subscriptionRepo.UpdateEmailTracking(ctx, subscription.EmailTrackingParams{
 			SubscriptionID:       r.SubscriptionID,
 			PaymentSuccessSentAt: &now,
 		}); err != nil {
-			log.Error().Err(err).Msg("Failed to mark payment email sent")
+			log.Error().Err(err).Str("subscription_id", fmt.Sprint(r.SubscriptionID)).Msg("Payment email queued but not marked; the next pass skips the duplicate")
 			continue
 		}
-
-		successCount++
+		queued++
 	}
-
-	log.Info().Int("sent", successCount).Int("total", len(recipients)).Msg("Payment emails sent")
+	if len(recipients) > 0 {
+		log.Info().Int("queued", queued).Int("total", len(recipients)).Msg("Payment emails queued")
+	}
 	return nil
 }
 
@@ -68,37 +59,31 @@ func (s *subscriptionServiceImpl) sendReminderEmails(ctx context.Context) error 
 // sendReminderType sends reminders for a specific day count
 func (s *subscriptionServiceImpl) sendReminderType(ctx context.Context, reminderType string) error {
 	var recipients []subscription.EmailRecipient
+	var template string
 	var err error
 
 	switch reminderType {
 	case "7d":
+		template = serviceemail.TplSubReminder7D
 		recipients, err = s.subscriptionRepo.GetNeedingReminder7D(ctx)
 	case "3d":
+		template = serviceemail.TplSubReminder3D
 		recipients, err = s.subscriptionRepo.GetNeedingReminder3D(ctx)
 	case "1d":
+		template = serviceemail.TplSubReminder1D
 		recipients, err = s.subscriptionRepo.GetNeedingReminder1D(ctx)
 	default:
 		return fmt.Errorf("unknown reminder type: %s", reminderType)
 	}
-
 	if err != nil {
 		return err
 	}
 
-	if len(recipients) == 0 {
-		return nil
-	}
-
 	for _, r := range recipients {
-		subject := fmt.Sprintf("Your %s Subscription Expires Soon", capitalize(r.Tier))
-		body := buildReminderEmail(r, reminderType)
-
-		if err := utils.MockSendEmail(r.UserEmail, subject, body); err != nil {
-			log.Error().Err(err).Str("email", r.UserEmail).Str("reminder_type", reminderType).Msg("Failed to send reminder email")
+		if err := s.queueSubscriptionEmail(ctx, template, r); err != nil {
+			log.Error().Err(err).Str("subscription_id", fmt.Sprint(r.SubscriptionID)).Str("reminder_type", reminderType).Msg("Failed to queue reminder email")
 			continue
 		}
-
-		// Mark as sent
 		now := time.Now()
 		params := subscription.EmailTrackingParams{SubscriptionID: r.SubscriptionID}
 		switch reminderType {
@@ -109,12 +94,10 @@ func (s *subscriptionServiceImpl) sendReminderType(ctx context.Context, reminder
 		case "1d":
 			params.Reminder1DSentAt = &now
 		}
-
 		if err := s.subscriptionRepo.UpdateEmailTracking(ctx, params); err != nil {
-			log.Error().Err(err).Str("reminder_type", reminderType).Msg("Failed to update email tracking for reminder")
+			log.Error().Err(err).Str("subscription_id", fmt.Sprint(r.SubscriptionID)).Str("reminder_type", reminderType).Msg("Reminder queued but not marked; the next pass skips the duplicate")
 		}
 	}
-
 	return nil
 }
 
@@ -124,31 +107,38 @@ func (s *subscriptionServiceImpl) sendExpiredNotices(ctx context.Context) error 
 	if err != nil {
 		return err
 	}
-
-	if len(recipients) == 0 {
-		return nil
-	}
-
 	for _, r := range recipients {
-		subject := fmt.Sprintf("Your %s Subscription Has Expired", capitalize(r.Tier))
-		body := buildExpiredNoticeEmail(r)
-
-		if err := utils.MockSendEmail(r.UserEmail, subject, body); err != nil {
-			log.Error().Err(err).Str("email", r.UserEmail).Msg("Failed to send expired notice email")
+		if err := s.queueSubscriptionEmail(ctx, serviceemail.TplSubExpired, r); err != nil {
+			log.Error().Err(err).Str("subscription_id", fmt.Sprint(r.SubscriptionID)).Msg("Failed to queue expired notice")
 			continue
 		}
-
 		now := time.Now()
 		if err := s.subscriptionRepo.UpdateEmailTracking(ctx, subscription.EmailTrackingParams{
 			SubscriptionID:      r.SubscriptionID,
 			ExpiredNoticeSentAt: &now,
 		}); err != nil {
-			log.Error().Err(err).Msg("Failed to update email tracking for expired notice")
+			log.Error().Err(err).Str("subscription_id", fmt.Sprint(r.SubscriptionID)).Msg("Expired notice queued but not marked; the next pass skips the duplicate")
 		}
 	}
-
 	return nil
 }
+
+// queueSubscriptionEmail hands one email to the outbox. Repeating it is harmless:
+// the dedupe key turns a second call into a no-op.
+func (s *subscriptionServiceImpl) queueSubscriptionEmail(ctx context.Context, template string, r subscription.EmailRecipient) error {
+	subject, payload, key, err := serviceemail.BuildSubscriptionEmail(template, fmt.Sprint(r.SubscriptionID), serviceemail.SubscriptionPayload{
+		UserName:   r.UserName,
+		VendorName: r.VendorName,
+		Tier:       r.Tier,
+		PriceKobo:  int64(r.PriceKobo),
+		ExpiresAt:  r.ExpiresAt.UTC().Format(time.RFC3339),
+	})
+	if err != nil {
+		return err
+	}
+	return s.subscriptionRepo.QueueEmailOnce(ctx, r.UserEmail, subject, template, payload, key)
+}
+
 
 // Helper functions for email templates
 func capitalize(s string) string {

@@ -33,6 +33,11 @@ func (s *subscriptionServiceImpl) StartExpiryWorker(ctx context.Context, checkIn
 func (s *subscriptionServiceImpl) runAllTasks(ctx context.Context) {
 	log.Info().Msg("Running subscription tasks")
 
+	// Task 0: confirm payments that no webhook or redirect confirmed
+	if err := s.reconcilePayments(ctx); err != nil {
+		log.Error().Err(err).Msg("Payment reconciliation failed")
+	}
+
 	// Task 1: Expire old subscriptions
 	if err := s.expireOldSubscriptions(ctx); err != nil {
 		log.Error().Err(err).Msg("Expiry task failed")
@@ -79,18 +84,17 @@ func (s *subscriptionServiceImpl) expireOldSubscriptions(ctx context.Context) er
 // processExpiredSubscription (keep existing implementation unchanged)
 func (s *subscriptionServiceImpl) processExpiredSubscription(ctx context.Context, subID, vendorID string) error {
 	return s.subscriptionRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
-		_, err := tx.ExecContext(ctx,
-			`UPDATE subscriptions SET status = $1, updated_at = NOW() WHERE id = $2`,
-			models.SubStatusExpired, subID,
-		)
-		if err != nil {
+		// Same lock order as SettlePayment (vendor first), so the two can never deadlock.
+		var one int
+		if err := tx.QueryRowContext(ctx, `SELECT 1 FROM vendors WHERE id = $1 FOR NO KEY UPDATE`, vendorID).Scan(&one); err != nil {
 			return err
 		}
-
-		_, err = tx.ExecContext(ctx,
-			`UPDATE vendors SET subscription_tier = $1, updated_at = NOW() WHERE id = $2`,
-			models.TierFree, vendorID,
-		)
+		// Guarded: a row renewed after GetExpired ran must not be expired.
+		// The vendor tier follows via trigger_sync_vendor_tier.
+		_, err := tx.ExecContext(ctx, `
+			UPDATE subscriptions SET status = $1, updated_at = NOW()
+			WHERE id = $2 AND status = 'active' AND expires_at IS NOT NULL AND expires_at < NOW()`,
+			models.SubStatusExpired, subID)
 		return err
 	})
 }

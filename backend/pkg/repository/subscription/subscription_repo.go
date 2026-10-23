@@ -1,4 +1,5 @@
 // backend/pkg/repository/subscription/subscription_repo.go
+
 package subscription
 
 import (
@@ -22,6 +23,16 @@ type SubscriptionRepository interface {
 	GetExpired(ctx context.Context) ([]models.Subscription, error)
 	RunInTransaction(ctx context.Context, fn func(tx *sqlx.Tx) error) error
 
+	
+	SettlePayment(ctx context.Context, in SettleInput) (SettleOutcome, error)
+	
+	CreatePayment(ctx context.Context, p *models.SubscriptionPayment) error
+	GetPaymentByReference(ctx context.Context, reference string) (*models.SubscriptionPayment, error)
+	MarkPaymentFailed(ctx context.Context, reference, reason string) error
+
+	ListInitiatedBetween(ctx context.Context, createdAfter, createdBefore time.Time, limit int) ([]string, error)
+	AbandonStalePayments(ctx context.Context, createdBefore time.Time) (int64, error)
+
 	GetNeedingPaymentEmail(ctx context.Context) ([]EmailRecipient, error)
 	GetNeedingReminder7D(ctx context.Context) ([]EmailRecipient, error)
 	GetNeedingReminder3D(ctx context.Context) ([]EmailRecipient, error)
@@ -30,6 +41,7 @@ type SubscriptionRepository interface {
 	GetActiveByVendorID(ctx context.Context, vendorID uuid.UUID) (*models.Subscription, error)
 	
 	UpdateEmailTracking(ctx context.Context, params EmailTrackingParams) error
+	QueueEmailOnce(ctx context.Context, to, subject, template, payloadJSON, dedupeKey string) error
 }
 
 // PaymentUpdateParams groups payment update fields
@@ -41,6 +53,24 @@ type PaymentUpdateParams struct {
 	NextPaymentDate  time.Time
 	ExpiresAt        time.Time
 }
+
+// SettleInput is what Paystack reported for a verified payment.
+type SettleInput struct {
+	Reference      string
+	PaidAmountKobo int64
+	PaidCurrency   string
+	Channel        string
+	PaidAt         time.Time
+	Now            time.Time // injected clock, UTC
+}
+
+type SettleOutcome string
+
+const (
+	SettleApplied        SettleOutcome = "applied"
+	SettleAlreadyApplied SettleOutcome = "already_applied"
+	SettleNeedsReview    SettleOutcome = "needs_review"
+)
 
 // EmailRecipient contains enriched data needed for sending emails
 type EmailRecipient struct {

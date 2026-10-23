@@ -243,3 +243,16 @@ func (r *subscriptionRepository) UpdateEmailTracking(ctx context.Context, params
 
 	return nil
 }
+
+// QueueEmailOnce adds one email to the outbox. A repeated dedupeKey is ignored.
+func (r *subscriptionRepository) QueueEmailOnce(ctx context.Context, to, subject, template, payloadJSON, dedupeKey string) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO email_outbox (recipient_email, subject, template_type, payload, status, dedupe_key)
+		VALUES ($1, $2, $3, $4::jsonb, 'pending', $5)
+		ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
+		to, subject, template, payloadJSON, dedupeKey)
+	if err != nil {
+		return fmt.Errorf("queue email: %w", err)
+	}
+	return nil
+}

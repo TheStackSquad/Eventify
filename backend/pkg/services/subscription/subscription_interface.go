@@ -13,7 +13,7 @@ import (
 // InitiateResponse represents the combined data needed by the frontend 
 // to redirect to Paystack and track the pending transaction.
 type InitiateResponse struct {
-    SubscriptionID   uuid.UUID `json:"subscriptionId"`
+   // SubscriptionID   uuid.UUID `json:"subscriptionId"`
     AuthorizationURL string    `json:"authorizationUrl"`
     Reference        string    `json:"reference"`
     Tier             string    `json:"tier"`
@@ -55,3 +55,4 @@ type SubscriptionService interface {
 	StartExpiryWorker(ctx context.Context, checkInterval time.Duration)
 
 }
+

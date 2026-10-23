@@ -251,6 +251,9 @@ publicEvents.Use(middleware.RateLimit(utils.PublicLimiter))
 		gateRoutes.POST("/check-in", eventHandler.CheckIn)
 	}
 
+	router.GET("/api/v1/subscription/plans",
+	middleware.RateLimit(utils.PublicLimiter), subscriptionHandler.GetPlans)
+	
 	// Subscription (protected)
 	protectedSubscription := router.Group("/api/v1/subscription")
 	protectedSubscription.Use(
@@ -283,7 +286,7 @@ publicEvents.Use(middleware.RateLimit(utils.PublicLimiter))
 
 	// Webhook (no auth, no CSRF)
 	router.POST("/api/webhooks/paystack", orderHandler.HandlePaystackWebhook)
-	router.POST("/subscription/webhook", subscriptionHandler.HandleWebhook)
+	//router.POST("/subscription/webhook", subscriptionHandler.HandleWebhook)
 
 
 	// ============================================
