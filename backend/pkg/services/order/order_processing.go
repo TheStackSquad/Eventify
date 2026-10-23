@@ -32,6 +32,7 @@ var (
 	ErrAmountMismatch      = errors.New("AmountMismatch")
 	ErrPaymentNotCompleted = errors.New("payment not completed")
 	ErrOrderNotFulfilled   = errors.New("payment received but the order is not fulfilled")
+	ErrPaymentFailedUpstream = errors.New("transaction verification failed")
 )
 
 // ============================================================================
@@ -258,7 +259,7 @@ func (s *OrderServiceImpl) finalizeOrder(ctx context.Context, order *models.Orde
 		}); err != nil {
 			log.Error().Err(err).Str("ref", order.Reference).Msg("Failed to close order after upstream failure")
 		}
-		return order, errors.New("transaction verification failed")
+		return order, ErrPaymentFailedUpstream
 	}
 
 	// Amount validation (fraud detection)
@@ -349,7 +350,8 @@ func (s *OrderServiceImpl) finalizeOrder(ctx context.Context, order *models.Orde
 			Status:         "pending",
 		}
 
-		return s.OrderRepo.QueueEmailTx(ctx, tx, outboxEntry)
+		// return s.OrderRepo.QueueEmailTx(ctx, tx, outboxEntry)
+		return s.OrderRepo.QueueEmailOnceTx(ctx, tx, outboxEntry, "ticket:"+order.Reference)
 	})
 
 	if err != nil {
@@ -467,4 +469,18 @@ type StockExhaustionError struct {
 
 func (e *StockExhaustionError) Error() string {
 	return fmt.Sprintf("insufficient stock for tier %s: requested %d, available %d", e.TierName, e.Requested, e.Available)
+}
+
+// IsRetryable reports whether Paystack should redeliver a webhook that ended in err.
+// A failed payment, a wrong amount or an already-handled order cannot be fixed by a
+// retry; anything else (database, network) can.
+func IsRetryable(err error) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, ErrAmountMismatch), errors.Is(err, ErrPaymentFailedUpstream), errors.Is(err, ErrAlreadyProcessed):
+		return false
+	default:
+		return true
+	}
 }

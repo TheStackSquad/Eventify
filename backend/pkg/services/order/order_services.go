@@ -161,10 +161,10 @@ func (s *OrderServiceImpl) InitializePendingOrder(
 		callbackURL,
 	)
 
-	if err != nil {
-		// Note: We don't rollback the DB here. If Paystack fails, the order stays 'pending'
-		// and the StockReleaseWorker will recover the stock after the timeout.
-		return nil, "", fmt.Errorf("payment gateway initialization failed: %w", err)
+		if err != nil {
+		// Nobody can pay for this order: give the tickets back now instead of holding them for 15 minutes.
+		s.releaseFailedInitialization(pendingOrder)
+		return nil, "", fmt.Errorf("%w: %w", ErrPaymentGatewayUnavailable, err)
 	}
 
 	return pendingOrder, authURL, nil

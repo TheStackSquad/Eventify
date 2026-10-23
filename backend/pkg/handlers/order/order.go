@@ -12,6 +12,7 @@ import (
 	"github.com/eventify/backend/pkg/models"
 	repoevent "github.com/eventify/backend/pkg/repository/event"
      serviceorder "github.com/eventify/backend/pkg/services/order"
+	 servicesubscription "github.com/eventify/backend/pkg/services/subscription"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -30,12 +31,18 @@ type TierDetails struct {
 }
 
 type OrderHandler struct {
-	OrderService serviceorder.OrderService
+	OrderService        serviceorder.OrderService
+	SubscriptionService servicesubscription.SubscriptionService
 }
 
-func NewOrderHandler(orderService serviceorder.OrderService) *OrderHandler {
+// Update the constructor to accept and assign it
+func NewOrderHandler(
+	orderService serviceorder.OrderService,
+	subscriptionService servicesubscription.SubscriptionService,
+) *OrderHandler {
 	return &OrderHandler{
-		OrderService: orderService,
+		OrderService:        orderService,
+		SubscriptionService: subscriptionService,
 	}
 }
 
@@ -151,3 +158,5 @@ func (h *OrderHandler) GetOrderByReference(c *gin.Context) {
 		"data":   order,
 	})
 }
+
+

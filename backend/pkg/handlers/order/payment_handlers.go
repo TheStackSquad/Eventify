@@ -11,6 +11,7 @@ import (
 
 	"github.com/eventify/backend/pkg/models"
     serviceorder "github.com/eventify/backend/pkg/services/order"
+	servicesubscription "github.com/eventify/backend/pkg/services/subscription"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -55,23 +56,36 @@ func (h *OrderHandler) VerifyPayment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Payment verified successfully", "data": order})
 }
 
-// HandlePaystackWebhook handles notifications from Paystack
+// HandlePaystackWebhook handles notifications from Paystack for both Orders and Subscriptions
 func (h *OrderHandler) HandlePaystackWebhook(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
+	
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid body"})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Failed to read request body"})
 		return
 	}
 
 	signature := c.GetHeader("x-paystack-signature")
+	if signature == "" {
+		signature = c.GetHeader("X-Paystack-Signature") // Fallback for header casing
+	}
 
+	// 1. Verify signature using order service (or a shared cryptographic helper)
 	if !h.OrderService.VerifyWebhookSignature(bodyBytes, signature) {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid signature"})
 		return
 	}
 
-	var webhook models.PaystackWebhook
-	if err := json.Unmarshal(bodyBytes, &webhook); err != nil {
+	// 2. Parse general event structure to check metadata or event type
+	var baseEvent struct {
+		Event string `json:"event"`
+		Data  struct {
+			Metadata interface{} `json:"metadata"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &baseEvent); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Parse error"})
 		return
 	}
@@ -79,10 +93,61 @@ func (h *OrderHandler) HandlePaystackWebhook(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	if err := h.OrderService.ProcessWebhook(ctx, &webhook, signature); err != nil {
-		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Processing failed"})
+	// 3. Dispatch based on metadata or event content
+	// If metadata contains subscription_id, route to subscription service!
+	// 3. Dispatch based on metadata or event content
+	// If metadata contains subscription_id, route to subscription service!
+	if isSubscriptionWebhook(baseEvent.Data.Metadata) {
+		if h.SubscriptionService == nil {
+			log.Error().Msg("SubscriptionService is not injected into OrderHandler")
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Handler configuration error"})
+			return
+		}
+
+		if err := h.SubscriptionService.HandleWebhook(ctx, bodyBytes, signature); err != nil {
+			if servicesubscription.IsRetryable(err) {
+				log.Error().Err(err).Msg("Subscription webhook failed; Paystack will retry")
+				c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "temporary failure"})
+				return
+			}
+			log.Warn().Err(err).Msg("Subscription webhook not actionable; acknowledged")
+			c.JSON(http.StatusOK, gin.H{"status": "error", "message": "acknowledged"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status": "success", "type": "subscription"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "success"})
+	// 4. Otherwise, fallback to standard Order processing
+	var webhook models.PaystackWebhook
+	if err := json.Unmarshal(bodyBytes, &webhook); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Parse error"})
+		return
+	}
+
+	if err := h.OrderService.ProcessWebhook(ctx, &webhook, signature); err != nil {
+		if serviceorder.IsRetryable(err) {
+			log.Error().Err(err).Msg("Order webhook failed; Paystack will retry")
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "temporary failure"})
+			return
+		}
+		log.Warn().Err(err).Msg("Order webhook not actionable; acknowledged")
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "acknowledged"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "type": "order"})
+}
+// Helper to check if metadata belongs to a subscription
+func isSubscriptionWebhook(metadata interface{}) bool {
+	m, ok := metadata.(map[string]interface{})
+	if !ok {
+		return false
+	}
+	if t, _ := m["payment_type"].(string); t == "subscription" {
+		return true
+	}
+	_, legacy := m["subscription_id"] // payments initiated before the ledger
+	return legacy
 }
