@@ -1,61 +1,47 @@
 # audit/docker/docker-compose.loadtest.yml
 
 name: eventify-loadtest
-
 services:
   db:
-    image: postgres:18-alpine
-    environment:
-      - POSTGRES_USER=loadtest
-      - POSTGRES_PASSWORD=loadtest
-      - POSTGRES_DB=eventify_loadtest
-    command: 
-      - "postgres"
-      - "-c"
-      - "max_connections=100"
-      - "-c"
-      - "shared_preload_libraries=pg_stat_statements"
-      - "-c"
-      - "pg_stat_statements.track=all"
-      - "-c"
-      - "log_min_duration_statement=250"
-    ports:
-      - "55432:5432"
-    volumes:
-      - "./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro"
-    deploy:
-      resources:
-        limits:
-          cpus: "${DB_CPUS:-1.0}"
-          memory: "${DB_MEM:-1g}"
+    image: postgres:18
+    environment: { POSTGRES_USER: loadtest, POSTGRES_PASSWORD: loadtest, POSTGRES_DB: eventify_loadtest }
+    command: ["postgres","-c","max_connections=100","-c","shared_preload_libraries=pg_stat_statements",
+              "-c","pg_stat_statements.track=all","-c","log_min_duration_statement=250"]
+    ports: ["55432:5432"]
+    volumes: ["./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro"]
+    deploy: { resources: { limits: { cpus: "${DB_CPUS:-1.0}", memory: "${DB_MEM:-1g}" } } }
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U loadtest -d eventify_loadtest"]
+      test: ["CMD-SHELL","pg_isready -h 127.0.0.1 -U loadtest -d eventify_loadtest"]
       interval: 3s
       retries: 20
 
   stub:
-    image: golang:1.26-alpine
+    image: golang:1.25
     working_dir: /stub
-    volumes:
-      - "../stub:/stub"
     command: ["go", "run", "paystack_stub.go"]
-    environment:
-      - STUB_PORT=9099
-      - STUB_DELAY_MS=150
-      - STUB_JITTER_MS=100
-      - STUB_FAIL_PCT=0
+    volumes:
+      - ./../stub:/stub:ro
     ports:
-      - "9099:9099"
+      - "127.0.0.1:9099:9099"
+    environment:
+      STUB_DELAY_MS: "150"
+      STUB_FAIL_PCT: "0"
+      STUB_JITTER_MS: "100"
+      PAYSTACK_SECRET_KEY: sk_test_local_loadtest_only
+      STUB_WEBHOOK_URL: http://backend:8081/api/webhooks/paystack
+      STUB_PUBLIC_URL: http://localhost:9099
+      STUB_WEBHOOK_RETRIES: "2"
+
+  mailpit:
+    image: axllent/mailpit
+    ports: ["8025:8025", "1025:1025"]
 
   backend:
-    build:
-      context: ../../backend
-      dockerfile: dockerfile
+    build: { context: ../../backend, dockerfile: dockerfile }
     depends_on:
-      db:
-        condition: service_healthy
-      stub:
-        condition: service_started
+      db: { condition: service_healthy }
+      stub: { condition: service_started }
+      mailpit: { condition: service_started }
     environment:
       POSTGRES_URI: postgres://loadtest:loadtest@db:5432/eventify_loadtest?sslmode=disable
       GIN_MODE: release
@@ -64,15 +50,12 @@ services:
       PAYSTACK_SECRET_KEY: sk_test_local_loadtest_only
       PAYSTACK_BASE_URL: http://stub:9099
       TICKET_SIGNING_SECRET: loadtest-ticket-secret
-      RSA_PRIVATE_KEY_PATH: /app/config/keys/private.pem
-      RSA_PUBLIC_KEY_PATH: /app/config/keys/public.pem
-      LOG_LEVEL: warn
-    volumes:
-      - "./keys:/app/config/keys:ro"
-    ports:
-      - "8081:8081"
-    deploy:
-      resources:
-        limits:
-          cpus: "${BACKEND_CPUS:-1.0}"
-          memory: "${BACKEND_MEM:-1g}"
+      LOG_LEVEL: info
+      RSA_PRIVATE_KEY: ${RSA_PRIVATE_KEY}
+      RSA_PUBLIC_KEY: ${RSA_PUBLIC_KEY}
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      FROM_EMAIL: "Eventify Tickets <tickets@eventify.test>"
+      SUBSCRIPTION_WORKER_INTERVAL: 20s
+    ports: ["18081:8081"]
+    deploy: { resources: { limits: { cpus: "${BACKEND_CPUS:-1.0}", memory: "${BACKEND_MEM:-1g}" } } }

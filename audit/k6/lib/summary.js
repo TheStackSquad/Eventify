@@ -14,7 +14,7 @@ export function compactSummary(data, name) {
     d = m.http_req_duration.values,
     prof = __ENV.PROFILE || "smoke";
   const out = [
-    `# ${name} profile=${prof} base=${__ENV.BASE_URL || "localhost:8081"}`,
+    `# ${name} profile=${prof} base=${__ENV.BASE_URL || "localhost:18081"}`,
     `reqs=${m.http_reqs.values.count} rps=${m.http_reqs.values.rate.toFixed(1)}`,
     `overall p50=${d.med.toFixed(0)} p95=${d["p(95)"].toFixed(0)} p99=${d["p(99)"].toFixed(0)} max=${d.max.toFixed(0)} (ms)`,
     `failed=${(m.http_req_failed.values.rate * 100).toFixed(2)}%` +

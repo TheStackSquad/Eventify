@@ -18,6 +18,7 @@ const limited = new Counter("orders_ratelimited");
 const badreq = new Counter("orders_badrequest");
 const err5xx = new Counter("orders_5xx");
 const other = new Counter("orders_other");
+const unavailable = new Counter("orders_unavailable");
 
 export const options = {
   summaryTrendStats,
@@ -68,8 +69,14 @@ export default function () {
   else if (r.status === 409) soldout.add(1);
   else if (r.status === 429) limited.add(1);
   else if (r.status === 400) badreq.add(1);
+  else if (r.status === 503) unavailable.add(1);
   else if (r.status >= 500) err5xx.add(1);
-  else { other.add(1); console.warn(`OTHER status=${r.status} err=${r.error || '-'} ms=${Math.round(r.timings.duration)}`); }
+  else {
+    other.add(1);
+    console.warn(
+      `OTHER status=${r.status} err=${r.error || "-"} ms=${Math.round(r.timings.duration)}`,
+    );
+  }
   check(r, { "no 5xx": (x) => x.status < 500 });
 }
 

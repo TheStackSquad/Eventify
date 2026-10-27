@@ -121,7 +121,7 @@ export function browse() {
   if (r < 0.35) {
     let q = `limit=20&offset=${20 * Math.floor(Math.random() * 12)}`;
     if (Math.random() < 0.4) q += `&category=${encodeURIComponent(pick(CATS))}`;
-    if (Math.random() < 0.3) q += `&city=${pick(CITIES)}`;
+    if (Math.random() < 0.3) q += `&city=${encodeURIComponent(pick(CITIES))}`;
     get(`${PATHS.events}?${q}`, "events");
   } else if (r < 0.6) {
     get(PATHS.eventById(pick(targets).eventId), "event_detail");

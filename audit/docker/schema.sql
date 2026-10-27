@@ -2,13 +2,15 @@
 -- PostgreSQL database dump
 --
 
+\restrict jKxFl2baYJW7xRpIRATY5Owey2z5OHN9NC9fa6Vy7bQpWsFXvRbb9XnESk3f2Cx
 
 -- Dumped from database version 18.1
 -- Dumped by pg_dump version 18.1
 
--- SET transaction_timeout = 0;
+SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);
@@ -98,7 +100,8 @@ CREATE TYPE public.vendor_status AS ENUM (
     'draft',
     'pending_approval',
     'active',
-    'suspended'
+    'suspended',
+    'deleted'
 );
 
 
@@ -822,6 +825,43 @@ CREATE TABLE public.reviews (
 
 
 --
+-- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.schema_migrations (
+    version bigint NOT NULL,
+    dirty boolean NOT NULL
+);
+
+
+--
+-- Name: subscription_payments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.subscription_payments (
+    reference character varying(100) NOT NULL,
+    vendor_id uuid NOT NULL,
+    subscription_id uuid,
+    tier character varying(20) NOT NULL,
+    amount_kobo bigint NOT NULL,
+    currency character(3) DEFAULT 'NGN'::bpchar NOT NULL,
+    status character varying(20) DEFAULT 'initiated'::character varying NOT NULL,
+    paid_amount_kobo bigint,
+    paid_currency character(3),
+    channel character varying(30),
+    review_reason text,
+    webhook_attempts integer DEFAULT 0 NOT NULL,
+    paid_at timestamp with time zone,
+    applied_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sp_valid_status CHECK (((status)::text = ANY ((ARRAY['initiated'::character varying, 'applied'::character varying, 'failed'::character varying, 'needs_review'::character varying])::text[]))),
+    CONSTRAINT sp_valid_tier CHECK (((tier)::text = ANY ((ARRAY['basic'::character varying, 'premium'::character varying, 'featured'::character varying])::text[]))),
+    CONSTRAINT subscription_payments_amount_kobo_check CHECK ((amount_kobo > 0))
+);
+
+
+--
 -- Name: subscriptions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -850,7 +890,7 @@ CREATE TABLE public.subscriptions (
     CONSTRAINT valid_currency CHECK (((currency)::text ~ '^[A-Z]{3}$'::text)),
     CONSTRAINT valid_price CHECK ((price >= 0)),
     CONSTRAINT valid_status CHECK (((status)::text = ANY (ARRAY['pending'::text, 'active'::text, 'expired'::text, 'cancelled'::text]))),
-    CONSTRAINT valid_tier CHECK (((tier)::text = ANY ((ARRAY['free'::character varying, 'basic'::character varying, 'premium'::character varying, 'featured'::character varying])::text[])))
+    CONSTRAINT valid_tier CHECK (((tier)::text = ANY (ARRAY[('free'::character varying)::text, ('basic'::character varying)::text, ('premium'::character varying)::text, ('featured'::character varying)::text])))
 );
 
 
@@ -1020,13 +1060,13 @@ CREATE TABLE public.vendors (
     owner_id uuid NOT NULL,
     name character varying(255) NOT NULL,
     category character varying(100) NOT NULL,
-    image_url character varying(255) DEFAULT ''::character varying NOT NULL,
+    image_url character varying(255) NOT NULL,
     status public.vendor_status DEFAULT 'draft'::public.vendor_status NOT NULL,
     is_identity_verified boolean DEFAULT false NOT NULL,
     is_business_registered boolean DEFAULT false NOT NULL,
     state character varying(100) NOT NULL,
-    city character varying(100) DEFAULT ''::character varying NOT NULL,
-    phone_number character varying(20) DEFAULT ''::character varying NOT NULL,
+    city character varying(100) NOT NULL,
+    phone_number character varying(20) NOT NULL,
     min_price integer,
     pvs_score integer DEFAULT 0 NOT NULL,
     review_count integer DEFAULT 0 NOT NULL,
@@ -1036,17 +1076,17 @@ CREATE TABLE public.vendors (
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     vnin character varying(20) DEFAULT ''::character varying NOT NULL,
-    first_name character varying(100) DEFAULT ''::character varying NOT NULL,
+    first_name character varying(100) NOT NULL,
     middle_name character varying(100),
-    last_name character varying(100) DEFAULT ''::character varying NOT NULL,
-    description text DEFAULT ''::text NOT NULL,
-    email character varying(255) DEFAULT ''::character varying NOT NULL,
+    last_name character varying(100) NOT NULL,
+    description text NOT NULL,
+    email character varying(255) NOT NULL,
     cac_number character varying(20) DEFAULT ''::character varying,
     is_business_verified boolean DEFAULT false,
     subscription_tier character varying(20) DEFAULT 'free'::character varying NOT NULL,
     deleted_at timestamp with time zone,
-    CONSTRAINT check_subscription_tier CHECK (((subscription_tier)::text = ANY ((ARRAY['free'::character varying, 'basic'::character varying, 'premium'::character varying, 'featured'::character varying])::text[]))),
-    CONSTRAINT check_valid_tier CHECK (((subscription_tier)::text = ANY ((ARRAY['free'::character varying, 'basic'::character varying, 'premium'::character varying, 'featured'::character varying])::text[])))
+    CONSTRAINT check_subscription_tier CHECK (((subscription_tier)::text = ANY (ARRAY[('free'::character varying)::text, ('basic'::character varying)::text, ('premium'::character varying)::text, ('featured'::character varying)::text]))),
+    CONSTRAINT check_valid_tier CHECK (((subscription_tier)::text = ANY (ARRAY[('free'::character varying)::text, ('basic'::character varying)::text, ('premium'::character varying)::text, ('featured'::character varying)::text])))
 );
 
 
@@ -1233,7 +1273,7 @@ CREATE MATERIALIZED VIEW public.vendor_of_the_month AS
     now() AS last_updated
    FROM (public.vendors v
      LEFT JOIN monthly_views mv ON ((v.id = mv.vendor_id)))
-  WHERE ((v.status = 'active'::public.vendor_status) AND ((v.subscription_tier)::text = ANY ((ARRAY['premium'::character varying, 'featured'::character varying])::text[])))
+  WHERE ((v.status = 'active'::public.vendor_status) AND ((v.subscription_tier)::text = ANY (ARRAY[('premium'::character varying)::text, ('featured'::character varying)::text])))
   WITH NO DATA;
 
 
@@ -1377,6 +1417,22 @@ ALTER TABLE ONLY public.refresh_tokens
 
 ALTER TABLE ONLY public.reviews
     ADD CONSTRAINT reviews_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schema_migrations
+    ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: subscription_payments subscription_payments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subscription_payments
+    ADD CONSTRAINT subscription_payments_pkey PRIMARY KEY (reference);
 
 
 --
@@ -1820,6 +1876,27 @@ CREATE INDEX idx_reviews_vendor_trust ON public.reviews USING btree (vendor_id, 
 
 
 --
+-- Name: idx_sp_needs_review; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sp_needs_review ON public.subscription_payments USING btree (created_at) WHERE ((status)::text = 'needs_review'::text);
+
+
+--
+-- Name: idx_sp_stale_initiated; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sp_stale_initiated ON public.subscription_payments USING btree (created_at) WHERE ((status)::text = 'initiated'::text);
+
+
+--
+-- Name: idx_sp_vendor_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sp_vendor_created ON public.subscription_payments USING btree (vendor_id, created_at DESC);
+
+
+--
 -- Name: idx_stats_cat_lookup; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2247,6 +2324,13 @@ CREATE TRIGGER trg_lock_price_on_sales BEFORE UPDATE ON public.ticket_tiers FOR 
 
 
 --
+-- Name: subscription_payments trg_sp_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_sp_updated_at BEFORE UPDATE ON public.subscription_payments FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
 -- Name: profile_views trigger_cleanup_old_views; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2454,6 +2538,22 @@ ALTER TABLE ONLY public.reviews
 
 
 --
+-- Name: subscription_payments subscription_payments_subscription_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subscription_payments
+    ADD CONSTRAINT subscription_payments_subscription_id_fkey FOREIGN KEY (subscription_id) REFERENCES public.subscriptions(id) ON DELETE SET NULL;
+
+
+--
+-- Name: subscription_payments subscription_payments_vendor_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subscription_payments
+    ADD CONSTRAINT subscription_payments_vendor_id_fkey FOREIGN KEY (vendor_id) REFERENCES public.vendors(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: ticket_tiers ticket_tiers_event_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2521,4 +2621,5 @@ ALTER TABLE ONLY public.vendors
 -- PostgreSQL database dump complete
 --
 
+\unrestrict jKxFl2baYJW7xRpIRATY5Owey2z5OHN9NC9fa6Vy7bQpWsFXvRbb9XnESk3f2Cx
 
