@@ -71,7 +71,7 @@ const ForYouHero = ({ featuredVendors = [] }) => {
   return (
     <div className="relative overflow-hidden min-h-[700px]">
       {/* Carousel Slides Container */}
-      <div className="relative h-[700px]">
+      <div className="relative h-[750px]">
         {slides.map((slide, index) => (
           <div
             key={slide.id}
@@ -198,7 +198,7 @@ const ForYouHero = ({ featuredVendors = [] }) => {
 
       {/* Carousel Indicators */}
       {slides.length > 1 && (
-        <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-40 flex gap-2">
+        <div className="absolute bottom-55 left-1/2 -translate-x-1/2 z-40 flex gap-2">
           {slides.map((_, index) => (
             <button
               key={index}
@@ -220,7 +220,7 @@ const ForYouHero = ({ featuredVendors = [] }) => {
           viewBox="0 0 1440 120"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          className="w-full h-auto"
+          className="w-full h-auto block"
         >
           <path
             d="M0 120L60 105C120 90 240 60 360 45C480 30 600 30 720 37.5C840 45 960 60 1080 67.5C1200 75 1320 75 1380 75L1440 75V120H1380C1320 120 1200 120 1080 120C960 120 840 120 720 120C600 120 480 120 360 120C240 120 120 120 60 120H0Z"

@@ -9,6 +9,7 @@ import { SuccessStatus } from "./statusComponents/successStatus";
 import { NotFoundStatus } from "./statusComponents/notFoundStatus";
 import { FailedStatus } from "./statusComponents/failedStatus";
 import { ErrorStatus } from "./statusComponents/errorStatus";
+import { PaidNotFulfilledStatus } from "./statusComponents/paidNotFulfilledStatus";
 
 export function ConfirmationContentRenderer({
   verificationStatus,
@@ -26,6 +27,9 @@ export function ConfirmationContentRenderer({
 
     case "pending_timeout":
       return <PendingTimeoutStatus trxref={trxref} />;
+    
+    case "paid_not_fulfilled":
+      return <PaidNotFulfilledStatus trxref={trxref} />;
 
     case "success":
       // ✅ NEW: Double protection for success state

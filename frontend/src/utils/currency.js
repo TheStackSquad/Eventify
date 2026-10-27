@@ -16,14 +16,14 @@ const PREMIUM_TICKET_RATE = 0.07;
 const PREMIUM_TICKET_FLAT = 50;
 
 // ========== CORE CONVERSION FUNCTIONS ==========
-export const koboToNaira = (kobo) => {
-  const koboNum = Number(kobo);
-  if (isNaN(koboNum)) {
-    console.warn(`[currency] Invalid kobo value: ${kobo}`);
-    return 0;
-  }
-  return koboNum / 100;
-};
+// export const koboToNaira = (kobo) => {
+//   const koboNum = Number(kobo);
+//   if (isNaN(koboNum)) {
+//     console.warn(`[currency] Invalid kobo value: ${kobo}`);
+//     return 0;
+//   }
+//   return koboNum / 100;
+// };
 
 export const nairaToKobo = (naira) => {
   const nairaNum = Number(naira);
@@ -132,65 +132,100 @@ export const calculateOrderTotals = (ticketPriceNaira, quantity = 1) => {
  * Format price with full currency symbol and decimals
  * Use for detailed displays where exact amount matters
  */
-export const formatPriceDetailed = (priceInKobo) => {
-  if (priceInKobo === 0) return "FREE";
-  if (priceInKobo === null || priceInKobo === undefined) return "Price TBD";
 
-  const koboNum = Number(priceInKobo);
-  if (isNaN(koboNum) || koboNum < 0) return "Price TBD";
+/* ---------- internals ---------- */
 
-  const naira = koboToNaira(koboNum);
-  return `₦${naira.toLocaleString("en-NG", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const UNITS = [
+  { size: 1e9, suffix: "B" },
+  { size: 1e6, suffix: "M" },
+  { size: 1e3, suffix: "K" },
+];
+
+// Returns a finite, non-negative number or null
+const toValidAmount = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 };
 
-/**
- * Format currency with full decimals (for exact amounts)
- * Detects if input is in kobo or naira
- */
-export const formatCurrency = (amount) => {
-  const amountNum = Number(amount);
-  if (isNaN(amountNum)) {
-    console.warn(`[currency] Invalid amount: ${amount}`);
-    return "₦0";
+// 1500 -> "1.5K", 200000 -> "200K", 999950 -> "1M", 1000000 -> "1M"
+const compactValue = (n) => {
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : "";
+
+  for (let i = 0; i < UNITS.length; i++) {
+    const { size, suffix } = UNITS[i];
+    if (abs >= size) {
+      const scaled = Math.round((abs / size) * 10) / 10; // 1 decimal max
+      // Rounding pushed us to 1000 of this unit -> promote (999.95K -> 1M)
+      if (scaled >= 1000 && i > 0) return `${sign}1${UNITS[i - 1].suffix}`;
+      return `${sign}${scaled}${suffix}`; // Number -> string drops trailing ".0"
+    }
   }
+  return n.toLocaleString("en-NG", { maximumFractionDigits: 2 });
+};
 
-  const isLikelyKobo = amountNum > 1000 && amountNum % 100 === 0;
-  const nairaValue = isLikelyKobo ? koboToNaira(amountNum) : amountNum;
-
-  // 🎯 DEFENSIVE: Wrap toLocaleString in try-catch
+const formatNairaFixed = (naira) => {
   try {
-    return nairaValue.toLocaleString("en-NG", {
-      style: "currency",
-      currency: "NGN",
+    return `₦${naira.toLocaleString("en-NG", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    });
-  } catch (error) {
-    // Fallback for browsers without Intl support
-    console.warn("[currency] toLocaleString failed, using fallback");
-    return `₦${nairaValue.toFixed(2)}`;
+    })}`;
+  } catch {
+    return `₦${naira.toFixed(2)}`;
   }
 };
 
+/* ---------- public API ---------- */
+
+/** kobo -> naira (number) */
+export const koboToNaira = (kobo) => Number(kobo) / 100;
+
 /**
- * Format plain numbers with K/M suffix (NO currency symbol)
- * Use for: ticket counts, attendee counts, event counts
+ * Kobo in, full naira out.
+ * 15000 -> "₦150.00" | 150000 -> "₦1,500.00" | 4500000 -> "₦45,000.00"
+ * 45000000 -> "₦450,000.00"
+ */
+export const formatPriceDetailed = (priceInKobo) => {
+  const kobo = toValidAmount(priceInKobo);
+  if (kobo === null) return "Price TBD";
+  if (kobo === 0) return "FREE";
+  return formatNairaFixed(koboToNaira(kobo));
+};
+
+/**
+ * Kobo in, compact naira out (for cards).
+ * 100000 -> "₦1K" | 20000000 -> "₦200K" | 95000000 -> "₦950K" | 100000000 -> "₦1M"
+ * Returns null when there is no usable price, so the caller can render a placeholder.
+ */
+export const formatPriceCompact = (priceInKobo) => {
+  const kobo = toValidAmount(priceInKobo);
+  if (kobo === null || kobo === 0) return null;
+  return `₦${compactValue(koboToNaira(kobo))}`;
+};
+
+/**
+ * Naira in (NO guessing), full decimals.
+ * 1500 -> "₦1,500.00"
+ */
+export const formatCurrency = (amountInNaira) => {
+  const n = toValidAmount(amountInNaira);
+  if (n === null) {
+    console.warn(`[currency] Invalid amount: ${amountInNaira}`);
+    return "₦0.00";
+  }
+  return formatNairaFixed(n);
+};
+
+/**
+ * Plain counts (NO currency symbol): tickets, attendees, events.
+ * 0 -> "0" | 1500 -> "1.5K" | 999999 -> "1M"
  */
 export const formatNumber = (num) => {
   const n = Number(num);
-  if (isNaN(n) || n === 0) return "0";
-
-  if (n >= 1000000) {
-    return `${(n / 1000000).toFixed(1).replace(/\.0$/, "")}M`;
-  } else if (n >= 1000) {
-    return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}K`;
-  }
-  return n.toLocaleString();
+  if (!Number.isFinite(n) || n === 0) return "0";
+  return compactValue(n);
 };
-
 /**
  * Format price with K/M suffix and currency symbol
  * Use for: ticket revenue, sales figures, monetary amounts

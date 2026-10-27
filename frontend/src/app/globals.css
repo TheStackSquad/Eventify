@@ -23,23 +23,17 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-onest), system-ui, sans-serif; /* Uses 'body' font from config */
+  font-family: var(--font-montserrat-alt), system-ui, sans-serif; /* Uses Montserrat Alternates as body font */
 }
 
-/* Override font for all heading elements (h1-h6) to use Plus Jakarta Sans */
+/* Override font for all heading elements (h1-h6) to use Cormorant Garamond */
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-jakarta-sans), system-ui, sans-serif; /* Uses 'header' font from config */
+  font-family: var(--font-cormorant), Georgia, serif; /* Uses Cormorant Garamond for headers */
 }
 
-/* Ensure 'a', 'li', and 'button' text specifically use Onest, 
-   though they inherit it from 'body', this explicitly reinforces it for links and list items. */
-a, li {
-  font-family: var(--font-onest), system-ui, sans-serif;
-}
-
-/* For buttons, apply the Onest font. You may need to add this for specific frameworks or resets. */
-button {
-    font-family: var(--font-onest), system-ui, sans-serif;
+/* Ensure 'a', 'li', and 'button' text specifically use Montserrat Alternates */
+a, li, button {
+  font-family: var(--font-montserrat-alt), system-ui, sans-serif;
 }
 
 /*vendor form style*/

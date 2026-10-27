@@ -54,6 +54,8 @@ const CheckoutForm = memo(
               className="mr-2 text-red-600"
               size={24}
               aria-hidden="true"
+
+              
             />
             <h2
               id="payment-heading"

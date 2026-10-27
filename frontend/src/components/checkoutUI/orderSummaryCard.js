@@ -1,273 +1,198 @@
+// frontend/src/components/checkoutUI/orderSummaryCard.js
+
 "use client";
 
-import { memo, useState } from "react";
-import {
-  CheckCircle,
-  ShoppingBag,
-  Receipt,
-  Info,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react";
+import { memo, useId, useState } from "react";
+import { Receipt, ChevronDown, Check } from "lucide-react";
+import InfoTip from "@/components/checkoutUI/infoTip";
+
+const naira = (n) => `₦${Number(n || 0).toLocaleString("en-NG")}`;
 
 const OrderSummaryCard = memo(
   ({ customerInfo, itemCount, orderBreakdown, items }) => {
-    const [showFeeBreakdown, setShowFeeBreakdown] = useState(false);
+    const [ticketsOpen, setTicketsOpen] = useState(false);
+    const panelId = useId();
 
-    const formatPrice = (amount) => {
-      return `₦${amount.toLocaleString("en-NG")}`;
-    };
+    const { subtotal, serviceFee, vat, finalTotal } = orderBreakdown;
+    const itemsBreakdown = orderBreakdown.itemsBreakdown || [];
+    const hasSmall = itemsBreakdown.some((b) => b.tier === "small");
+    const hasPremium = itemsBreakdown.some((b) => b.tier !== "small");
 
-    const getItemTotal = (item) => {
-      return Number(item.price) * item.quantity;
-    };
-
-    const hasVAT = orderBreakdown.vat > 0;
-    const hasMixedTiers = orderBreakdown.hasMixedTiers;
+    // Summary line shown while the ticket list is collapsed
+    const eventCount = new Set(items.map((i) => i.eventTitle)).size;
+    const single = items.length === 1 ? items[0] : null;
+    const summaryTitle = single
+      ? single.eventTitle
+      : `${eventCount} ${eventCount === 1 ? "event" : "events"}`;
+    const summarySub = single
+      ? `${single.tierName} × ${single.quantity}`
+      : `${itemCount} ${itemCount === 1 ? "ticket" : "tickets"}`;
 
     return (
-      <div className="bg-gradient-to-br from-gray-50 to-white p-4 sm:p-6 rounded-xl shadow-xl border border-gray-200 lg:sticky lg:top-24">
-        <div className="flex items-center mb-4 md:mb-6 pb-3 border-b border-gray-200">
-          <Receipt
-            className="mr-2 text-blue-600"
-            size={22}
-            aria-hidden="true"
-          />
-          <h2 className="text-lg sm:text-xl font-bold text-gray-800">
-            Order Summary
-          </h2>
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6 lg:sticky lg:top-24">
+        <div className="mb-4 flex items-center gap-2">
+          <Receipt size={20} className="text-gray-700" aria-hidden="true" />
+          <h2 className="text-lg font-bold text-gray-900">Order summary</h2>
         </div>
 
         {customerInfo.firstName && (
-          <div className="mb-4 p-3 sm:p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200 animate-fadeIn">
-            <div className="flex items-start">
-              <CheckCircle
-                className="mr-2 text-green-600 flex-shrink-0 mt-0.5"
-                size={18}
-                aria-hidden="true"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-green-800 truncate">
-                  {customerInfo.firstName} {customerInfo.lastName}
-                </p>
-                <p className="text-xs text-green-700 truncate">
-                  {customerInfo.email}
-                </p>
-                {customerInfo.phone && (
-                  <p className="text-xs text-green-700">{customerInfo.phone}</p>
-                )}
-              </div>
+          <div className="mb-4 flex items-start gap-2 rounded-lg bg-green-50 px-3 py-2">
+            <Check
+              size={14}
+              className="mt-1 shrink-0 text-green-600"
+              aria-hidden="true"
+            />
+            <div className="min-w-0 text-xs">
+              <p className="truncate font-semibold text-green-900">
+                {customerInfo.firstName} {customerInfo.lastName}
+              </p>
+              {customerInfo.email && (
+                <p className="truncate text-green-800">{customerInfo.email}</p>
+              )}
             </div>
           </div>
         )}
 
-        <div className="space-y-3 text-gray-700 mb-4 md:mb-6">
-          <div className="flex justify-between items-center text-sm">
-            <span className="flex items-center">
-              <ShoppingBag
-                size={16}
-                className="mr-1.5 text-gray-500"
-                aria-hidden="true"
-              />
-              Tickets Subtotal ({itemCount} {itemCount === 1 ? "item" : "items"}
-              )
-            </span>
-            <span className="font-semibold">
-              {formatPrice(orderBreakdown.subtotal)}
-            </span>
-          </div>
-
-          <div className="flex justify-between items-start text-sm">
-            <div className="flex items-start flex-1">
-              <span>Service Fee</span>
-              {hasMixedTiers && (
-                <button
-                  onClick={() => setShowFeeBreakdown(!showFeeBreakdown)}
-                  className="ml-1 text-blue-600 hover:text-blue-700 focus:outline-none"
-                  aria-label="Toggle fee breakdown"
-                >
-                  <Info size={14} />
-                </button>
-              )}
-            </div>
-            <span className="font-semibold">
-              {formatPrice(orderBreakdown.serviceFee)}
-            </span>
-          </div>
-
-          {hasMixedTiers && showFeeBreakdown && (
-            <div className="ml-4 p-3 bg-blue-50 rounded-lg text-xs space-y-1.5 animate-slideDown">
-              <p className="font-medium text-blue-900 mb-2">Fee Breakdown:</p>
-              {orderBreakdown.itemsBreakdown.map((item, idx) => (
-                <div key={idx} className="flex justify-between text-blue-800">
-                  <span className="truncate max-w-[60%]">
-                    {item.eventTitle} (
-                    {item.tier === "small" ? "10%" : "7% + ₦50"})
-                  </span>
-                  <span>{formatPrice(item.serviceFee)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {hasVAT && (
-            <div className="flex justify-between items-center text-sm">
-              <div className="flex items-center">
-                <span>Value Added Tax (VAT)</span>
-                <div className="group relative ml-1">
-                  <Info size={14} className="text-gray-400 cursor-help" />
-                  <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 w-48 p-2 bg-gray-800 text-white text-xs rounded shadow-lg z-10">
-                    VAT (7.5%) applies only to service fees on tickets over
-                    ₦5,000
-                  </div>
-                </div>
-              </div>
-              <span className="font-semibold">
-                {formatPrice(orderBreakdown.vat)}
+        <div className="divide-y divide-gray-100">
+          {/* Tickets: always shows a summary line, even when closed */}
+          <section className="pb-4">
+            <button
+              type="button"
+              onClick={() => setTicketsOpen((o) => !o)}
+              aria-expanded={ticketsOpen}
+              aria-controls={panelId}
+              className="flex w-full items-center justify-between gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-gray-900">
+                  {summaryTitle}
+                </span>
+                <span className="block truncate text-xs text-gray-500">
+                  {summarySub}
+                </span>
               </span>
-            </div>
-          )}
+              <span className="flex shrink-0 items-center gap-2 text-sm font-semibold text-gray-900">
+                {naira(subtotal)}
+                <ChevronDown
+                  size={16}
+                  className={`text-gray-400 transition-transform duration-300 ${
+                    ticketsOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </span>
+            </button>
 
-          {!hasVAT && itemCount > 0 && (
-            <div className="flex items-start gap-2 p-2 bg-green-50 rounded text-xs text-green-800">
-              <Info size={14} className="flex-shrink-0 mt-0.5 text-green-600" />
-              <p>
-                <span className="font-medium">10% flat fee</span> - VAT included
-                for tickets ≤₦5,000
-              </p>
-            </div>
-          )}
-
-          <div className="border-t-2 border-gray-300 pt-3 flex justify-between items-center">
-            <span className="text-base sm:text-lg font-bold text-gray-900">
-              Total Due
-            </span>
-            <span className="text-lg sm:text-xl font-extrabold text-red-600">
-              {formatPrice(orderBreakdown.finalTotal)}
-            </span>
-          </div>
-        </div>
-
-        <div className="pt-4 border-t border-gray-200">
-          <button
-            onClick={() => setShowFeeBreakdown(!showFeeBreakdown)}
-            className="w-full flex items-center justify-between font-semibold text-gray-800 mb-3 text-sm sm:text-base hover:text-blue-600 transition-colors"
-          >
-            <span className="flex items-center">
-              <CheckCircle
-                size={16}
-                className="mr-1.5 text-blue-600"
-                aria-hidden="true"
-              />
-              Your Tickets
-            </span>
-            {showFeeBreakdown ? (
-              <ChevronUp size={16} />
-            ) : (
-              <ChevronDown size={16} />
-            )}
-          </button>
-
-          <div
-            className={`space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar transition-all ${
-              showFeeBreakdown ? "opacity-100" : "opacity-0 max-h-0"
-            }`}
-          >
-            {items.map((item, idx) => {
-              const itemBreakdown = orderBreakdown.itemsBreakdown?.[idx];
-              return (
-                <div
-                  key={item.cartId}
-                  className="flex flex-col gap-2 p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-300 transition-colors"
-                >
-                  <div className="flex justify-between items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 text-sm line-clamp-1 mb-1">
-                        {item.eventTitle}
-                      </p>
-                      <p className="text-gray-500 text-xs">
-                        {item.tierName} × {item.quantity}
-                      </p>
-                    </div>
-                    <span className="font-semibold text-gray-800 text-sm whitespace-nowrap">
-                      {formatPrice(getItemTotal(item))}
-                    </span>
-                  </div>
-
-                  {itemBreakdown && (
-                    <div className="text-xs text-gray-500 flex items-center gap-1">
-                      <span
-                        className={`px-2 py-0.5 rounded-full ${
-                          itemBreakdown.tier === "small"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-blue-100 text-blue-700"
-                        }`}
-                      >
-                        {itemBreakdown.tier === "small"
-                          ? "10% fee"
-                          : "7% + ₦50 + VAT"}
+            <div
+              id={panelId}
+              aria-hidden={!ticketsOpen}
+              className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
+                ticketsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+              }`}
+            >
+              <div className="overflow-hidden">
+                <ul className="mt-3 max-h-56 space-y-3 overflow-y-auto border-t border-gray-100 pt-3">
+                  {items.map((item) => (
+                    <li
+                      key={item.cartId}
+                      className="flex items-start justify-between gap-3 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-gray-900">
+                          {item.eventTitle}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {item.tierName} × {item.quantity} ·{" "}
+                          {naira(item.price)} each
+                        </p>
+                      </div>
+                      <span className="shrink-0 font-medium text-gray-700">
+                        {naira(Number(item.price) * item.quantity)}
                       </span>
-                    </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          {/* Fees */}
+          <section className="space-y-3 py-4 text-sm text-gray-700">
+            <div className="relative flex items-center justify-between">
+              <span className="flex items-center">Tickets subtotal</span>
+              <span className="font-medium">{naira(subtotal)}</span>
+            </div>
+
+            <div className="relative flex items-center justify-between">
+              <span className="flex items-center">
+                Service fee
+                <InfoTip label="What does the service fee cover?">
+                  <p className="font-medium text-white">
+                    What you’re paying for
+                  </p>
+                  <p className="mt-1">
+                    Secure payment processing, instant ticket delivery and
+                    customer support for your order.
+                  </p>
+                  {hasSmall && !hasPremium && (
+                    <p className="mt-2">
+                      A flat 10% of the ticket price, VAT included.
+                    </p>
                   )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+                  {hasPremium && !hasSmall && (
+                    <p className="mt-2">
+                      7% of the ticket price + ₦50 per ticket. VAT is added
+                      separately.
+                    </p>
+                  )}
+                  {hasSmall && hasPremium && (
+                    <ul className="mt-2 space-y-1">
+                      {itemsBreakdown.map((b, i) => (
+                        <li key={i} className="flex justify-between gap-3">
+                          <span className="truncate">
+                            {b.eventTitle} (
+                            {b.tier === "small" ? "10%" : "7% + ₦50"})
+                          </span>
+                          <span>{naira(b.serviceFee)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </InfoTip>
+              </span>
+              <span className="font-medium">{naira(serviceFee)}</span>
+            </div>
 
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <div className="flex items-center justify-center text-xs text-gray-600">
-            <CheckCircle
-              size={14}
-              className="mr-1.5 text-green-600"
-              aria-hidden="true"
-            />
-            <span>Secure checkout powered by Paystack</span>
-          </div>
-        </div>
+            {vat > 0 && (
+              <div className="relative flex items-center justify-between">
+                <span className="flex items-center">
+                  VAT
+                  <InfoTip label="How is VAT calculated?">
+                    <p className="font-medium text-white">
+                      7.5% VAT on the service fee
+                    </p>
+                    <p className="mt-1">
+                      VAT applies to our fee only, never to the ticket price.
+                      It’s worked out per ticket and rounded, so the total can
+                      differ by a few naira from 7.5% of the combined fee.
+                    </p>
+                    <p className="mt-2 text-gray-400">
+                      Tickets up to ₦5,000 have VAT included in their 10% fee.
+                    </p>
+                  </InfoTip>
+                </span>
+                <span className="font-medium">{naira(vat)}</span>
+              </div>
+            )}
+          </section>
 
-        <style jsx>{`
-          .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-          }
-          .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-          }
-          .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #cbd5e0;
-            border-radius: 10px;
-          }
-          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #a0aec0;
-          }
-          @keyframes fadeIn {
-            from {
-              opacity: 0;
-              transform: translateY(-10px);
-            }
-            to {
-              opacity: 1;
-              transform: translateY(0);
-            }
-          }
-          @keyframes slideDown {
-            from {
-              opacity: 0;
-              max-height: 0;
-            }
-            to {
-              opacity: 1;
-              max-height: 200px;
-            }
-          }
-          .animate-fadeIn {
-            animation: fadeIn 0.3s ease-out;
-          }
-          .animate-slideDown {
-            animation: slideDown 0.3s ease-out;
-          }
-        `}</style>
+          {/* Total */}
+          <section className="flex items-baseline justify-between pt-4">
+            <span className="text-base font-bold text-gray-900">Total due</span>
+            <span className="text-xl font-extrabold text-red-600">
+              {naira(finalTotal)}
+            </span>
+          </section>
+        </div>
       </div>
     );
   },

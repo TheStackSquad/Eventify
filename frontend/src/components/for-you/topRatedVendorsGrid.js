@@ -8,15 +8,15 @@ import EmptyState from "./emptyState";
 
 const TopRatedVendorsGrid = ({ vendors, isLoading = false }) => {
   // Helper functions for VendorCard
-  const formatNumber = (num) => {
-    if (!num) return "0";
-    return num.toLocaleString();
-  };
+  // const formatNumber = (num) => {
+  //   if (!num) return "0";
+  //   return num.toLocaleString();
+  // };
 
-  const getRatingPercentage = (rating) => {
-    if (!rating) return 0;
-    return (rating / 5) * 100;
-  };
+  // const getRatingPercentage = (rating) => {
+  //   if (!rating) return 0;
+  //   return (rating / 5) * 100;
+  // };
 
   // Loading state
   if (isLoading) {
@@ -43,12 +43,7 @@ const TopRatedVendorsGrid = ({ vendors, isLoading = false }) => {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {vendors.map((vendor) => (
-        <VendorCard
-          key={vendor.id}
-          vendor={vendor}
-          formatNumber={formatNumber}
-          getRatingPercentage={getRatingPercentage}
-        />
+        <VendorCard key={vendor.id} vendor={vendor} />
       ))}
     </div>
   );

@@ -1,5 +1,5 @@
 // frontend/src/app/layout.js
-import { Plus_Jakarta_Sans, Onest } from "next/font/google";
+import localFont from "next/font/local";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import Header from "@/components/common/Header";
 import { CartProvider } from "@/context/cartContext";
@@ -10,17 +10,70 @@ import PaystackScriptProvider from "@/provider/paystackScriptProvider";
 import ErrorBoundaryProvider from "@/provider/errorBoundaryProvider";
 import "./globals.css";
 
-// Font configurations
-const headerFont = Plus_Jakarta_Sans({
-  subsets: ["latin"],
+// Configure Cormorant Garamond for Headers
+const cormorant = localFont({
+  src: [
+    {
+      path: "../../public/fonts/CormorantGaramond-Light.woff",
+      weight: "300",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/CormorantGaramond-Regular.woff",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/CormorantGaramond-Medium.woff",
+      weight: "500",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/CormorantGaramond-SemiBold.woff",
+      weight: "600",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/CormorantGaramond-Bold.woff",
+      weight: "700",
+      style: "normal",
+    },
+  ],
+  variable: "--font-cormorant",
   display: "swap",
-  variable: "--font-jakarta-sans",
 });
 
-const bodyFont = Onest({
-  subsets: ["latin"],
+// Configure Montserrat Alternates for Subtexts and Body
+const montserratAlt = localFont({
+  src: [
+    {
+      path: "../../public/fonts/MontserratAlternates-Thin.woff",
+      weight: "100",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/MontserratAlternates-Regular.woff",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/MontserratAlternates-Medium.woff",
+      weight: "500",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/MontserratAlternates-Bold.woff",
+      weight: "700",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/MontserratAlternates-Black.woff",
+      weight: "900",
+      style: "normal",
+    },
+  ],
+  variable: "--font-montserrat-alt",
   display: "swap",
-  variable: "--font-onest",
 });
 
 // SEO metadata
@@ -28,7 +81,7 @@ export const metadata = {
   metadataBase: new URL(
     process.env.NODE_ENV === "development"
       ? "http://localhost:3000"
-      : "https://eventify.com"
+      : "https://eventify-tix.vercel.app/",
   ),
   title: {
     default: "Eventify | Discover Events & Professional Vendors",
@@ -106,7 +159,10 @@ const structuredData = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${headerFont.variable} ${bodyFont.variable}`}>
+    <html
+      lang="en"
+      className={`${cormorant.variable} ${montserratAlt.variable}`}
+    >
       <head>
         {/* Preconnect to Paystack for faster script loading */}
         <link rel="preconnect" href="https://js.paystack.co" />
