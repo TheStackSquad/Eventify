@@ -1,0 +1,194 @@
+[
+  {
+    "Id": "S1",
+    "Name": "backend reachable through the ngrok tunnel",
+    "Expected": "200",
+    "Actual": "200",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "S2",
+    "Name": "vendor 1 session works",
+    "Expected": "200 on /me",
+    "Actual": "200",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "S3",
+    "Name": "CSRF cookie after login",
+    "Expected": "present",
+    "Actual": "present",
+    "Outcome": "INFO",
+    "Note": ""
+  },
+  {
+    "Id": "T13.1",
+    "Name": "public plans match the server price table",
+    "Expected": "basic=350000, premium=1000000, featured=2500000",
+    "Actual": "basic=350000, premium=1000000, featured=2500000",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T12.1",
+    "Name": "initiate without a session is rejected",
+    "Expected": "401",
+    "Actual": "401",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T12.2",
+    "Name": "verify without a session is rejected",
+    "Expected": "401",
+    "Actual": "401",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T12.3",
+    "Name": "initiate with a session but no CSRF token is rejected",
+    "Expected": "403 and no ledger row",
+    "Actual": "403, +0 rows",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T10.1",
+    "Name": "free, unknown and malformed tiers rejected, nothing written",
+    "Expected": "400 and +0 rows for each",
+    "Actual": "'free'->400/+0 'platinum'->400/+0 ''->400/+0 'PREMIUM'->400/+0",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T10.2",
+    "Name": "the vendor comes from the session, not the request body",
+    "Expected": "201 and ledger vendor = session vendor",
+    "Actual": "201, eee4b3d4-3c6b-4d44-879b-9e1e27d52b6f",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T9.1",
+    "Name": "initiate returns a reference and a checkout URL",
+    "Expected": "201 and https://checkout.paystack.com/...",
+    "Actual": "201",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T9.2",
+    "Name": "ledger row written before payment",
+    "Expected": "initiated, server price, session vendor, no webhook yet",
+    "Actual": "initiated 1000000 attempts=0",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T9.3",
+    "Name": "no pending subscription row is created",
+    "Expected": "subscription rows unchanged",
+    "Actual": "0 -> 0",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T3.1",
+    "Name": "wrong signature rejected",
+    "Expected": "401",
+    "Actual": "401",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T3.2",
+    "Name": "missing signature rejected",
+    "Expected": "401",
+    "Actual": "401",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T3.3",
+    "Name": "valid HMAC of a different body rejected and not counted",
+    "Expected": "401 and attempts = 0",
+    "Actual": "401, attempts=0",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T9.4",
+    "Name": "verify on an unpaid reference is refused",
+    "Expected": "422 PAYMENT_NOT_SUCCESSFUL",
+    "Actual": "422 ",
+    "Outcome": "FAIL",
+    "Note": ""
+  },
+  {
+    "Id": "T9.5",
+    "Name": "verify changed nothing",
+    "Expected": "ledger still initiated, subscription state identical",
+    "Actual": "initiated; same=True",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T9b.1",
+    "Name": "signed webhook claiming success for an unpaid transaction is acknowledged",
+    "Expected": "200",
+    "Actual": "200",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T9b.2",
+    "Name": "it changes nothing and is counted",
+    "Expected": "ledger initiated, state identical, attempts >= 1",
+    "Actual": "initiated; same=True; attempts=1",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T8.1",
+    "Name": "another vendor cannot verify this payment",
+    "Expected": "404 PAYMENT_NOT_FOUND",
+    "Actual": "404 ",
+    "Outcome": "FAIL",
+    "Note": ""
+  },
+  {
+    "Id": "T3c.1",
+    "Name": "signed webhook for an unknown reference is acknowledged, no side effects",
+    "Expected": "200 and no new rows",
+    "Actual": "200, +0 ledger, +0 subscriptions",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T16.1",
+    "Name": "2 MB webhook body",
+    "Expected": "400 or 413 (size cap)",
+    "Actual": "400",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T17.1",
+    "Name": "hostile references produce 4xx, never 5xx",
+    "Expected": "4xx for each",
+    "Actual": "400 400 404 404",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "T7.1",
+    "Name": "a different tier is refused while a plan is active",
+    "Expected": "409",
+    "Actual": "",
+    "Outcome": "SKIP",
+    "Note": "needs an active plan (a real paid test in tunnel mode, or a stub control endpoint in rig mode)"
+  }
+]
