@@ -105,7 +105,8 @@ runCleanup := func() {
 func main() {
 
 	// Load env files immediately before any other package initializes
-    _ = godotenv.Load("audit/docker/.env", "../audit/docker/.env", ".env", "backend/.env")
+  //  _ = godotenv.Load("audit/docker/.env", "../audit/docker/.env", ".env", "backend/.env")
+  _ = godotenv.Load(".env", "backend/.env")
 
 	envPaths := []string{
         "audit/docker/.env", // If run from project root
