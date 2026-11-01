@@ -5,6 +5,9 @@ import (
 	//"io"
 	"net/http"
 	"strings"
+	"regexp"
+	"errors"
+	"github.com/eventify/backend/pkg/services/subscription"
 
 	"github.com/eventify/backend/pkg/middleware"
 	"github.com/eventify/backend/pkg/models"
@@ -13,6 +16,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
+
+var validReferenceRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-\.]{1,128}$`)
 
 type SubscriptionHandler struct {
 	Service    servicesubscription.SubscriptionService
@@ -74,6 +79,12 @@ func (h *SubscriptionHandler) VerifySubscription(c *gin.Context) {
 		return
 	}
 
+	// 🛡️ Defend against hostile or malformed reference strings
+    if !validReferenceRegex.MatchString(reference) {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid transaction reference format"})
+        return
+    }
+
 	vendorID, err := middleware.ExtractVendorID(c, h.VendorRepo)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -85,12 +96,27 @@ func (h *SubscriptionHandler) VerifySubscription(c *gin.Context) {
 		Str("reference", reference).
 		Msg("Verifying subscription payment")
 
-	if err := h.Service.VerifyAndFinalize(c.Request.Context(), reference, vendorID); err != nil {
-		log.Error().Err(err).Str("reference", reference).Msg("Verification failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
-		return
-	}
+if err := h.Service.VerifyAndFinalize(c.Request.Context(), reference, vendorID); err != nil {
+            log.Warn().Err(err).Str("reference", reference).Msg("Verification failed gracefully")
 
+            msg := err.Error()
+            
+            // 1. Handle cross-vendor or missing reference (T8.1)
+            if strings.Contains(msg, "not found") || strings.Contains(msg, "no rows") || strings.Contains(msg, "unauthorized") {
+                c.JSON(http.StatusNotFound, gin.H{"status": "error", "code": "PAYMENT_NOT_FOUND", "message": "Transaction reference not found"})
+                return
+            }
+            
+            // 2. Handle unpaid / unsuccessful transactions (T9.4)
+            if strings.Contains(msg, "not successful") || strings.Contains(msg, "pending") || strings.Contains(msg, "failed") {
+                c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "code": "PAYMENT_NOT_SUCCESSFUL", "message": "The transaction has not been successfully completed."})
+                return
+            }
+
+            // Fallback for general client validation errors
+            c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid transaction reference"})
+            return
+        }
 	log.Info().
 		Str("vendorID", vendorID.String()).
 		Str("reference", reference).
@@ -187,30 +213,53 @@ func (h *SubscriptionHandler) GetMySubscription(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": response})
 }
 
-// handleServiceError processes service layer errors
-
+// handleServiceError processes service layer errors and maps them to clean HTTP responses
+// handleServiceError processes service layer errors and maps them to clean HTTP responses
 func handleServiceError(c *gin.Context, err error, vID string) {
-	msg := err.Error()
-	log.Error().Err(err).Str("vendorID", vID).Msg("Service Error")
+	log.Error().Err(err).Str("vendorID", vID).Msg("Service Error encountered")
 
+	// 1. Check for idiomatic sentinel errors first (cleanest Go pattern)
 	switch {
-	case strings.Contains(msg, "already have an active"), strings.Contains(msg, "already has an active"):
+	case errors.Is(err, subscription.ErrFreeTier) || errors.Is(err, subscription.ErrInvalidTier):
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		return
+
+	case errors.Is(err, subscription.ErrActiveDifferentTier):
 		c.JSON(http.StatusConflict, gin.H{
 			"status":  "error",
+			"code":    "ACTIVE_PLAN_EXISTS", // 👈 Added here so it matches immediately
+			"message": err.Error(),
+			"action":  "cancel_existing_or_wait",
+		})
+		return
+
+	case errors.Is(err, subscription.ErrGatewayUnavailable):
+		// 🛡️ Map Paystack / gateway outages to 502 Bad Gateway instead of 500 crash
+		c.JSON(http.StatusBadGateway, gin.H{"status": "error", "message": "Payment gateway currently unavailable"})
+		return
+	}
+
+	// 2. Fallback to string matching for wrapped or dynamic errors
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "already have an active") || strings.Contains(msg, "already has an active"):
+		c.JSON(http.StatusConflict, gin.H{
+			"status":  "error",
+			"code":    "ACTIVE_PLAN_EXISTS", // 👈 Also include here for string-matched variants
 			"message": msg,
 			"action":  "cancel_existing_or_wait",
 		})
-	case strings.Contains(msg, "already has"):
-		c.JSON(http.StatusConflict, gin.H{"error": msg})
-	case strings.Contains(msg, "cannot subscribe to"),
-		strings.HasPrefix(msg, "invalid subscription tier"),
+
+	case strings.Contains(msg, "cannot subscribe to") ||
+		strings.HasPrefix(msg, "invalid subscription tier") ||
 		strings.Contains(msg, "no email on file"):
-		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": msg})
+
 	default:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		// Catch-all for unhandled internal failures -> returns 500 safely
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Internal server error"})
 	}
 }
-
 // GetPlans: GET /api/v1/subscription/plans (public)
 func (h *SubscriptionHandler) GetPlans(c *gin.Context) {
 	c.Header("Cache-Control", "public, max-age=300")

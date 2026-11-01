@@ -200,6 +200,13 @@ func (s *OrderServiceImpl) resolveAlreadyProcessed(ctx context.Context, referenc
 
 // ProcessWebhook handles Paystack webhook callbacks for payment events
 func (s *OrderServiceImpl) ProcessWebhook(ctx context.Context, payload *models.PaystackWebhook, signature string) error {
+
+	// Only a successful charge matters here; failures are released by the stock-release worker.
+	if payload.Event != "charge.success" {
+		log.Debug().Str("event", payload.Event).Msg("Ignoring unrelated webhook event")
+		return nil
+	}
+
 	data := payload.Data
 	if data == nil {
 		return errors.New("webhook data is nil")
@@ -208,12 +215,11 @@ func (s *OrderServiceImpl) ProcessWebhook(ctx context.Context, payload *models.P
 	// Fetch order by reference
 	order, err := s.OrderRepo.GetOrderByReference(ctx, data.Reference)
 	if err != nil {
-		log.Warn().Str("reference", data.Reference).Err(err).Msg("Order not found during webhook")
-		return nil
+		// A real database error: let Paystack retry rather than lose a paid order.
+		return fmt.Errorf("load order for webhook: %w", err)
 	}
-
 	if order == nil {
-		log.Warn().Str("reference", data.Reference).Msg("Order not found for webhook reference — skipping")
+		log.Warn().Str("reference", data.Reference).Msg("Order not found for webhook reference; skipping")
 		return nil
 	}
 

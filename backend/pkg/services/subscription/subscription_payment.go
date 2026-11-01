@@ -5,14 +5,15 @@ package subscription
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"os"
 	"errors"
+	"fmt"
+	//"os"
 	"time"
 
 	"github.com/eventify/backend/pkg/models"
 	reposub "github.com/eventify/backend/pkg/repository/subscription"
 	"github.com/eventify/backend/pkg/services/paystack"
+	"github.com/eventify/backend/pkg/utils"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
@@ -39,18 +40,21 @@ func (s *subscriptionServiceImpl) InitiateSubscription(ctx context.Context, vend
 	// 3. Vendor and owner (Paystack needs an email).
 	vendor, err := s.vendorRepo.GetByID(ctx, vendorID)
 	if err != nil {
-		return nil, fmt.Errorf("vendor profile not found")
+		return nil, fmt.Errorf("vendor profile not found: %w", err)
 	}
 	user, err := s.authRepo.GetUserByID(ctx, vendor.OwnerID)
 	if err != nil {
-		return nil, fmt.Errorf("user authentication failed")
+		return nil, fmt.Errorf("user authentication failed: %w", err)
 	}
 
 	// 4. Ledger first: no payment link may exist without a record of it.
 	reference := uuid.NewString()
 	payment := &models.SubscriptionPayment{
-		Reference: reference, VendorID: vendorID, Tier: req.Tier,
-		AmountKobo: priceKobo, Currency: "NGN",
+		Reference:  reference, 
+		VendorID:   vendorID, 
+		Tier:       req.Tier,
+		AmountKobo: priceKobo, 
+		Currency:   "NGN",
 	}
 	if err := s.subscriptionRepo.CreatePayment(ctx, payment); err != nil {
 		log.Error().Err(err).Str("vendorID", vendorID.String()).Msg("Ledger insert failed; not contacting Paystack")
@@ -58,7 +62,12 @@ func (s *subscriptionServiceImpl) InitiateSubscription(ctx context.Context, vend
 	}
 
 	// 5. Paystack.
-	callback := fmt.Sprintf("%s/subscription/callback", os.Getenv("FRONTEND_URL"))
+	feURL, err := utils.FrontendBaseURL()
+	if err != nil {
+		return nil, fmt.Errorf("subscription payment callback URL: %w", err)
+	}
+	callback := fmt.Sprintf("%s/subscription/callback", feURL)
+
 	metadata := map[string]string{
 		"payment_type": "subscription",
 		"vendor_id":    vendorID.String(),
@@ -74,9 +83,70 @@ func (s *subscriptionServiceImpl) InitiateSubscription(ctx context.Context, vend
 	}
 
 	return &InitiateResponse{
-		Reference: reference, AuthorizationURL: authURL,
-		Tier: string(req.Tier), AmountKobo: priceKobo,
+		Reference:        reference, 
+		AuthorizationURL: authURL,
+		Tier:             string(req.Tier), 
+		AmountKobo:       priceKobo,
 	}, nil
+}
+
+// VerifyAndFinalize is the vendor-initiated confirmation (the redirect page).
+func (s *subscriptionServiceImpl) VerifyAndFinalize(ctx context.Context, reference string, vendorID uuid.UUID) error {
+	payment, err := s.subscriptionRepo.GetPaymentByReference(ctx, reference)
+	switch {
+	case errors.Is(err, reposub.ErrPaymentNotFound):
+		return ErrPaymentNotOwned // an unknown reference looks the same as someone else's
+	case err != nil:
+		return fmt.Errorf("load payment: %w", err)
+	case payment.VendorID != vendorID:
+		return ErrPaymentNotOwned
+	}
+	return s.settle(ctx, reference)
+}
+
+// settle asks Paystack what really happened, then applies it exactly once through the
+// ledger. Paid amount and currency come from Paystack, never from our own records, so
+// the repository's comparison against the expected price is a real check.
+func (s *subscriptionServiceImpl) settle(ctx context.Context, reference string) error {
+	ps, err := s.paystack.VerifyTransaction(ctx, reference)
+	if err != nil {
+		return fmt.Errorf("paystack verify: %w", err)
+	}
+	// ps.Status only says the API call worked. The payment itself is ps.Data.Status.
+	if !ps.Status || ps.Data == nil || ps.Data.Status != "success" {
+		return ErrPaymentNotSuccessful
+	}
+
+	now := time.Now().UTC()
+	outcome, err := s.subscriptionRepo.SettlePayment(ctx, reposub.SettleInput{
+		Reference:      reference,
+		PaidAmountKobo: int64(ps.Data.Amount),
+		PaidCurrency:   ps.Data.Currency,
+		Channel:        ps.Data.Channel,
+		PaidAt:         parsePaidAt(ps.Data.PaidAt, now),
+		Now:            now,
+	})
+	if err != nil {
+		return fmt.Errorf("settle payment: %w", err)
+	}
+
+	switch outcome {
+	case reposub.SettleNeedsReview:
+		log.Error().Str("reference", reference).Msg("🚨 PAYMENT HELD FOR MANUAL REVIEW")
+		return ErrPaymentNeedsReview
+	case reposub.SettleAlreadyApplied:
+		log.Info().Str("reference", reference).Msg("Payment already applied; nothing to do")
+	default:
+		log.Info().Str("reference", reference).Msg("🎊 Subscription payment applied")
+	}
+	return nil
+}
+
+func parsePaidAt(s string, fallback time.Time) time.Time {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.UTC()
+	}
+	return fallback
 }
 
 func (s *subscriptionServiceImpl) HandleWebhook(ctx context.Context, body []byte, signature string) error {
@@ -104,75 +174,12 @@ func (s *subscriptionServiceImpl) HandleWebhook(ctx context.Context, body []byte
 		log.Warn().Err(err).Str("ref", ref).Msg("Could not increment webhook attempts")
 	}
 
-	// Ledger-backed payment: the vendor comes from the ledger, never from metadata.
-	if _, err := s.subscriptionRepo.GetPaymentByReference(ctx, ref); err == nil {
-		return s.settle(ctx, ref)
-	} else if !errors.Is(err, reposub.ErrPaymentNotFound) {
+	// The vendor comes from the ledger, never from webhook metadata.
+	if _, err := s.subscriptionRepo.GetPaymentByReference(ctx, ref); err != nil {
+		if errors.Is(err, reposub.ErrPaymentNotFound) {
+			return fmt.Errorf("%w: reference %s", ErrPaymentNotOwned, ref)
+		}
 		return fmt.Errorf("load payment: %w", err)
 	}
-
-	// Legacy path: payments initiated before the ledger.
-	metadata, ok := payload.Data.Metadata.(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("%w: metadata is invalid", ErrBadWebhookPayload)
-	}
-	vendorIDStr, _ := metadata["vendor_id"].(string)
-	vendorID, err := uuid.Parse(vendorIDStr)
-	if err != nil {
-		return fmt.Errorf("%w: invalid vendor_id in metadata", ErrBadWebhookPayload)
-	}
-	return s.VerifyAndFinalize(ctx, ref, vendorID)
-}
-// VerifyAndFinalize confirms a payment with Paystack and activates the subscription
-func (s *subscriptionServiceImpl) VerifyAndFinalize(ctx context.Context, reference string, vendorID uuid.UUID) error {
-	// 1. Verify transaction with Paystack gateway
-	transaction, err := s.paystack.VerifyTransaction(ctx, reference)
-	if err != nil {
-		return fmt.Errorf("paystack verification failed: %w", err)
-	}
-
-	if !transaction.Status {
-		_ = s.subscriptionRepo.MarkPaymentFailed(ctx, reference, "gateway status failed")
-		return fmt.Errorf("transaction not successful")
-	}
-
-	// 2. Settle the payment via the ledger
-	return s.settle(ctx, reference)
-}
-
-// settle handles the ledger-backed activation and renewal logic
-// settle handles the ledger-backed activation and renewal logic
-func (s *subscriptionServiceImpl) settle(ctx context.Context, reference string) error {
-	payment, err := s.subscriptionRepo.GetPaymentByReference(ctx, reference)
-	if err != nil {
-		return fmt.Errorf("get payment by reference: %w", err)
-	}
-
-	// If already applied, it's idempotent success
-	if payment.Status == models.PaymentApplied {
-		return nil
-	}
-
-	// Verify transaction again with Paystack gateway to ensure it's valid
-	_, err = s.paystack.VerifyTransaction(ctx, reference)
-	if err != nil {
-		return fmt.Errorf("paystack verification failed during settle: %w", err)
-	}
-
-	// Prepare settlement input using the ledger payment details
-	input := reposub.SettleInput{
-		Reference:      reference,
-		PaidAmountKobo: payment.AmountKobo,
-		PaidCurrency:   payment.Currency,
-		Channel:        "card", // Default fallback channel
-		PaidAt:         time.Now().UTC(),
-		Now:            time.Now().UTC(),
-	}
-
-	_, err = s.subscriptionRepo.SettlePayment(ctx, input)
-	if err != nil {
-		return fmt.Errorf("settle payment: %w", err)
-	}
-
-	return nil
+	return s.settle(ctx, ref)
 }

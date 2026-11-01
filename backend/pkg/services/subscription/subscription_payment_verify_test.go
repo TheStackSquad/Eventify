@@ -8,7 +8,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"errors"
-//	"fmt"
+	"fmt"
 	"testing"
 	"time"
 
@@ -149,9 +149,22 @@ func (m *mockSubRepo) AbandonStalePayments(ctx context.Context, before time.Time
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
 
-func (m *mockSubRepo) SettlePayment(ctx context.Context, in reposub.SettleInput) (reposub.SettleOutcome, error) {
-	args := m.Called(ctx, in)
-	return args.Get(0).(reposub.SettleOutcome), args.Error(1)
+func (m *mockSubRepo) SettlePayment(ctx context.Context, input reposub.SettleInput) (reposub.SettleOutcome, error) {
+    args := m.Called(ctx, input)
+    
+    var outcome reposub.SettleOutcome
+    if val := args.Get(0); val != nil {
+        if o, ok := val.(reposub.SettleOutcome); ok {
+            outcome = o
+        }
+    }
+
+    var err error
+    if len(args) > 1 {
+        err = args.Error(1)
+    }
+
+    return outcome, err
 }
 
 func buildService(ps *mockPaystackClient, sr *mockSubRepo) *subscriptionServiceImpl {
@@ -197,175 +210,172 @@ func pendingSub(subID, vendorID uuid.UUID, priceKobo int64) *models.Subscription
 
 // ── VerifyAndFinalize tests ───────────────────────────────────────────────────
 
-func TestVerifyAndFinalize_Success_ActivatesSubscription(t *testing.T) {
-	ps := &mockPaystackClient{}
-	sr := &mockSubRepo{}
-	svc := buildService(ps, sr)
 
-	subID := uuid.New()
-	vendorID := uuid.New()
-	const priceKobo = 1_000_000
 
-	ps.On("VerifyTransaction", mock.Anything, subID.String()).
-		Return(validPaystackResponse(subID, vendorID, priceKobo), nil)
-	sr.On("GetByID", mock.Anything, subID).
-		Return(pendingSub(subID, vendorID, priceKobo), nil)
-	sr.On("UpdateAfterPayment", mock.Anything, subID, mock.AnythingOfType("subscription.PaymentUpdateParams")).
-		Return(nil)
+// func TestVerifyAndFinalize_PaystackNetworkError_Propagates(t *testing.T) {
+// 	ps := &mockPaystackClient{}
+// 	sr := &mockSubRepo{}
+// 	svc := buildService(ps, sr)
 
-	err := svc.VerifyAndFinalize(context.Background(), subID.String(), vendorID)
+// 	subID := uuid.New()
+// 	vendorID := uuid.New()
 
-	assert.NoError(t, err)
-	ps.AssertExpectations(t)
-	sr.AssertExpectations(t)
-}
+// 	ps.On("VerifyTransaction", mock.Anything, subID.String()).
+// 		Return(nil, errors.New("network timeout"))
+
+// 	err := svc.VerifyAndFinalize(context.Background(), subID.String(), vendorID)
+
+// 	assert.ErrorContains(t, err, "network timeout")
+// 	sr.AssertNotCalled(t, "GetByID")
+// 	sr.AssertNotCalled(t, "UpdateAfterPayment")
+// }
+
 
 func TestVerifyAndFinalize_PaystackNetworkError_Propagates(t *testing.T) {
-	ps := &mockPaystackClient{}
-	sr := &mockSubRepo{}
-	svc := buildService(ps, sr)
+    ref := uuid.NewString()
+    vendorID := uuid.New()
+    ps, sr, svc := settleFixture(ledgerRow(ref, vendorID))
 
-	subID := uuid.New()
-	vendorID := uuid.New()
+    ps.On("VerifyTransaction", mock.Anything, ref).
+        Return(nil, errors.New("network timeout"))
 
-	ps.On("VerifyTransaction", mock.Anything, subID.String()).
-		Return(nil, errors.New("network timeout"))
+    err := svc.VerifyAndFinalize(context.Background(), ref, vendorID)
 
-	err := svc.VerifyAndFinalize(context.Background(), subID.String(), vendorID)
-
-	assert.ErrorContains(t, err, "network timeout")
-	sr.AssertNotCalled(t, "GetByID")
-	sr.AssertNotCalled(t, "UpdateAfterPayment")
+    assert.ErrorContains(t, err, "network timeout")
+    sr.AssertNumberOfCalls(t, "SettlePayment", 0)
 }
 
-func TestVerifyAndFinalize_PaystackStatusFailed_ReturnsError(t *testing.T) {
-	ps := &mockPaystackClient{}
-	sr := &mockSubRepo{}
-	svc := buildService(ps, sr)
+func settleFixture(p *models.SubscriptionPayment) (*mockPaystackClient, *mockSubRepo, *subscriptionServiceImpl) {
+	ps, sr := &mockPaystackClient{}, &mockSubRepo{}
+	sr.On("GetPaymentByReference", mock.Anything, p.Reference).Return(p, nil)
+	return ps, sr, buildService(ps, sr)
+}
 
-	subID := uuid.New()
-	vendorID := uuid.New()
+func paidResp(vendorID uuid.UUID) *models.PaystackVerificationResponse {
+	r := validPaystackResponse(uuid.New(), vendorID, 1_000_000)
+	r.Status, r.Data.Status, r.Data.Currency = true, "success", "NGN"
+	return r
+}
 
-	failedResp := &models.PaystackVerificationResponse{
-		Status:  true,
-		Message: "Verification successful",
-		Data: &models.PaystackData{
-			Status:    "failed",
-			Reference: subID.String(),
-			Metadata: map[string]interface{}{
-				"subscription_id": subID.String(),
-				"vendor_id":       vendorID.String(),
-			},
-		},
+func underpaidResp(vendorID uuid.UUID) *models.PaystackVerificationResponse {
+	r := validPaystackResponse(uuid.New(), vendorID, 100)
+	r.Status, r.Data.Status, r.Data.Currency = true, "success", "NGN"
+	return r
+}
+
+func ledgerRow(ref string, vendorID uuid.UUID) *models.SubscriptionPayment {
+	return &models.SubscriptionPayment{Reference: ref, VendorID: vendorID, AmountKobo: 1_000_000, Currency: "NGN"}
+}
+
+
+func TestVerify_OtherVendorsPayment_Rejected(t *testing.T) {
+	ref := uuid.NewString()
+	ps, sr, svc := settleFixture(ledgerRow(ref, uuid.New()))
+
+	err := svc.VerifyAndFinalize(context.Background(), ref, uuid.New())
+
+	assert.ErrorIs(t, err, ErrPaymentNotOwned)
+	ps.AssertNumberOfCalls(t, "VerifyTransaction", 0)
+	sr.AssertNumberOfCalls(t, "SettlePayment", 0)
+}
+
+func TestVerify_UnpaidStatuses_CanNeverActivate(t *testing.T) {
+	for _, status := range []string{"abandoned", "pending", "ongoing", "failed", "reversed", ""} {
+		ref, vendorID := uuid.NewString(), uuid.New()
+		ps, sr, svc := settleFixture(ledgerRow(ref, vendorID))
+		resp := paidResp(vendorID)
+		resp.Data.Status = status
+		ps.On("VerifyTransaction", mock.Anything, ref).Return(resp, nil)
+
+		err := svc.VerifyAndFinalize(context.Background(), ref, vendorID)
+
+		assert.ErrorIs(t, err, ErrPaymentNotSuccessful, "paystack status %q", status)
+		sr.AssertNumberOfCalls(t, "SettlePayment", 0)
 	}
-
-	ps.On("VerifyTransaction", mock.Anything, subID.String()).
-		Return(failedResp, nil)
-
-	err := svc.VerifyAndFinalize(context.Background(), subID.String(), vendorID)
-
-	assert.ErrorContains(t, err, "not successful")
-	sr.AssertNotCalled(t, "GetByID")
 }
 
-func TestVerifyAndFinalize_AlreadyActive_IdempotentNoError(t *testing.T) {
-	ps := &mockPaystackClient{}
-	sr := &mockSubRepo{}
-	svc := buildService(ps, sr)
+func TestVerify_PaidAmountAndCurrencyComeFromPaystack_NotFromLedger(t *testing.T) {
+	ref, vendorID := uuid.NewString(), uuid.New()
+	ps, sr, svc := settleFixture(ledgerRow(ref, vendorID)) // ledger expects 1,000,000 NGN
+	resp := underpaidResp(vendorID)
+	resp.Data.Currency = "USD"
+	ps.On("VerifyTransaction", mock.Anything, ref).Return(resp, nil)
+	var got reposub.SettleInput
+	sr.On("SettlePayment", mock.Anything, mock.Anything).
+		Run(func(a mock.Arguments) { got = a.Get(1).(reposub.SettleInput) }).
+		Return(reposub.SettleNeedsReview, nil)
 
-	subID := uuid.New()
-	vendorID := uuid.New()
-	const priceKobo = 1_000_000
+	err := svc.VerifyAndFinalize(context.Background(), ref, vendorID)
 
-	ps.On("VerifyTransaction", mock.Anything, subID.String()).
-		Return(validPaystackResponse(subID, vendorID, priceKobo), nil)
-
-	activeSub := pendingSub(subID, vendorID, priceKobo)
-	activeSub.Status = models.SubStatusActive
-	sr.On("GetByID", mock.Anything, subID).Return(activeSub, nil)
-
-	err := svc.VerifyAndFinalize(context.Background(), subID.String(), vendorID)
-
-	assert.NoError(t, err)
-	sr.AssertNotCalled(t, "UpdateAfterPayment")
+	assert.ErrorIs(t, err, ErrPaymentNeedsReview)
+	assert.Equal(t, int64(100), got.PaidAmountKobo)
+	assert.Equal(t, "USD", got.PaidCurrency)
 }
 
-func TestVerifyAndFinalize_AmountMismatch_CancelsFraudAndErrors(t *testing.T) {
-	ps := &mockPaystackClient{}
-	sr := &mockSubRepo{}
-	svc := buildService(ps, sr)
+func TestVerify_Outcomes(t *testing.T) {
+	cases := []struct {
+		outcome reposub.SettleOutcome
+		wantErr error
+	}{
+		{reposub.SettleApplied, nil},
+		{reposub.SettleAlreadyApplied, nil},
+		{reposub.SettleNeedsReview, ErrPaymentNeedsReview},
+	}
+	for _, tc := range cases {
+		ref, vendorID := uuid.NewString(), uuid.New()
+		ps, sr, svc := settleFixture(ledgerRow(ref, vendorID))
+		ps.On("VerifyTransaction", mock.Anything, ref).Return(paidResp(vendorID), nil)
+		sr.On("SettlePayment", mock.Anything, mock.Anything).Return(tc.outcome, nil)
 
-	subID := uuid.New()
-	vendorID := uuid.New()
-	const expectedKobo = 1_000_000
-	const tamperedKobo = 100
+		err := svc.VerifyAndFinalize(context.Background(), ref, vendorID)
 
-	ps.On("VerifyTransaction", mock.Anything, subID.String()).
-		Return(validPaystackResponse(subID, vendorID, tamperedKobo), nil)
-	sr.On("GetByID", mock.Anything, subID).
-		Return(pendingSub(subID, vendorID, expectedKobo), nil)
-	sr.On("UpdateStatus", mock.Anything, subID, models.SubStatusCancelled).
-		Return(nil)
-
-	err := svc.VerifyAndFinalize(context.Background(), subID.String(), vendorID)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "amount")
-	sr.AssertCalled(t, "UpdateStatus", mock.Anything, subID, models.SubStatusCancelled)
-	sr.AssertNotCalled(t, "UpdateAfterPayment")
+		if tc.wantErr == nil {
+			assert.NoError(t, err, string(tc.outcome))
+		} else {
+			assert.ErrorIs(t, err, tc.wantErr, string(tc.outcome))
+		}
+	}
 }
 
-func TestVerifyAndFinalize_DBUpdateFails_ReturnsError(t *testing.T) {
-	ps := &mockPaystackClient{}
-	sr := &mockSubRepo{}
-	svc := buildService(ps, sr)
+func TestVerify_DatabaseFailure_PropagatesAndIsRetryable(t *testing.T) {
+	ref, vendorID := uuid.NewString(), uuid.New()
+	ps, sr, svc := settleFixture(ledgerRow(ref, vendorID))
+	ps.On("VerifyTransaction", mock.Anything, ref).Return(paidResp(vendorID), nil)
+	sr.On("SettlePayment", mock.Anything, mock.Anything).
+		Return(reposub.SettleOutcome(""), errors.New("db connection lost"))
 
-	subID := uuid.New()
-	vendorID := uuid.New()
-	const priceKobo = 1_000_000
-
-	ps.On("VerifyTransaction", mock.Anything, subID.String()).
-		Return(validPaystackResponse(subID, vendorID, priceKobo), nil)
-	sr.On("GetByID", mock.Anything, subID).
-		Return(pendingSub(subID, vendorID, priceKobo), nil)
-	sr.On("UpdateAfterPayment", mock.Anything, subID, mock.AnythingOfType("subscription.PaymentUpdateParams")).
-		Return(errors.New("db connection lost"))
-
-	err := svc.VerifyAndFinalize(context.Background(), subID.String(), vendorID)
+	err := svc.VerifyAndFinalize(context.Background(), ref, vendorID)
 
 	assert.ErrorContains(t, err, "db connection lost")
+	assert.True(t, IsRetryable(err))
 }
 
-func TestVerifyAndFinalize_SetsExpiryOneMonthFromNow(t *testing.T) {
-	ps := &mockPaystackClient{}
-	sr := &mockSubRepo{}
-	svc := buildService(ps, sr)
+func TestHandleWebhook_LedgerPayment_SettledByReference_MetadataVendorIgnored(t *testing.T) {
+	ref, ledgerVendor := uuid.NewString(), uuid.New()
+	ps, sr, svc := settleFixture(ledgerRow(ref, ledgerVendor))
+	body := []byte(fmt.Sprintf(
+		`{"event":"charge.success","data":{"reference":%q,"metadata":{"payment_type":"subscription","vendor_id":%q}}}`,
+		ref, uuid.NewString())) // metadata names a DIFFERENT vendor
+	sr.On("IncrementWebhookAttempts", mock.Anything, ref).Return(nil)
+	ps.On("VerifyTransaction", mock.Anything, ref).Return(paidResp(ledgerVendor), nil)
+	sr.On("SettlePayment", mock.Anything, mock.Anything).Return(reposub.SettleApplied, nil)
 
-	subID := uuid.New()
-	vendorID := uuid.New()
-	const priceKobo = 1_000_000
-
-	ps.On("VerifyTransaction", mock.Anything, subID.String()).
-		Return(validPaystackResponse(subID, vendorID, priceKobo), nil)
-	sr.On("GetByID", mock.Anything, subID).
-		Return(pendingSub(subID, vendorID, priceKobo), nil)
-
-	var captured reposub.PaymentUpdateParams
-	sr.On("UpdateAfterPayment", mock.Anything, subID, mock.AnythingOfType("subscription.PaymentUpdateParams")).
-		Run(func(args mock.Arguments) {
-			captured = args.Get(2).(reposub.PaymentUpdateParams)
-		}).
-		Return(nil)
-
-	before := time.Now()
-	err := svc.VerifyAndFinalize(context.Background(), subID.String(), vendorID)
-	after := time.Now()
+	err := svc.HandleWebhook(context.Background(), body, signWebhook("test-webhook-secret", body))
 
 	assert.NoError(t, err)
-	assert.Equal(t, models.SubStatusActive, captured.Status)
-	assert.Equal(t, "card", captured.PaymentMethod)
-
-	expectedExpiry := before.AddDate(0, 1, 0)
-	tolerance := after.Sub(before) + time.Second
-	assert.WithinDuration(t, expectedExpiry, captured.ExpiresAt, tolerance)
+	sr.AssertNumberOfCalls(t, "SettlePayment", 1)
 }
+
+func TestHandleWebhook_UnknownReference_AcknowledgedNotRetried(t *testing.T) {
+	ps, sr := &mockPaystackClient{}, &mockSubRepo{}
+	svc := buildService(ps, sr) // mock default: no ledger row
+	body := []byte(`{"event":"charge.success","data":{"reference":"ghost"}}`)
+	sr.On("IncrementWebhookAttempts", mock.Anything, "ghost").Return(errors.New("not found"))
+
+	err := svc.HandleWebhook(context.Background(), body, signWebhook("test-webhook-secret", body))
+
+	assert.Error(t, err)
+	assert.False(t, IsRetryable(err))
+	ps.AssertNumberOfCalls(t, "VerifyTransaction", 0)
+}
+
