@@ -17,7 +17,11 @@ import (
 	"github.com/eventify/backend/pkg/db"
 	"github.com/eventify/backend/pkg/routes"
 	"github.com/eventify/backend/pkg/utils"
+	"github.com/joho/godotenv" //(https://github.com/joho/godotenv)"
+	"github.com/rs/zerolog/log"
+	"github.com/gin-gonic/gin"
 
+	
 	// Repositories (aliased)
 	repoauth "github.com/eventify/backend/pkg/repository/auth"
 	repoevent "github.com/eventify/backend/pkg/repository/event"
@@ -54,8 +58,6 @@ import (
 	handlersubscription "github.com/eventify/backend/pkg/handlers/subscription"
 	handlervendor "github.com/eventify/backend/pkg/handlers/vendor"
 
-	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog/log"
 )
 
 const serviceName = "eventify-api"
@@ -65,25 +67,27 @@ func startTokenCleanup(refreshRepo repoauth.RefreshTokenRepository, authRepo rep
 	ticker := time.NewTicker(24 * time.Hour)
 
 	// Helper to run both cleanups
-	runCleanup := func() {
-		ctx := context.Background()
+runCleanup := func() {
+        ctx := context.Background()
 
-		// 1. Clean up Expired Refresh Tokens
-		deletedTokens, err := refreshRepo.CleanupExpiredTokens(ctx)
-		if err != nil {
-			utils.LogError(serviceName, "token-cleanup", "Refresh token cleanup failed", err)
-		} else if deletedTokens > 0 {
-			utils.LogInfo(serviceName, "token-cleanup", fmt.Sprintf("🧹 Cleaned up %d expired refresh tokens", deletedTokens))
-		}
+        // 1. Clean up Expired Refresh Tokens
+        deletedTokens, err := refreshRepo.CleanupExpiredTokens(ctx)
+        if err != nil {
+            utils.LogError(serviceName, "token-cleanup", "Refresh token cleanup failed", err)
+        } else if deletedTokens > 0 {
+            // ✅ Fix: Pass the format string and variable directly
+            utils.LogInfo(serviceName, "token-cleanup", "🧹 Cleaned up %d expired refresh tokens", deletedTokens)
+        }
 
-		// 2. NEW: Clean up Expired Blacklisted Access Tokens
-		deletedBlacklist, err := authRepo.CleanupBlacklist(ctx)
-		if err != nil {
-			utils.LogError(serviceName, "token-cleanup", "Blacklist cleanup failed", err)
-		} else if deletedBlacklist > 0 {
-			utils.LogInfo(serviceName, "token-cleanup", fmt.Sprintf("🛡️ Cleaned up %d expired blacklist entries", deletedBlacklist))
-		}
-	}
+        // 2. NEW: Clean up Expired Blacklisted Access Tokens
+        deletedBlacklist, err := authRepo.CleanupBlacklist(ctx)
+        if err != nil {
+            utils.LogError(serviceName, "token-cleanup", "Blacklist cleanup failed", err)
+        } else if deletedBlacklist > 0 {
+            // ✅ Fix: Pass the format string and variable directly
+            utils.LogInfo(serviceName, "token-cleanup", "🛡️ Cleaned up %d expired blacklist entries", deletedBlacklist)
+        }
+    }
 
 	// Initial cleanup on startup
 	go runCleanup()
@@ -99,14 +103,57 @@ func startTokenCleanup(refreshRepo repoauth.RefreshTokenRepository, authRepo rep
 }
 
 func main() {
-	// ============================================================================
-	// STEP 1: LOGGING CONFIGURATION
-	// ============================================================================
-	utils.InitLogger()
-	env := os.Getenv("NODE_ENV")
-	if env == "" {
-		env = "development"
-	}
+
+	// Load env files immediately before any other package initializes
+    _ = godotenv.Load("audit/docker/.env", "../audit/docker/.env", ".env", "backend/.env")
+
+	envPaths := []string{
+        "audit/docker/.env", // If run from project root
+        "../audit/docker/.env", // If run from backend/ directory
+        ".env",              // Local root .env
+        "backend/.env",      // Local backend .env
+    }
+
+	// Print current working directory and env check for debugging
+    wd, _ := os.Getwd()
+    log.Info().Str("working_dir", wd).Msg("📂 Current working directory")
+
+    apiKey := os.Getenv("PAYSTACK_SECRET_KEY")
+    if apiKey == "" {
+        log.Error().Msg("❌ PAYSTACK_SECRET_KEY is still EMPTY after loading attempts!")
+    } else {
+        // Print the first few characters to verify it loaded correctly without leaking the full secret
+        masked := apiKey
+        if len(apiKey) > 10 {
+            masked = apiKey[:6] + "..." + apiKey[len(apiKey)-4:]
+        }
+        log.Info().Str("key_masked", masked).Msg("✅ PAYSTACK_SECRET_KEY successfully detected in environment!")
+    }
+
+    // ============================================================================
+    // STEP 0: LOAD ENVIRONMENT VARIABLES
+    // ============================================================================
+   loaded := false
+    for _, p := range envPaths {
+        if err := godotenv.Load(p); err == nil {
+            log.Info().Str("path", p).Msg("Successfully loaded environment variables")
+            loaded = true
+            break
+        }
+    }
+
+    if !loaded {
+        log.Info().Msg("No .env file found in standard search paths, relying on system environment variables")
+    }
+
+    // ============================================================================
+    // STEP 1: LOGGING CONFIGURATION
+    // ============================================================================
+    utils.InitLogger()
+    env := os.Getenv("NODE_ENV")
+    if env == "" {
+        env = "development"
+    }
 
 	utils.LogInfo(serviceName, "startup", "🚀 Starting Eventify API [env=%s]", env)
 

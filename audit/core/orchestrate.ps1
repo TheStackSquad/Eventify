@@ -1,4 +1,4 @@
-# audit/rig/run-ngrok-matrix.ps1
+# audit/rig/orchestrate.ps1
 
 <#
 .SYNOPSIS
@@ -57,13 +57,14 @@
   Requires: PowerShell 5.1+, psql, curl.exe, git; go + ngrok (tunnel mode) or docker (rig mode).
 #>
 [CmdletBinding()]
+[CmdletBinding()]
 param(
-    [int]$Port = 8080,
-    [string]$NgrokDomain = "autopilot-secrecy-scraggly.ngrok-free.dev",
+    [int]$Port = 0,                                    # 0 means auto-detect from .env
+    [string]$NgrokDomain = "",                          # empty means auto-detect
     [string]$ComposeFile = "",
-    [string]$LoginPath = "/api/v1/auth/login",   # CONFIRM against router.go
-    [string]$CsrfCookie = "csrf_token",          # CONFIRM against the CSRF middleware
-    [string]$CsrfHeader = "X-CSRF-Token",        # CONFIRM against the CSRF middleware
+    [string]$LoginPath = "/auth/login",
+    [string]$CsrfCookie = "csrf_token",
+    [string]$CsrfHeader = "X-CSRF-Token",
     [int]$Burst = 0,
     [switch]$SetupOnly,
     [switch]$Manual,
@@ -71,6 +72,39 @@ param(
     [switch]$StartRig,
     [switch]$ApplyMigrations
 )
+
+# ── Auto-load configuration from audit/docker/.env or backend/.env if not provided ──
+$DockerEnvPath = Join-Path $PSScriptRoot "../docker/.env"
+$EnvConfig = @{}
+
+if (Test-Path $DockerEnvPath) {
+    Get-Content $DockerEnvPath | ForEach-Object {
+        if ($_ -match '^\s*([^#\s]+)\s*=\s*(.*)\s*$') {
+            $EnvConfig[$matches[1]] = $matches[2].Trim('"', "'")
+        }
+    }
+}
+
+# Fallback: Parse port from BASE_URL if PORT isn't set
+if ($Port -eq 0) {
+    if ($EnvConfig.ContainsKey("BASE_URL") -and $EnvConfig["BASE_URL"] -match ':(\d+)') {
+        $Port = [int]$matches[1]
+    } else {
+        $Port = 8081 # Ultimate fallback matching your active setup
+    }
+}
+
+# Fallback for NgrokDomain if empty
+if ([string]::IsNullOrWhiteSpace($NgrokDomain)) {
+    if ($EnvConfig.ContainsKey("NGROK_DOMAIN")) {
+        $NgrokDomain = $EnvConfig["NGROK_DOMAIN"]
+    } else {
+        $NgrokDomain = "autopilot-secrecy-scraggly.ngrok-free.dev"
+    }
+}
+
+Write-Host "ℹ️ [Config] Using Backend Port: $Port" -ForegroundColor Cyan
+Write-Host "ℹ️ [Config] Using Ngrok Domain: $NgrokDomain" -ForegroundColor Cyan
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -187,9 +221,14 @@ try {
         } -Solution "Run 'ngrok config check', make sure your ngrok account owns the domain $NgrokDomain, and that no other ngrok session is already using it. The tunnel URL must match the webhook URL saved in the Paystack dashboard."
     }
 
-    Invoke-Step -Name "Checking the backend is reachable" -Detailed -Action {
+   Invoke-Step -Name "Checking the backend is reachable" -Detailed -Action {
         Test-BackendReachable $Ctx
     } -Solution "Rig mode: docker compose -f <compose file> logs backend. Tunnel mode: confirm ngrok forwards to port $Port and the backend is running."
+
+    # 🚀 NEW: Seed the test users and vendor profiles via the actual API now that backend is live
+    Invoke-Step -Name "Seeding test vendors via API" -Detailed -Action {
+        & (Join-Path $AuditDir "runner\seed-vendors-api.ps1") -BaseUrl "http://localhost:$Port" -CsrfCookie $CsrfCookie -CsrfHeader $CsrfHeader
+    } -Solution "Check that the Go backend is running and /auth/register, /auth/login, and /vendors endpoints are responding correctly."
 
     Invoke-Step -Name "Logging in the test vendor accounts" -Detailed -Action {
         New-VendorSessions $Ctx
@@ -202,7 +241,6 @@ try {
     Invoke-Step -Name "Reading the starting subscription state" -Detailed -Action {
         Get-BaselineState $Ctx
     } -Solution "Check that AUDIT_DB_URL points at the same database as the backend and that the subscriptions table exists. If the Paystack stub could not be reached, check that its compose service publishes its port."
-
     if ($SetupOnly) {
         Write-Host "`nSetup OK: environment, login and database all work. Run again without -SetupOnly." -ForegroundColor Green
     }
@@ -234,6 +272,8 @@ catch {
     $KeepTmp = $true
 }
 finally {
+    if (@($Results | Where-Object { $_.Outcome -eq 'FAIL' }).Count -gt 0) { $KeepTmp = $true }
+    
     foreach ($p in $Started) { try { if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force } } catch { } }
     if ((-not $KeepTmp) -and (Test-Path $Tmp)) { Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue }
     elseif (Test-Path $Tmp) { Write-Host "Logs kept in $Tmp" -ForegroundColor DarkGray }

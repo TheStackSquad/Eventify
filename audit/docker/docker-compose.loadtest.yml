@@ -57,5 +57,5 @@ services:
       SMTP_PORT: "1025"
       FROM_EMAIL: "Eventify Tickets <tickets@eventify.test>"
       SUBSCRIPTION_WORKER_INTERVAL: 20s
-    ports: ["18081:8081"]
+    ports: ["8081:8081"]
     deploy: { resources: { limits: { cpus: "${BACKEND_CPUS:-1.0}", memory: "${BACKEND_MEM:-1g}" } } }
