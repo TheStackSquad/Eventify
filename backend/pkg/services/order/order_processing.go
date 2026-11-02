@@ -218,9 +218,8 @@ func (s *OrderServiceImpl) ProcessWebhook(ctx context.Context, payload *models.P
 		// A real database error: let Paystack retry rather than lose a paid order.
 		return fmt.Errorf("load order for webhook: %w", err)
 	}
-	if order == nil {
-		log.Warn().Str("reference", data.Reference).Msg("Order not found for webhook reference; skipping")
-		return nil
+		if order == nil {
+		return fmt.Errorf("%w: reference %s", ErrOrderNotFound, data.Reference)
 	}
 
 	// Process order idempotently
@@ -484,7 +483,7 @@ func IsRetryable(err error) bool {
 	switch {
 	case err == nil:
 		return false
-	case errors.Is(err, ErrAmountMismatch), errors.Is(err, ErrPaymentFailedUpstream), errors.Is(err, ErrAlreadyProcessed):
+	case errors.Is(err, ErrAmountMismatch), errors.Is(err, ErrPaymentFailedUpstream), errors.Is(err, ErrAlreadyProcessed), errors.Is(err, ErrOrderNotFound):
 		return false
 	default:
 		return true

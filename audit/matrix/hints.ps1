@@ -33,4 +33,9 @@ $Hints = @{
     "T1.2"  = "Paystack never delivered the webhook. The dashboard webhook URL is not the tunnel URL, or the tunnel was down."
     "T1.4"  = "Expiry did not move by about a month. Check NextExpiry and SettlePayment, and the time-zone note F19."
     "T5.1"  = "An amount mismatch was not parked for review. Check the comparison in SettlePayment."
+    "T3d.1" = "A real-shaped webhook for an unknown reference was not kept as an orphan. Check the dispatcher's orphan branch, and that migration 000003 (webhook_inbox) is applied to the database the backend uses."
+    "T3e.1" = "A signed body we cannot read must give 500 and a failed inbox row. Acknowledging it is how a paid payment was lost (F63). Check IsRetryable and the parse branch."
+    "T3f.1" = "A repeated delivery created a second inbox row or was not counted. Check the unique (provider, body_sha256) key and the Store upsert."
+    "T3g.1" = "An unsigned webhook was stored. Only signature-verified bodies may be kept, or anyone could fill the table."
+    "T3h.1" = "A payment with no type in its metadata was not checked against both ledgers. Check the ErrOrderNotFound branch in handleOrderWebhook and ProcessWebhook."
 }

@@ -130,6 +130,7 @@ $HelperFiles = @(
     "matrix\helpers.ps1",
     "matrix\setup.ps1",
     "matrix\checks.ps1",
+    "matrix\checks-webhook.ps1",
     "matrix\manual.ps1",
     "matrix\report.ps1"
 )
@@ -252,6 +253,7 @@ try {
         Invoke-Step -Name "Input validation checks (T10)" -Detailed -Action { Test-InputValidation $Ctx } -Solution $CheckCrashSolution
         Invoke-Step -Name "Unpaid payment, signature and ownership checks (T9, T3, T9b, T8)" -Detailed -Action { Test-UnpaidPaymentFlow $Ctx } -Solution $CheckCrashSolution
         Invoke-Step -Name "Unknown reference webhook check (T3c)" -Detailed -Action { Test-UnknownReference $Ctx } -Solution $CheckCrashSolution
+        Invoke-Step -Name "Webhook inbox checks (T3d to T3h)" -Detailed -Action { Test-WebhookInbox $Ctx } -Solution $CheckCrashSolution
         Invoke-Step -Name "Oversized webhook body check (T16)" -Detailed -Action { Test-OversizedBody $Ctx } -Solution $CheckCrashSolution
         Invoke-Step -Name "Hostile reference checks (T17)" -Detailed -Action { Test-HostileReferences $Ctx } -Solution $CheckCrashSolution
         Invoke-Step -Name "Tier switch while active check (T7)" -Detailed -Action { Test-TierSwitch $Ctx } -Solution $CheckCrashSolution

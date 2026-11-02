@@ -168,6 +168,9 @@ func (h *OrderHandler) handleOrderWebhook(ctx context.Context, c *gin.Context, b
 	case err == nil:
 		done(repowebhook.StatusProcessed, "")
 		c.JSON(http.StatusOK, gin.H{"status": "success", "type": "order"})
+	case errors.Is(err, serviceorder.ErrOrderNotFound):
+		// D4: not an order. Ask the subscription ledger; a payment neither ledger knows becomes an orphan.
+		h.handleSubscriptionWebhook(ctx, c, base, body, signature, done)
 	case serviceorder.IsRetryable(err):
 		done(repowebhook.StatusFailed, err.Error())
 		log.Error().Err(err).Str("reference", base.Data.Reference).Msg("CRITICAL: order webhook failed; Paystack will retry")
