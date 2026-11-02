@@ -31,6 +31,7 @@ import (
 	reporeview "github.com/eventify/backend/pkg/repository/review"
 	reposubscription "github.com/eventify/backend/pkg/repository/subscription"
 	repovendor "github.com/eventify/backend/pkg/repository/vendor"
+	repowebhook "github.com/eventify/backend/pkg/repository/webhook"
 
 	// Services (aliased)
 	serviceanalytics "github.com/eventify/backend/pkg/services/analytics"
@@ -261,7 +262,8 @@ func main() {
 	reviewHandler := handlerreview.NewReviewHandler(reviewService)
 	inquiryHandler := handlerinquiries.NewInquiryHandler(inquiryService)
 	feedbackHandler := handlerfeedback.NewFeedbackHandler(feedbackService)
-	orderHandler := handlerorder.NewOrderHandler(orderService, subscriptionService)
+	orderHandler := handlerorder.NewOrderHandler(orderService, subscriptionService).WithInbox(repowebhook.NewInbox(dbClient))
+	//orderHandler := handlerorder.NewOrderHandler(orderService, subscriptionService)
 	eventHandler := handlerevent.NewEventHandler(eventService)
 	analyticsHandler := handleranalytics.NewAnalyticsHandler(analyticsService)
 

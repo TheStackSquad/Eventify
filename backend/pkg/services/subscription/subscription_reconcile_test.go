@@ -17,24 +17,24 @@ import (
 )
 
 func TestIsRetryable(t *testing.T) {
-	cases := []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{"nil", nil, false},
-		{"bad signature", ErrInvalidSignature, false},
-		{"malformed payload", fmt.Errorf("%w: x", ErrBadWebhookPayload), false},
-		{"payment not successful", ErrPaymentNotSuccessful, false},
-		{"held for review", ErrPaymentNeedsReview, false},
-		{"unknown reference", fmt.Errorf("paystack verify: %w", paystack.ErrTransactionNotFound), false},
-		{"gateway down", fmt.Errorf("paystack verify: %w", paystack.ErrUnavailable), true},
-		{"gateway rejected our key", fmt.Errorf("x: %w", paystack.ErrRejected), true},
-		{"database error", errors.New("pq: connection refused"), true},
-	}
-	for _, tc := range cases {
-		assert.Equal(t, tc.want, IsRetryable(tc.err), tc.name)
-	}
+    cases := []struct {
+        name string
+        err  error
+        want bool
+    }{
+        {"nil", nil, false},
+        {"bad signature", ErrInvalidSignature, false},
+        {"malformed payload", fmt.Errorf("%w: x", ErrBadWebhookPayload), true}, // Updated to true
+        {"payment not successful", ErrPaymentNotSuccessful, false},
+        {"held for review", ErrPaymentNeedsReview, false},
+        {"unknown reference", fmt.Errorf("paystack verify: %w", paystack.ErrTransactionNotFound), false},
+        {"gateway down", fmt.Errorf("paystack verify: %w", paystack.ErrUnavailable), true},
+        {"gateway rejected our key", fmt.Errorf("x: %w", paystack.ErrRejected), true},
+        {"database error", errors.New("pq: connection refused"), true},
+    }
+    for _, tc := range cases {
+        assert.Equal(t, tc.want, IsRetryable(tc.err), tc.name)
+    }
 }
 
 func paidResponse(vendorID uuid.UUID) *models.PaystackVerificationResponse {

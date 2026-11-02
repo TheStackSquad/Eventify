@@ -11,8 +11,10 @@ import (
 	
 	"github.com/eventify/backend/pkg/models"
 	repoevent "github.com/eventify/backend/pkg/repository/event"
-     serviceorder "github.com/eventify/backend/pkg/services/order"
-	 servicesubscription "github.com/eventify/backend/pkg/services/subscription"
+    serviceorder "github.com/eventify/backend/pkg/services/order"
+	servicesubscription "github.com/eventify/backend/pkg/services/subscription"
+	repowebhook "github.com/eventify/backend/pkg/repository/webhook"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -33,6 +35,13 @@ type TierDetails struct {
 type OrderHandler struct {
 	OrderService        serviceorder.OrderService
 	SubscriptionService servicesubscription.SubscriptionService
+	Inbox               repowebhook.Inbox // raw webhook store; set with WithInbox
+}
+
+// WithInbox sets the webhook store. main.go always sets it; tests may leave it nil.
+func (h *OrderHandler) WithInbox(in repowebhook.Inbox) *OrderHandler {
+	h.Inbox = in
+	return h
 }
 
 // Update the constructor to accept and assign it

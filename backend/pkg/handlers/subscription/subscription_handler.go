@@ -13,6 +13,7 @@ import (
 	"github.com/eventify/backend/pkg/models"
 	repovendor "github.com/eventify/backend/pkg/repository/vendor"
 	servicesubscription "github.com/eventify/backend/pkg/services/subscription"
+	reposub "github.com/eventify/backend/pkg/repository/subscription"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 )
@@ -125,43 +126,22 @@ if err := h.Service.VerifyAndFinalize(c.Request.Context(), reference, vendorID);
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Subscription activated"})
 }
 
-// HandleWebhook — POST /subscription/webhook
-// func (h *SubscriptionHandler) HandleWebhook(c *gin.Context) {
-// 	log.Info().
-// 		Str("method", c.Request.Method).
-// 		Str("path", c.Request.URL.Path).
-// 		Str("source_ip", c.ClientIP()).
-// 		Msg("Webhook received")
-
-// 	signature := c.GetHeader("X-Paystack-Signature")
-// 	if signature == "" {
-// 		log.Warn().Msg("Webhook rejected: missing signature")
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing signature"})
-// 		return
-// 	}
-
-// 	body, err := io.ReadAll(c.Request.Body)
-// 	if err != nil {
-// 		log.Error().Err(err).Msg("Failed to read webhook body")
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read body"})
-// 		return
-// 	}
-
-// 	if err := h.Service.HandleWebhook(c.Request.Context(), body, signature); err != nil {
-// 		status := http.StatusInternalServerError
-// 		if err.Error() == "invalid webhook signature" || err.Error() == "invalid signature" {
-//     status = http.StatusUnauthorized
-// 			log.Warn().Msg("Webhook rejected: invalid signature")
-// 		} else {
-// 			log.Error().Err(err).Msg("Webhook processing failed")
-// 		}
-// 		c.JSON(status, gin.H{"error": err.Error()})
-// 		return
-// 	}
-
-// 	log.Info().Msg("Webhook processed successfully")
-// 	c.Status(http.StatusOK)
-// }
+// respondVerifyError maps typed errors to codes the frontend can act on. An error we do not recognise
+// never tells a customer their payment failed: it says we could not confirm yet, and 503 lets the page retry.
+func respondVerifyError(c *gin.Context, err error, reference string) {
+	log.Warn().Err(err).Str("reference", reference).Msg("Verification did not complete")
+	status, code, msg := http.StatusServiceUnavailable, "VERIFICATION_UNAVAILABLE",
+		"We could not confirm your payment right now. If you were charged, your plan activates automatically."
+	switch {
+	case errors.Is(err, servicesubscription.ErrPaymentNotOwned), errors.Is(err, reposub.ErrPaymentNotFound):
+		status, code, msg = http.StatusNotFound, "PAYMENT_NOT_FOUND", "Transaction reference not found"
+	case errors.Is(err, servicesubscription.ErrPaymentNotSuccessful):
+		status, code, msg = http.StatusUnprocessableEntity, "PAYMENT_NOT_SUCCESSFUL", "The transaction has not been successfully completed."
+	case errors.Is(err, servicesubscription.ErrPaymentNeedsReview):
+		status, code, msg = http.StatusConflict, "PAYMENT_UNDER_REVIEW", "Your payment was received and is being reviewed by our team. You do not need to pay again."
+	}
+	c.JSON(status, gin.H{"status": "error", "code": code, "message": msg})
+}
 
 // GetMySubscription — GET /api/subscription/me
 func (h *SubscriptionHandler) GetMySubscription(c *gin.Context) {
@@ -213,7 +193,6 @@ func (h *SubscriptionHandler) GetMySubscription(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": response})
 }
 
-// handleServiceError processes service layer errors and maps them to clean HTTP responses
 // handleServiceError processes service layer errors and maps them to clean HTTP responses
 func handleServiceError(c *gin.Context, err error, vID string) {
 	log.Error().Err(err).Str("vendorID", vID).Msg("Service Error encountered")

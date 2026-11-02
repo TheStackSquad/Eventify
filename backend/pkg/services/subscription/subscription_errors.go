@@ -26,7 +26,6 @@ func IsRetryable(err error) bool {
 	case err == nil:
 		return false
 	case errors.Is(err, ErrInvalidSignature),
-		errors.Is(err, ErrBadWebhookPayload),
 		errors.Is(err, ErrPaymentNotSuccessful),
 		errors.Is(err, ErrPaymentNeedsReview),
 		errors.Is(err, ErrPaymentNotOwned),
@@ -34,6 +33,7 @@ func IsRetryable(err error) bool {
 		errors.Is(err, reposub.ErrPaymentNotFound):
 		return false
 	default:
+		// Includes ErrBadWebhookPayload: a signed body we cannot read is our problem, so Paystack must retry.
 		return true
 	}
 }

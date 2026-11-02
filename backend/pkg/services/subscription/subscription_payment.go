@@ -154,10 +154,12 @@ func (s *subscriptionServiceImpl) HandleWebhook(ctx context.Context, body []byte
 		log.Error().Msg("🚨 Webhook: Invalid signature received")
 		return ErrInvalidSignature
 	}
-
+	
 	var payload struct {
-		Event string              `json:"event"`
-		Data  models.PaystackData `json:"data"`
+		Event string `json:"event"`
+		Data  struct {
+			Reference string `json:"reference"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return fmt.Errorf("%w: %v", ErrBadWebhookPayload, err)

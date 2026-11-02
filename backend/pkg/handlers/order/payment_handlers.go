@@ -12,6 +12,7 @@ import (
 	"github.com/eventify/backend/pkg/models"
     serviceorder "github.com/eventify/backend/pkg/services/order"
 	servicesubscription "github.com/eventify/backend/pkg/services/subscription"
+	repowebhook "github.com/eventify/backend/pkg/repository/webhook"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -57,88 +58,129 @@ func (h *OrderHandler) VerifyPayment(c *gin.Context) {
 }
 
 // HandlePaystackWebhook handles notifications from Paystack for both Orders and Subscriptions
+// webhookBase is all that is read from every Paystack webhook: enough to route it and to index the stored copy.
+type webhookBase struct {
+	Event string `json:"event"`
+	Data  struct {
+		Reference string      `json:"reference"`
+		Metadata  interface{} `json:"metadata"`
+	} `json:"data"`
+}
+
+type webhookDone func(status, detail string)
+
+// HandlePaystackWebhook is the single Paystack webhook endpoint for orders and subscriptions.
+//
+//	bad or missing signature           -> 401, nothing stored
+//	signed, but we cannot store it      -> 500, Paystack retries
+//	signed, unreadable or failed        -> 500 and a CRITICAL log, body kept, Paystack retries
+//	signed, reference unknown to us     -> 200, kept as an orphan
+//	signed and handled (or ignorable)   -> 200
 func (h *OrderHandler) HandlePaystackWebhook(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20)
-	
-	bodyBytes, err := io.ReadAll(c.Request.Body)
+	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Failed to read request body"})
 		return
 	}
-
-	signature := c.GetHeader("x-paystack-signature")
-	if signature == "" {
-		signature = c.GetHeader("X-Paystack-Signature") // Fallback for header casing
-	}
-
-	// 1. Verify signature using order service (or a shared cryptographic helper)
-	if !h.OrderService.VerifyWebhookSignature(bodyBytes, signature) {
+	signature := c.GetHeader("X-Paystack-Signature") // header lookup ignores case
+	if !h.OrderService.VerifyWebhookSignature(body, signature) {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid signature"})
-		return
-	}
-
-	// 2. Parse general event structure to check metadata or event type
-	var baseEvent struct {
-		Event string `json:"event"`
-		Data  struct {
-			Metadata interface{} `json:"metadata"`
-		} `json:"data"`
-	}
-
-	if err := json.Unmarshal(bodyBytes, &baseEvent); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Parse error"})
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	// 3. Dispatch based on metadata or event content
-	// If metadata contains subscription_id, route to subscription service!
-	// 3. Dispatch based on metadata or event content
-	// If metadata contains subscription_id, route to subscription service!
-	if isSubscriptionWebhook(baseEvent.Data.Metadata) {
-		if h.SubscriptionService == nil {
-			log.Error().Msg("SubscriptionService is not injected into OrderHandler")
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Handler configuration error"})
-			return
-		}
+	var base webhookBase
+	parseErr := json.Unmarshal(body, &base)
 
-		if err := h.SubscriptionService.HandleWebhook(ctx, bodyBytes, signature); err != nil {
-			if servicesubscription.IsRetryable(err) {
-				log.Error().Err(err).Msg("Subscription webhook failed; Paystack will retry")
-				c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "temporary failure"})
-				return
-			}
-			log.Warn().Err(err).Msg("Subscription webhook not actionable; acknowledged")
-			c.JSON(http.StatusOK, gin.H{"status": "error", "message": "acknowledged"})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{"status": "success", "type": "subscription"})
-		return
-	}
-
-	// 4. Otherwise, fallback to standard Order processing
-	var webhook models.PaystackWebhook
-	if err := json.Unmarshal(bodyBytes, &webhook); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Parse error"})
-		return
-	}
-
-	if err := h.OrderService.ProcessWebhook(ctx, &webhook, signature); err != nil {
-		if serviceorder.IsRetryable(err) {
-			log.Error().Err(err).Msg("Order webhook failed; Paystack will retry")
+	var entry repowebhook.Entry
+	if h.Inbox != nil {
+		if entry, err = h.Inbox.Store(ctx, "paystack", base.Event, base.Data.Reference, body); err != nil {
+			log.Error().Err(err).Msg("CRITICAL: could not store a signed webhook; Paystack will retry")
 			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "temporary failure"})
 			return
 		}
-		log.Warn().Err(err).Msg("Order webhook not actionable; acknowledged")
-		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "acknowledged"})
-		return
+	}
+	done := func(status, detail string) {
+		if h.Inbox == nil {
+			return
+		}
+		if err := h.Inbox.Mark(ctx, entry.ID, status, detail); err != nil {
+			log.Error().Err(err).Int64("inbox_id", entry.ID).Msg("could not record the webhook outcome")
+		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "success", "type": "order"})
+	if parseErr != nil {
+		done(repowebhook.StatusFailed, "unreadable body: "+parseErr.Error())
+		log.Error().Err(parseErr).Msg("CRITICAL: a signed webhook could not be read; Paystack will retry")
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "temporary failure"})
+		return
+	}
+	if isSubscriptionWebhook(base.Data.Metadata) {
+		h.handleSubscriptionWebhook(ctx, c, base, body, signature, done)
+		return
+	}
+	h.handleOrderWebhook(ctx, c, base, body, signature, done)
 }
+
+func (h *OrderHandler) handleSubscriptionWebhook(ctx context.Context, c *gin.Context, base webhookBase, body []byte, signature string, done webhookDone) {
+	if h.SubscriptionService == nil {
+		done(repowebhook.StatusFailed, "subscription service not configured")
+		log.Error().Msg("CRITICAL: SubscriptionService is not injected into OrderHandler")
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Handler configuration error"})
+		return
+	}
+	err := h.SubscriptionService.HandleWebhook(ctx, body, signature)
+	switch {
+	case err == nil && base.Event != "charge.success":
+		done(repowebhook.StatusIgnored, "event "+base.Event)
+		c.JSON(http.StatusOK, gin.H{"status": "success", "type": "subscription"})
+	case err == nil:
+		done(repowebhook.StatusProcessed, "")
+		c.JSON(http.StatusOK, gin.H{"status": "success", "type": "subscription"})
+	case errors.Is(err, servicesubscription.ErrPaymentNotOwned):
+		done(repowebhook.StatusOrphan, err.Error())
+		log.Warn().Str("reference", base.Data.Reference).Msg("Webhook for a reference this system does not know; kept as an orphan")
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "acknowledged"})
+	case servicesubscription.IsRetryable(err):
+		done(repowebhook.StatusFailed, err.Error())
+		log.Error().Err(err).Str("reference", base.Data.Reference).Msg("CRITICAL: subscription webhook failed; Paystack will retry")
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "temporary failure"})
+	default:
+		done(repowebhook.StatusIgnored, err.Error())
+		log.Warn().Err(err).Str("reference", base.Data.Reference).Msg("Subscription webhook not actionable; acknowledged")
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "acknowledged"})
+	}
+}
+
+func (h *OrderHandler) handleOrderWebhook(ctx context.Context, c *gin.Context, base webhookBase, body []byte, signature string, done webhookDone) {
+	var webhook models.PaystackWebhook
+	if err := json.Unmarshal(body, &webhook); err != nil {
+		done(repowebhook.StatusFailed, "unreadable order webhook: "+err.Error())
+		log.Error().Err(err).Str("reference", base.Data.Reference).Msg("CRITICAL: a signed order webhook could not be read; Paystack will retry")
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "temporary failure"})
+		return
+	}
+	err := h.OrderService.ProcessWebhook(ctx, &webhook, signature)
+	switch {
+	case err == nil:
+		done(repowebhook.StatusProcessed, "")
+		c.JSON(http.StatusOK, gin.H{"status": "success", "type": "order"})
+	case serviceorder.IsRetryable(err):
+		done(repowebhook.StatusFailed, err.Error())
+		log.Error().Err(err).Str("reference", base.Data.Reference).Msg("CRITICAL: order webhook failed; Paystack will retry")
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "temporary failure"})
+	default:
+		// Next step (D4): an order reference this system does not know is tried against the subscription
+		// ledger, and becomes an orphan if neither knows it. That needs the order service's "not found" error.
+		done(repowebhook.StatusIgnored, err.Error())
+		log.Warn().Err(err).Str("reference", base.Data.Reference).Msg("Order webhook not actionable; acknowledged")
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "acknowledged"})
+	}
+}
+
 // Helper to check if metadata belongs to a subscription
 func isSubscriptionWebhook(metadata interface{}) bool {
 	m, ok := metadata.(map[string]interface{})

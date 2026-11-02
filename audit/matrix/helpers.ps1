@@ -185,13 +185,12 @@ function Send-Webhook([string]$Body, [string]$Signature) {
 }
 
 function New-ChargeBody([string]$Reference, [string]$VendorId, [int64]$Amount) {
-    @{
-        event = "charge.success"
-        data  = @{
-            reference = $Reference; status = "success"; amount = $Amount; currency = "NGN"
-            metadata  = @{ payment_type = "subscription"; vendor_id = $VendorId }
-        }
-    } | ConvertTo-Json -Depth 6 -Compress
+    # Built from a real Paystack webhook (audit/fixtures), so the body has the shape Paystack really sends.
+    $b = [IO.File]::ReadAllText((Join-Path $AuditDir 'fixtures/paystack/charge.success.real.json'))
+    $b = $b -replace '(?<="reference"\s*:\s*")[^"]*', $Reference
+    $b = $b -replace '(?<="vendor_id"\s*:\s*")[^"]*', $VendorId
+    $b = $b -replace '(?<="(?:amount|requested_amount)"\s*:\s*)\d+', "$Amount"
+    $b.Trim()
 }
 
 function Get-StubVerify([string]$Reference) {
