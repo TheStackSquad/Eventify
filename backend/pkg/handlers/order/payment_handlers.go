@@ -171,6 +171,10 @@ func (h *OrderHandler) handleOrderWebhook(ctx context.Context, c *gin.Context, b
 	case errors.Is(err, serviceorder.ErrOrderNotFound):
 		// D4: not an order. Ask the subscription ledger; a payment neither ledger knows becomes an orphan.
 		h.handleSubscriptionWebhook(ctx, c, base, body, signature, done)
+	case errors.Is(err, servicesubscription.ErrPaymentNeedsReview):
+		done(repowebhook.StatusProcessed, "held for manual review: "+err.Error())
+		log.Warn().Str("reference", base.Data.Reference).Msg("Payment received and held for manual review (needs_review)")
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "acknowledged"})
 	case serviceorder.IsRetryable(err):
 		done(repowebhook.StatusFailed, err.Error())
 		log.Error().Err(err).Str("reference", base.Data.Reference).Msg("CRITICAL: order webhook failed; Paystack will retry")

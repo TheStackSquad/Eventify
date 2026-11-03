@@ -105,48 +105,57 @@ runCleanup := func() {
 
 func main() {
 
-	// Load env files immediately before any other package initializes
-  //  _ = godotenv.Load("audit/docker/.env", "../audit/docker/.env", ".env", "backend/.env")
-  _ = godotenv.Load(".env", "backend/.env")
-
-	envPaths := []string{
-        "audit/docker/.env", // If run from project root
-        "../audit/docker/.env", // If run from backend/ directory
-        ".env",              // Local root .env
-        "backend/.env",      // Local backend .env
-    }
-
-	// Print current working directory and env check for debugging
-    wd, _ := os.Getwd()
-    log.Info().Str("working_dir", wd).Msg("📂 Current working directory")
-
-    apiKey := os.Getenv("PAYSTACK_SECRET_KEY")
-    if apiKey == "" {
-        log.Error().Msg("❌ PAYSTACK_SECRET_KEY is still EMPTY after loading attempts!")
-    } else {
-        // Print the first few characters to verify it loaded correctly without leaking the full secret
-        masked := apiKey
-        if len(apiKey) > 10 {
-            masked = apiKey[:6] + "..." + apiKey[len(apiKey)-4:]
-        }
-        log.Info().Str("key_masked", masked).Msg("✅ PAYSTACK_SECRET_KEY successfully detected in environment!")
-    }
-
+// ============================================================================
+    // STEP 0: LOAD ENVIRONMENT VARIABLES & VERIFY VITAL CONFIGS
     // ============================================================================
-    // STEP 0: LOAD ENVIRONMENT VARIABLES
-    // ============================================================================
-   loaded := false
+    envPaths := []string{".env", "backend/.env"}
+    if p := os.Getenv("EVENTIFY_ENV_FILE"); p != "" {
+        envPaths = []string{p}
+    }
+    loaded := false
     for _, p := range envPaths {
         if err := godotenv.Load(p); err == nil {
-            log.Info().Str("path", p).Msg("Successfully loaded environment variables")
+            log.Info().Str("path", p).Msg("Loaded environment file")
             loaded = true
             break
         }
     }
-
     if !loaded {
-        log.Info().Msg("No .env file found in standard search paths, relying on system environment variables")
+        log.Info().Msg("No .env file found; using the process environment")
     }
+
+    _ = godotenv.Load(".env", "backend/.env")
+
+    // Print current working directory for debugging
+    wd, _ := os.Getwd()
+    log.Info().Str("working_dir", wd).Msg("📂 Current working directory")
+
+    // List of all vital environment variables required by your server
+    vitalEnvs := []string{
+        "PAYSTACK_SECRET_KEY",
+        "DATABASE_URL",
+        "PORT",
+        // Add any other vital keys your app needs here (e.g., "JWT_SECRET", "CLIENT_URL")
+    }
+
+    // Loop through each vital env, validate it, and print a redacted version (last 4 chars)
+    for _, envKey := range vitalEnvs {
+        val := os.Getenv(envKey)
+        if val == "" {
+            log.Error().Str("key", envKey).Msg("❌ CRITICAL: Vital environment variable is EMPTY!")
+        } else {
+            // Redact everything except the last 4 characters
+            masked := "****"
+            if len(val) > 4 {
+                masked = "****" + val[len(val)-4:]
+            }
+            log.Info().
+                Str("key", envKey).
+                Str("masked_value", masked).
+                Msg("✅ Environment variable verified")
+        }
+    }
+
 
     // ============================================================================
     // STEP 1: LOGGING CONFIGURATION

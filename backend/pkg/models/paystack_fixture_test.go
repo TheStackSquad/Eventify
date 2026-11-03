@@ -64,3 +64,16 @@ func TestWebhookToleratesPayloadVariants(t *testing.T) {
 		})
 	}
 }
+
+func TestEveryRealWebhookFixtureParses(t *testing.T) {
+	for _, name := range []string{"paystack_charge_success.json", "paystack_charge_success_bank_transfer.json"} {
+		b, err := os.ReadFile("testdata/" + name)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		var w PaystackWebhook
+		if err := json.Unmarshal(b, &w); err != nil || w.Data == nil {
+			t.Errorf("%s did not parse: %v", name, err)
+		}
+	}
+}

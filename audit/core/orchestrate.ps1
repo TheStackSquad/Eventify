@@ -57,9 +57,8 @@
   Requires: PowerShell 5.1+, psql, curl.exe, git; go + ngrok (tunnel mode) or docker (rig mode).
 #>
 [CmdletBinding()]
-[CmdletBinding()]
 param(
-    [int]$Port = 0,                                    # 0 means auto-detect from .env
+    [int]$Port = 0,                                     # 0 means auto-detect from .env
     [string]$NgrokDomain = "",                          # empty means auto-detect
     [string]$ComposeFile = "",
     [string]$LoginPath = "/auth/login",
@@ -70,6 +69,7 @@ param(
     [switch]$Manual,
     [switch]$ReuseBackend,
     [switch]$StartRig,
+    [switch]$Reset,
     [switch]$ApplyMigrations
 )
 
@@ -111,8 +111,6 @@ $ErrorActionPreference = "Stop"
 
 # ---------------------------------------------------------------- locate the repo and load the helper files
 
-# Walk up from this script until a folder containing "backend" is found, so the script
-# works from audit\rig, audit\ or anywhere else under the repo.
 $RepoRoot = $PSScriptRoot
 while (-not (Test-Path -LiteralPath (Join-Path $RepoRoot "backend"))) {
     $parent = Split-Path -Parent $RepoRoot
@@ -135,8 +133,6 @@ $HelperFiles = @(
     "matrix\report.ps1"
 )
 
-# ---------------------------------------------------------------- run state (shared with the helper files)
-
 $BackendDir     = Join-Path $RepoRoot "backend"
 $ResultsDir     = Join-Path $AuditDir "results"
 $Rig            = [bool]$ComposeFile
@@ -153,7 +149,6 @@ $RunInfo        = @{
 $Tmp            = Join-Path ([IO.Path]::GetTempPath()) ("eventify-matrix-" + [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $Tmp | Out-Null
 
-# Values the steps hand to each other (sessions, vendor id, tier to pay for, ...).
 $Ctx = @{ Reach = $null; S1 = $null; S2 = $null; Vid = ""; UseTier = "premium" }
 
 foreach ($file in $HelperFiles) {
@@ -185,6 +180,21 @@ try {
     Invoke-Step -Name "Validating required environment variables and safety rules" -Action {
         Assert-Safety
     } -Solution "Set the missing variables in this terminal before running: AUDIT_VENDOR_EMAIL and AUDIT_VENDOR_PASSWORD always; in tunnel mode also PAYSTACK_SECRET_KEY (must start with sk_test_) and AUDIT_DB_URL (must point at localhost)."
+
+    # ============================================================================
+    # RESET BLOCK: Placed after env configuration & safety validation are loaded
+    # ============================================================================
+    if ($Reset) {
+        if ($env:AUDIT_DB_URL -notmatch '@(localhost|127\.0\.0\.1)[:/]') { throw 'Reset only runs against a localhost database' }
+        Write-Host 'Resetting the audit vendors'' payments, plans and stored webhooks...' -ForegroundColor Yellow
+        $sql = @'
+DELETE FROM subscription_payments WHERE vendor_id IN (SELECT v.id FROM vendors v JOIN users u ON u.id = v.owner_id WHERE u.email LIKE 'audit_vendor%');
+DELETE FROM subscriptions WHERE vendor_id IN (SELECT v.id FROM vendors v JOIN users u ON u.id = v.owner_id WHERE u.email LIKE 'audit_vendor%');
+UPDATE vendors SET subscription_tier = 'free' WHERE email LIKE 'audit_vendor%';
+DELETE FROM webhook_inbox;
+'@
+        psql $env:AUDIT_DB_URL -v ON_ERROR_STOP=1 -q -c $sql
+    }
 
     Invoke-Step -Name "Checking required tools are on PATH" -Action {
         $tools = @("psql", "curl.exe", "git")
@@ -226,7 +236,7 @@ try {
         Test-BackendReachable $Ctx
     } -Solution "Rig mode: docker compose -f <compose file> logs backend. Tunnel mode: confirm ngrok forwards to port $Port and the backend is running."
 
-    # 🚀 NEW: Seed the test users and vendor profiles via the actual API now that backend is live
+    # Seed the test users and vendor profiles via the actual API now that backend is live
     Invoke-Step -Name "Seeding test vendors via API" -Detailed -Action {
         & (Join-Path $AuditDir "runner\seed-vendors-api.ps1") -BaseUrl "http://localhost:$Port" -CsrfCookie $CsrfCookie -CsrfHeader $CsrfHeader
     } -Solution "Check that the Go backend is running and /auth/register, /auth/login, and /vendors endpoints are responding correctly."
@@ -256,7 +266,7 @@ try {
         Invoke-Step -Name "Webhook inbox checks (T3d to T3h)" -Detailed -Action { Test-WebhookInbox $Ctx } -Solution $CheckCrashSolution
         Invoke-Step -Name "Oversized webhook body check (T16)" -Detailed -Action { Test-OversizedBody $Ctx } -Solution $CheckCrashSolution
         Invoke-Step -Name "Hostile reference checks (T17)" -Detailed -Action { Test-HostileReferences $Ctx } -Solution $CheckCrashSolution
-        Invoke-Step -Name "Tier switch while active check (T7)" -Detailed -Action { Test-TierSwitch $Ctx } -Solution $CheckCrashSolution
+        
 
         if ($Burst -gt 0) {
             Invoke-Step -Name "Rate limit burst of $Burst initiate calls (T15)" -Detailed -Action { Test-RateLimit $Ctx } -Solution $CheckCrashSolution
@@ -265,10 +275,10 @@ try {
         if ($Manual) {
             Invoke-Step -Name "Manual payment tests with a Paystack test card (T1, T2, T5)" -Detailed -Action { Invoke-ManualPaymentTests $Ctx } -Solution "A manual test could not finish. Confirm the tunnel is up, the Paystack dashboard webhook URL matches it, and you paid with a Paystack TEST card within 10 minutes."
         }
+         Invoke-Step -Name "Tier switch while active check (T7)" -Detailed -Action { Test-TierSwitch $Ctx } -Solution $CheckCrashSolution
     }
 }
 catch {
-    # A failed step has already printed its own report; only print unexpected errors.
     if (-not $script:StepFailureReported) { Write-Host ("`n" + $_.Exception.Message) -ForegroundColor Red }
     $exitCode = 2
     $KeepTmp = $true
@@ -285,6 +295,6 @@ if ((-not $SetupOnly) -and ($Results.Count -gt 0)) { Write-Report }
 
 $failed = @($Results | Where-Object { $_.Outcome -eq "FAIL" }).Count
 $counts = $Results | Group-Object Outcome | ForEach-Object { "$($_.Name)=$($_.Count)" }
-Write-Host ("`nSummary: " + ($counts -join "  ")) -ForegroundColor Cyan
+Write-Host ("`nSummary: " + ($counts -join "   ")) -ForegroundColor Cyan
 if (($exitCode -eq 0) -and ($failed -gt 0)) { $exitCode = 1 }
 exit $exitCode

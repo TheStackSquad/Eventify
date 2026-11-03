@@ -97,27 +97,11 @@ func (h *SubscriptionHandler) VerifySubscription(c *gin.Context) {
 		Str("reference", reference).
 		Msg("Verifying subscription payment")
 
-if err := h.Service.VerifyAndFinalize(c.Request.Context(), reference, vendorID); err != nil {
-            log.Warn().Err(err).Str("reference", reference).Msg("Verification failed gracefully")
+    if err := h.Service.VerifyAndFinalize(c.Request.Context(), reference, vendorID); err != nil {
+		respondVerifyError(c, err, reference)
+		return
+	}
 
-            msg := err.Error()
-            
-            // 1. Handle cross-vendor or missing reference (T8.1)
-            if strings.Contains(msg, "not found") || strings.Contains(msg, "no rows") || strings.Contains(msg, "unauthorized") {
-                c.JSON(http.StatusNotFound, gin.H{"status": "error", "code": "PAYMENT_NOT_FOUND", "message": "Transaction reference not found"})
-                return
-            }
-            
-            // 2. Handle unpaid / unsuccessful transactions (T9.4)
-            if strings.Contains(msg, "not successful") || strings.Contains(msg, "pending") || strings.Contains(msg, "failed") {
-                c.JSON(http.StatusUnprocessableEntity, gin.H{"status": "error", "code": "PAYMENT_NOT_SUCCESSFUL", "message": "The transaction has not been successfully completed."})
-                return
-            }
-
-            // Fallback for general client validation errors
-            c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid transaction reference"})
-            return
-        }
 	log.Info().
 		Str("vendorID", vendorID.String()).
 		Str("reference", reference).
