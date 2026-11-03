@@ -124,37 +124,49 @@ func main() {
         log.Info().Msg("No .env file found; using the process environment")
     }
 
-    _ = godotenv.Load(".env", "backend/.env")
-
     // Print current working directory for debugging
-    wd, _ := os.Getwd()
-    log.Info().Str("working_dir", wd).Msg("📂 Current working directory")
+    // Print current working directory and verify required settings by name only.
+	// No part of any secret value is ever logged.
+	wd, _ := os.Getwd()
+	log.Info().Str("working_dir", wd).Msg("Current working directory")
+
+	missing := false
+	for _, k := range []string{"PAYSTACK_SECRET_KEY", "POSTGRES_URI"} {
+		if os.Getenv(k) == "" {
+			log.Error().Str("key", k).Msg("required environment variable is not set")
+			missing = true
+		}
+	}
+	
+	if missing && os.Getenv("GIN_MODE") == "release" {
+		log.Fatal().Msg("refusing to start in release mode with missing configuration")
+	}
 
     // List of all vital environment variables required by your server
-    vitalEnvs := []string{
-        "PAYSTACK_SECRET_KEY",
-        "DATABASE_URL",
-        "PORT",
-        // Add any other vital keys your app needs here (e.g., "JWT_SECRET", "CLIENT_URL")
-    }
+    // vitalEnvs := []string{
+    //     "PAYSTACK_SECRET_KEY",
+    //     "DATABASE_URL",
+    //     "PORT",
+    //     // Add any other vital keys your app needs here (e.g., "JWT_SECRET", "CLIENT_URL")
+    // }
 
     // Loop through each vital env, validate it, and print a redacted version (last 4 chars)
-    for _, envKey := range vitalEnvs {
-        val := os.Getenv(envKey)
-        if val == "" {
-            log.Error().Str("key", envKey).Msg("❌ CRITICAL: Vital environment variable is EMPTY!")
-        } else {
-            // Redact everything except the last 4 characters
-            masked := "****"
-            if len(val) > 4 {
-                masked = "****" + val[len(val)-4:]
-            }
-            log.Info().
-                Str("key", envKey).
-                Str("masked_value", masked).
-                Msg("✅ Environment variable verified")
-        }
-    }
+    // for _, envKey := range vitalEnvs {
+    //     val := os.Getenv(envKey)
+    //     if val == "" {
+    //         log.Error().Str("key", envKey).Msg("❌ CRITICAL: Vital environment variable is EMPTY!")
+    //     } else {
+    //         // Redact everything except the last 4 characters
+    //         masked := "****"
+    //         if len(val) > 4 {
+    //             masked = "****" + val[len(val)-4:]
+    //         }
+    //         log.Info().
+    //             Str("key", envKey).
+    //             Str("masked_value", masked).
+    //             Msg("✅ Environment variable verified")
+    //     }
+    // }
 
 
     // ============================================================================

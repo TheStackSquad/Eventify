@@ -208,7 +208,7 @@ function Get-State([string]$VendorId) {
     [pscustomobject]@{
         Subs   = [int](Invoke-Sql "SELECT count(*) FROM subscriptions WHERE vendor_id = '$VendorId'")
         Active = [int](Invoke-Sql "SELECT count(*) FROM subscriptions WHERE vendor_id = '$VendorId' AND status = 'active'")
-        Expiry = (Invoke-Sql "SELECT coalesce(max(expires_at)::text, '') FROM subscriptions WHERE vendor_id = '$VendorId' AND status = 'active'")
+        Expiry = (Invoke-Sql "SELECT coalesce(to_char(max(expires_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.US'), '') FROM subscriptions WHERE vendor_id = '$VendorId' AND status = 'active'")
         Tier   = (Invoke-Sql "SELECT subscription_tier FROM vendors WHERE id = '$VendorId'")
     }
 }

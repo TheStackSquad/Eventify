@@ -253,7 +253,7 @@ func (s Subscription) MarshalJSON() ([]byte, error) {
 	}
 	cleanTime := func(nt sql.NullTime) interface{} {
 		if nt.Valid {
-			return nt.Time.Format(time.RFC3339)
+			return nt.Time.UTC().Format(time.RFC3339)
 		}
 		return nil
 	}
