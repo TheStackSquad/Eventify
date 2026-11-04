@@ -307,7 +307,8 @@ func main() {
 	if d, err := time.ParseDuration(os.Getenv("SUBSCRIPTION_WORKER_INTERVAL")); err == nil && d > 0 {
 		subInterval = d
 	}
-	go subscriptionService.StartExpiryWorker(context.Background(), subInterval)
+	//go subscriptionService.StartExpiryWorker(context.Background(), subInterval)
+	go subscriptionService.StartExpiryWorker(workerCtx, subInterval)
 	go servicevendor.StartLeaderboardRefreshWorker(workerCtx, dbClient, 1*time.Hour)
 	go servicevendor.StartAnalyticsRefreshWorker(
 		workerCtx,

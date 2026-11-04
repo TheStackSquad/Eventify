@@ -5,7 +5,6 @@ package subscription
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/eventify/backend/pkg/repository/subscription"
@@ -126,7 +125,9 @@ func (s *subscriptionServiceImpl) sendExpiredNotices(ctx context.Context) error 
 // queueSubscriptionEmail hands one email to the outbox. Repeating it is harmless:
 // the dedupe key turns a second call into a no-op.
 func (s *subscriptionServiceImpl) queueSubscriptionEmail(ctx context.Context, template string, r subscription.EmailRecipient) error {
-	subject, payload, key, err := serviceemail.BuildSubscriptionEmail(template, fmt.Sprint(r.SubscriptionID), serviceemail.SubscriptionPayload{
+	// One email per plan per cycle: the expiry date moves with every paid month, so a renewal is a new cycle.
+	cycle := fmt.Sprintf("%s:%s", r.SubscriptionID, r.ExpiresAt.UTC().Format("20060102"))
+	subject, payload, key, err := serviceemail.BuildSubscriptionEmail(template, cycle, serviceemail.SubscriptionPayload{
 		UserName:   r.UserName,
 		VendorName: r.VendorName,
 		Tier:       r.Tier,
@@ -139,67 +140,3 @@ func (s *subscriptionServiceImpl) queueSubscriptionEmail(ctx context.Context, te
 	return s.subscriptionRepo.QueueEmailOnce(ctx, r.UserEmail, subject, template, payload, key)
 }
 
-
-// Helper functions for email templates
-func capitalize(s string) string {
-	if len(s) == 0 {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
-}
-
-func buildPaymentSuccessEmail(r subscription.EmailRecipient) string {
-	priceNaira := float64(r.PriceKobo) / 100
-	return fmt.Sprintf(`Hello %s,
-
-Thank you for subscribing to Eventify %s Plan!
-
-Amount Paid: ₦%.2f
-Valid Until: %s
-
-Your vendor profile "%s" now has premium access.
-
-Manage subscription: https://eventify.ng/dashboard/subscription
-
-Best regards,
-The Eventify Team`, r.UserName, capitalize(r.Tier), priceNaira, r.ExpiresAt.Format("Jan 2, 2006"), r.VendorName)
-}
-
-func buildReminderEmail(r subscription.EmailRecipient, reminderType string) string {
-	daysMap := map[string]string{"7d": "7 days", "3d": "3 days", "1d": "1 day"}
-	days := daysMap[reminderType]
-	priceNaira := float64(r.PriceKobo) / 100
-
-	return fmt.Sprintf(`Hello %s,
-
-Your %s subscription expires in %s (%s).
-
-Renewal Price: ₦%.2f
-
-Renew now: https://eventify.ng/dashboard/subscription/renew
-
-Best regards,
-The Eventify Team
-
----
-To manage email preferences, visit: https://eventify.ng/account/settings
-You will still receive important account notifications.`,
-		r.UserName, capitalize(r.Tier), days, r.ExpiresAt.Format("Jan 2 at 3:04PM"),
-		priceNaira)
-}
-
-func buildExpiredNoticeEmail(r subscription.EmailRecipient) string {
-	priceNaira := float64(r.PriceKobo) / 100
-
-	return fmt.Sprintf(`Hello %s,
-
-Your %s subscription has expired (%s).
-
-Your vendor profile has been moved to the Free tier.
-
-Renew now: https://eventify.ng/dashboard/subscription/renew
-Price: ₦%.2f
-
-Best regards,
-The Eventify Team`, r.UserName, capitalize(r.Tier), r.ExpiresAt.Format("Jan 2, 2006"), priceNaira)
-}

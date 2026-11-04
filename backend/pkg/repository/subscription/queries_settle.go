@@ -81,7 +81,9 @@ func (r *subscriptionRepository) SettlePayment(ctx context.Context, in SettleInp
 			_, err = tx.ExecContext(ctx, `
 				UPDATE subscriptions
 				SET payment_reference = $2, payment_method = $3, last_payment_date = $4,
-				    expires_at = $5, next_payment_date = $5, price = $6
+				    expires_at = $5, next_payment_date = $5, price = $6,
+				    payment_success_sent_at = NULL, reminder_7d_sent_at = NULL, reminder_3d_sent_at = NULL,
+				    reminder_1d_sent_at = NULL, expired_notice_sent_at = NULL
 				WHERE id = $1`,
 				subID, in.Reference, in.Channel, in.Now, expiry, p.AmountKobo)
 		} else {

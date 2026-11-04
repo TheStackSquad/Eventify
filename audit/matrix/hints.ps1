@@ -38,4 +38,10 @@ $Hints = @{
     "T3f.1" = "A repeated delivery created a second inbox row or was not counted. Check the unique (provider, body_sha256) key and the Store upsert."
     "T3g.1" = "An unsigned webhook was stored. Only signature-verified bodies may be kept, or anyone could fill the table."
     "T3h.1" = "A payment with no type in its metadata was not checked against both ledgers. Check the ErrOrderNotFound branch in handleOrderWebhook and ProcessWebhook."
+    "L1.1" = "The 7-day reminder was not queued exactly once. Check GetNeedingReminder7D (range and flag) and that the worker runs (look for 'Starting subscription worker' in the backend log, and SUBSCRIPTION_WORKER_INTERVAL)."
+    "L1.2" = "After an outage the nearest missed reminder (3-day) must go out, never the 7-day one. Check that the 7D and 3D ranges in queries_maintenance.go do not overlap."
+    "L1.3" = "A plan 12 hours out must get the 1-day reminder only; a plan that expired 30 days ago and old payments must stay silent (age caps)."
+    "L2.1" = "A lapsed plan must be expired, the vendor tier must return to free (trigger), and one notice queued. Check expireOldSubscriptions, the sync trigger and GetNeedingExpiredNotice."
+    "L4.1" = "A later worker pass queued more emails. Dedupe keys (plan id plus expiry date) must make repeats no-ops; check queueSubscriptionEmail."
+
 }

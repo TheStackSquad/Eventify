@@ -28,6 +28,9 @@ function Write-Report {
         @{ Text = "Re-delivered signed webhooks do not extend or duplicate the subscription."; Needs = @("T2.1", "T2.2") },
         @{ Text = "A vendor with an active plan cannot start a payment for a different tier."; Needs = @("T7.1") },
         @{ Text = "An amount mismatch parks the payment for manual review and leaves the subscription untouched."; Needs = @("T5.1", "T5.2", "T5.3") }
+        @{ Text = "Reminders reach every vendor with a plan nearing expiry, once per window, and a worker outage never causes a burst."; Needs = @("L1.1", "L1.2", "L1.3") },
+        @{ Text = "A lapsed plan is switched off, the vendor returns to the free tier and is told once; old expiries stay silent."; Needs = @("L2.1", "L1.3") },
+        @{ Text = "Repeated worker passes never send the same email twice."; Needs = @("L4.1") }
     )
     $passed = @($Results | Where-Object { $_.Outcome -eq "PASS" } | ForEach-Object { $_.Id })
     $supported = @(); $unsupported = @()

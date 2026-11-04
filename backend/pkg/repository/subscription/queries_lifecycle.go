@@ -214,7 +214,7 @@ func (r *subscriptionRepository) GetByReference(ctx context.Context, reference s
 func (r *subscriptionRepository) GetActiveByVendorID(ctx context.Context, vendorID uuid.UUID) (*models.Subscription, error) {
 	query := `
 		SELECT * FROM subscriptions
-		WHERE vendor_id = $1 AND status = 'active'
+		WHERE vendor_id = $1 AND status = 'active' AND (expires_at IS NULL OR expires_at > NOW())
 		ORDER BY created_at DESC
 		LIMIT 1
 	`
