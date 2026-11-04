@@ -1,9 +1,30 @@
-//frontend/app/subscription/page.js
-
+// frontend/src/app/subscription/page.js
 "use client";
-import { useState } from "react";
+
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import TierComparisonTable from "@/components/subscription/tierComparisonTable";
 import TierSelectorModal from "@/components/subscription/tierSelectorModal";
+import { SUBSCRIPTION_TIERS } from "@/utils/constants/globalConstants";
+
+const VALID_TIER_IDS = Object.values(SUBSCRIPTION_TIERS).map((tier) => tier.id);
+
+// Reopens the modal on the plan the user picked before logging in (?plan=premium)
+// Isolated in its own component so only this part waits on the query string
+function PlanResume({ onResume }) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const plan = searchParams.get("plan");
+
+  useEffect(() => {
+    if (!plan || !VALID_TIER_IDS.includes(plan)) return;
+    onResume(plan);
+    // Drop the param so a refresh does not reopen the modal
+    router.replace("/subscription", { scroll: false });
+  }, [plan, onResume, router]);
+
+  return null;
+}
 
 export default function SubscriptionPage() {
   const [modalState, setModalState] = useState({
@@ -11,10 +32,17 @@ export default function SubscriptionPage() {
     tier: "premium",
   });
 
-  const openModal = (tier) => setModalState({ isOpen: true, tier });
+  const openModal = useCallback(
+    (tier) => setModalState({ isOpen: true, tier }),
+    [],
+  );
 
   return (
     <div className="min-h-screen bg-white">
+      <Suspense fallback={null}>
+        <PlanResume onResume={openModal} />
+      </Suspense>
+
       {/* Hero / Conversion Banner */}
       <section className="relative py-20 px-6 bg-gradient-to-br from-indigo-50 via-white to-purple-50 overflow-hidden">
         <div className="max-w-5xl mx-auto text-center relative z-10">
@@ -59,7 +87,7 @@ export default function SubscriptionPage() {
       {/* Selector Modal */}
       <TierSelectorModal
         isOpen={modalState.isOpen}
-        onClose={() => setModalState({ ...modalState, isOpen: false })}
+        onClose={() => setModalState((prev) => ({ ...prev, isOpen: false }))}
         initialTier={modalState.tier}
       />
     </div>

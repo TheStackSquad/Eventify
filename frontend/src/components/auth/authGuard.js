@@ -4,6 +4,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/utils/hooks/useAuth";
+import { buildLoginUrl } from "@/utils/helper/callbackUrl";
 import AuthLoadingState from "./authLoadingState";
 
 export default function AuthGuard({
@@ -15,37 +16,42 @@ export default function AuthGuard({
   const pathname = usePathname();
   const { isAuthenticated, isInitialized, user } = useAuth();
   const hasRedirected = useRef(false);
+  const wasAuthenticated = useRef(false);
 
   useEffect(() => {
-    // Don't do anything until session check completes
+    // Wait until the session check completes
     if (!isInitialized) return;
 
-    // If authenticated, clear redirect flag (in case user navigates back)
+    // Authenticated: reset flags in case the user navigates back
     if (isAuthenticated && user) {
       hasRedirected.current = false;
+      wasAuthenticated.current = true;
       return;
     }
 
-    // Not authenticated - redirect to login (once)
-    if (!hasRedirected.current) {
-      hasRedirected.current = true;
+    // Not authenticated: redirect once
+    if (hasRedirected.current) return;
+    hasRedirected.current = true;
 
-      // Build redirect URL with optional callback
-      let loginUrl = redirectTo;
-      if (preserveCallback && pathname) {
-       // const callbackUrl = encodeURIComponent(pathname);
-        loginUrl = `${redirectTo}`;
-      }
+    // Keep the full path and query so the user lands exactly where they left
+    const returnTo = `${pathname}${window.location.search}`;
+    const reason = wasAuthenticated.current
+      ? "session_expired"
+      : "login_required";
 
-      if (process.env.NODE_ENV === "development") {
-        console.log("🛡️ [AuthGuard] Redirecting to login", {
-          from: pathname,
-          to: loginUrl,
-        });
-      }
+    const loginUrl =
+      preserveCallback && pathname
+        ? buildLoginUrl(returnTo, reason, redirectTo)
+        : redirectTo;
 
-      router.replace(loginUrl);
+    if (process.env.NODE_ENV === "development") {
+      console.log("🛡️ [AuthGuard] Redirecting to login", {
+        from: returnTo,
+        to: loginUrl,
+      });
     }
+
+    router.replace(loginUrl);
   }, [
     isInitialized,
     isAuthenticated,
@@ -56,20 +62,16 @@ export default function AuthGuard({
     preserveCallback,
   ]);
 
-  // ================================================================
-  // RENDER PHASES
-  // ================================================================
-
-  // Phase 1: Still checking session
+  // Phase 1: still checking session
   if (!isInitialized) {
     return <AuthLoadingState message="Checking authentication..." />;
   }
 
-  // Phase 2: Not authenticated - show loading while redirecting
+  // Phase 2: not authenticated, show loading while redirecting
   if (!isAuthenticated || !user) {
     return <AuthLoadingState message="Redirecting to login..." />;
   }
 
-  // Phase 3: Authenticated and has user data - render protected content
+  // Phase 3: authenticated, render protected content
   return <>{children}</>;
 }
