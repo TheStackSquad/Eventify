@@ -274,7 +274,9 @@ DELETE FROM webhook_inbox;
         }
 
         if ($Manual) {
+            Save-ReceiptBaseline
             Invoke-Step -Name "Manual payment tests with a Paystack test card (T1, T2, T5)" -Detailed -Action { Invoke-ManualPaymentTests $Ctx } -Solution "A manual test could not finish. Confirm the tunnel is up, the Paystack dashboard webhook URL matches it, and you paid with a Paystack TEST card within 10 minutes."
+            Invoke-Step -Name "Payment receipts (L3)" -Detailed -Action { Test-PaymentReceipts $Ctx } -Solution $CheckCrashSolution
         }
          Invoke-Step -Name "Tier switch while active check (T7)" -Detailed -Action { Test-TierSwitch $Ctx } -Solution $CheckCrashSolution
     }

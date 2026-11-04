@@ -74,3 +74,21 @@ function Test-SubscriptionLifecycle($Ctx) {
     foreach ($c in $all) { if ((Get-OutboxCounts $c.Mail) -ne $n[$c.Mail]) { $same = $false } }
     Check "L4.1" "further worker passes queue nothing new" "emails queued, then counts unchanged" $(if (-not $ready) { "nothing was queued" } elseif ($same) { "unchanged" } else { "changed" }) ($ready -and $same)
 }
+
+# Receipts: each payment applied during a manual run must produce exactly one receipt email.
+function Get-AppliedCount { [int](Invoke-Sql "SELECT count(*) FROM subscription_payments WHERE status = 'applied'") }
+function Get-ReceiptCount { [int](Invoke-Sql "SELECT count(*) FROM email_outbox WHERE template_type = 'SUBSCRIPTION_PAYMENT_SUCCESS'") }
+
+function Save-ReceiptBaseline { $script:ReceiptBase = @{ Applied = Get-AppliedCount; Receipts = Get-ReceiptCount } }
+
+# L3 a first purchase and a renewal each queue one receipt
+function Test-PaymentReceipts($Ctx) {
+    $paid = (Get-AppliedCount) - $script:ReceiptBase.Applied
+    if ($paid -lt 1) {
+        Add-Result "L3.1" "each paid month queues one receipt" "a payment applied in this run" "none applied" "SKIP" "pay the first checkout so a payment is applied"
+        return
+    }
+    $null = Wait-Until { ((Get-ReceiptCount) - $script:ReceiptBase.Receipts) -ge $paid } 90
+    $got = (Get-ReceiptCount) - $script:ReceiptBase.Receipts
+    Check "L3.1" "each paid month (first purchase or renewal) queues exactly one receipt" "$paid receipt(s)" "$got receipt(s)" ($got -eq $paid)
+}

@@ -30,6 +30,7 @@ function Write-Report {
         @{ Text = "An amount mismatch parks the payment for manual review and leaves the subscription untouched."; Needs = @("T5.1", "T5.2", "T5.3") }
         @{ Text = "Reminders reach every vendor with a plan nearing expiry, once per window, and a worker outage never causes a burst."; Needs = @("L1.1", "L1.2", "L1.3") },
         @{ Text = "A lapsed plan is switched off, the vendor returns to the free tier and is told once; old expiries stay silent."; Needs = @("L2.1", "L1.3") },
+        @{ Text = "Every paid month, whether a first purchase or a renewal, produces exactly one receipt email."; Needs = @("L3.1") },
         @{ Text = "Repeated worker passes never send the same email twice."; Needs = @("L4.1") }
     )
     $passed = @($Results | Where-Object { $_.Outcome -eq "PASS" } | ForEach-Object { $_.Id })
