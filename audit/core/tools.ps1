@@ -27,11 +27,13 @@ function Test-ComposeV2([string]$Mode) {
 
 function Test-GoVersion([string]$Mode) {
     if ($Mode -ne 'tunnel' -or -not (Get-Command go -ErrorAction SilentlyContinue)) { return }
-    $m = [regex]::Match([string](go version), 'go(\d+\.\d+(?:\.\d+)?)')
+    Push-Location backend      # inside the module, Go reports the toolchain it will really build with
+    try { $out = [string](go version) } finally { Pop-Location }
+    $m = [regex]::Match($out, 'go(\d+\.\d+(?:\.\d+)?)')
     if (-not $m.Success) { return }
     $have = [version]$m.Groups[1].Value
     $ok = $have -ge [version]'1.26.9'
-    Add-Check 'Tools' 'go version' $(if ($ok) { 'PASS' } else { 'WARN' }) "go$have" 'govulncheck listed standard-library fixes in 1.26.9; tunnel mode builds with this Go (winget upgrade GoLang.Go)'
+    Add-Check 'Tools' 'go toolchain' $(if ($ok) { 'PASS' } else { 'WARN' }) "go$have (as used by backend/)" 'govulncheck listed standard-library fixes in 1.26.9; set the toolchain line in backend/go.mod'
 }
 
 function Test-Tools([string]$Mode) {

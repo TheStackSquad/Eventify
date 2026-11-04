@@ -75,14 +75,6 @@ function Test-Rig([string]$Compose) {
 }
 
 function Test-Tunnel {
-    $key = Get-Setting 'PAYSTACK_SECRET_KEY'
-    if (-not $key) { Add-Check 'Tunnel' 'PAYSTACK_SECRET_KEY' 'FAIL' 'not set' 'use a Paystack TEST secret key (sk_test_...)' }
-    elseif ($key -notmatch '^sk_test_') { Add-Check 'Tunnel' 'PAYSTACK_SECRET_KEY' 'FAIL' 'is not a test key' 'only sk_test_ keys are allowed' }
-    else { Add-Check 'Tunnel' 'PAYSTACK_SECRET_KEY' 'PASS' 'test key' '' }
-    $db = Get-Setting 'AUDIT_DB_URL'
-    if (-not $db) { Add-Check 'Tunnel' 'AUDIT_DB_URL' 'FAIL' 'not set' 'postgres://user:pass@localhost:5432/dbname' }
-    elseif ($db -notmatch '@(localhost|127\.0\.0\.1)[:/]') { Add-Check 'Tunnel' 'AUDIT_DB_URL' 'FAIL' 'does not point at localhost' 'tunnel runs write test data: use a local database' }
-    else { Add-Check 'Tunnel' 'AUDIT_DB_URL' 'PASS' 'localhost' '' }
     if (Get-Command ngrok -ErrorAction SilentlyContinue) {
         ngrok config check 2>&1 | Out-Null
         Add-Check 'Tunnel' 'ngrok config' $(if ($LASTEXITCODE -eq 0) { 'PASS' } else { 'FAIL' }) '' 'run: ngrok config add-authtoken <token>'

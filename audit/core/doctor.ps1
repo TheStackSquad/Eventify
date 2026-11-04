@@ -16,15 +16,17 @@ function Test-Paths($Paths, [string]$Compose, [string]$Mode) {
     }
 }
 
-function Test-AuditEnv([string]$Mode) {
-    foreach ($n in 'AUDIT_VENDOR_EMAIL', 'AUDIT_VENDOR_PASSWORD') {
-        $ok = [bool](Get-Setting $n)
-        Add-Check 'Env' $n $(if ($ok) { 'PASS' } else { 'FAIL' }) $(if ($ok) { 'set' } else { 'not set' }) 'set it in this shell or pass -EnvFile (values are never printed)'
-    }
-    foreach ($n in 'AUDIT_VENDOR2_EMAIL', 'AUDIT_VENDOR2_PASSWORD') {
-        $ok = [bool](Get-Setting $n)
-        Add-Check 'Env' $n $(if ($ok) { 'PASS' } else { 'WARN' }) $(if ($ok) { 'set' } else { 'not set: the ownership check (T8) will be skipped' }) ''
-    }
+function Test-AuditEnv([string]$Mode, [string]$EnvFile) {
+    try { $cfg = Import-AuditConfig -Mode $Mode -EnvFile $EnvFile }
+    catch { Add-Check 'Config' 'env file' 'FAIL' $_.Exception.Message 'copy audit\docker\.env.example to audit\docker\.env and fill it in'; return }
+    Add-Check 'Config' 'file' 'PASS' $cfg.File ''
+    foreach ($r in $cfg.Results) { Add-Check 'Config' $r.Name $r.Status $r.Detail $r.Fix }
+}
+
+function Test-MigrationsTracked($Paths) {
+    $dirty = @(git -C $Paths.Repo status --porcelain -- backend/migrations)
+    $bad = $dirty.Count -gt 0
+    Add-Check 'Migrations' 'committed' $(if ($bad) { 'FAIL' } else { 'PASS' }) $(if ($bad) { "$($dirty.Count) migration file(s) not committed" } else { 'all migration files are committed' }) 'commit backend/migrations: the code depends on them (finding F82)'
 }
 
 # Files that must never reach git: they have to be ignored, and never tracked.
@@ -39,11 +41,12 @@ function Test-SecretHygiene($Paths) {
     }
 }
 
-function Invoke-Doctor($Paths, [string]$Mode, [string]$ComposeFile) {
+function Invoke-Doctor($Paths, [string]$Mode, [string]$ComposeFile, [string]$EnvFile = '') {
     Test-Runtime
     Test-Tools $Mode
     Test-Paths $Paths $ComposeFile $Mode
-    Test-AuditEnv $Mode
+    Test-AuditEnv $Mode $EnvFile
+    Test-MigrationsTracked $Paths
     Test-SecretHygiene $Paths
     if ($Mode -eq 'rig') { Test-Rig $ComposeFile } else { Test-Tunnel }
 }

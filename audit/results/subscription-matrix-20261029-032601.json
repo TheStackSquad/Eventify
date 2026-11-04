@@ -1,8 +1,0 @@
-﻿{
-    "Id":  "S1",
-    "Name":  "backend reachable through the ngrok tunnel",
-    "Expected":  "200",
-    "Actual":  "200",
-    "Outcome":  "PASS",
-    "Note":  ""
-}

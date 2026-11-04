@@ -16,6 +16,7 @@ main.exe
 .env.local
 cookies.txt
 login_headers.txt
+audit/docker/.env
 
 # === Go Artifacts ===
 # Compiled test binaries (e.g. vendor.test, analytics.test)

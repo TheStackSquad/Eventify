@@ -181,7 +181,13 @@ function Invoke-Auth($Session, [string]$Method, [string]$Path, [string]$Body = $
 function Send-Webhook([string]$Body, [string]$Signature) {
     $h = @{}
     if ($Signature) { $h["x-paystack-signature"] = $Signature }
-    Invoke-Http -Method POST -Url $Webhook -Headers $h -Body $Body
+    # A webhook is safe to repeat (Paystack does it too), so a dropped connection through the tunnel is retried.
+    for ($try = 1; $try -le 3; $try++) {
+        $r = Invoke-Http -Method POST -Url $Webhook -Headers $h -Body $Body
+        if ($r.Status -ne 0) { return $r }
+        Start-Sleep -Seconds 2
+    }
+    return $r
 }
 
 function New-ChargeBody([string]$Reference, [string]$VendorId, [int64]$Amount) {
