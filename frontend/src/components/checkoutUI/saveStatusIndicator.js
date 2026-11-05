@@ -1,57 +1,55 @@
 // frontend/src/components/checkoutUI/saveStatusIndicator.js
+
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Cloud, CloudOff, Loader2 } from "lucide-react";
+import { Check, CloudOff, Loader2 } from "lucide-react";
 
-export default function SaveStatusIndicator({ status }) {
-  const statusConfig = {
-    idle: null,
-    saving: {
-      icon: Loader2,
-      text: "Saving...",
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
-      animate: true,
-    },
-    saved: {
-      icon: Check,
-      text: "Saved",
-      color: "text-green-600",
-      bgColor: "bg-green-50",
-      animate: false,
-    },
-    error: {
-      icon: CloudOff,
-      text: "Save failed",
-      color: "text-red-600",
-      bgColor: "bg-red-50",
-      animate: false,
-    },
-  };
+// Static class strings so Tailwind can see them (dynamic border-${...} classes get purged).
+const STATUS_CONFIG = {
+  saving: {
+    icon: Loader2,
+    text: "Saving…",
+    classes: "text-blue-700 bg-blue-50 border-blue-200",
+    spin: true,
+  },
+  saved: {
+    icon: Check,
+    text: "Saved",
+    classes: "text-green-700 bg-green-50 border-green-200",
+  },
+  error: {
+    icon: CloudOff,
+    text: "Couldn’t save",
+    classes: "text-red-700 bg-red-50 border-red-200",
+  },
+  offline: {
+    icon: CloudOff,
+    text: "Offline · saved on this device",
+    classes: "text-amber-800 bg-amber-50 border-amber-200",
+  },
+};
 
-  const config = statusConfig[status];
+export default function SaveStatusIndicator({ status, isOffline = false }) {
+  const key = isOffline ? "offline" : status;
+  const config = STATUS_CONFIG[key];
   if (!config) return null;
-
   const Icon = config.icon;
 
   return (
     <AnimatePresence mode="wait">
       <motion.div
-        key={status}
-        initial={{ opacity: 0, y: -10, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -10, scale: 0.95 }}
+        key={key}
+        role="status"
+        aria-live="polite"
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.2, ease: "easeOut" }}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${config.bgColor} border border-${config.color.split("-")[1]}-200`}
+        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${config.classes}`}
       >
-        <Icon
-          size={14}
-          className={`${config.color} ${config.animate ? "animate-spin" : ""}`}
-        />
-        <span className={`text-xs font-semibold ${config.color}`}>
-          {config.text}
-        </span>
+        <Icon size={13} className={config.spin ? "animate-spin" : ""} />
+        <span>{config.text}</span>
       </motion.div>
     </AnimatePresence>
   );

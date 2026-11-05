@@ -1,5 +1,0 @@
-# webhook profile=smoke base=localhost:8081
-reqs=130 rps=11.1
-overall p50=1623 p95=2323 p99=2422 max=2471 (ms)
-failed=0.00%
-THRESHOLDS: all passed

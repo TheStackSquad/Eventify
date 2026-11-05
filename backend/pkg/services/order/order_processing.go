@@ -32,6 +32,7 @@ var (
 	ErrAmountMismatch      = errors.New("AmountMismatch")
 	ErrPaymentNotCompleted = errors.New("payment not completed")
 	ErrOrderNotFulfilled   = errors.New("payment received but the order is not fulfilled")
+	ErrPaymentFailedUpstream = errors.New("transaction verification failed")
 )
 
 // ============================================================================
@@ -199,6 +200,13 @@ func (s *OrderServiceImpl) resolveAlreadyProcessed(ctx context.Context, referenc
 
 // ProcessWebhook handles Paystack webhook callbacks for payment events
 func (s *OrderServiceImpl) ProcessWebhook(ctx context.Context, payload *models.PaystackWebhook, signature string) error {
+
+	// Only a successful charge matters here; failures are released by the stock-release worker.
+	if payload.Event != "charge.success" {
+		log.Debug().Str("event", payload.Event).Msg("Ignoring unrelated webhook event")
+		return nil
+	}
+
 	data := payload.Data
 	if data == nil {
 		return errors.New("webhook data is nil")
@@ -207,13 +215,11 @@ func (s *OrderServiceImpl) ProcessWebhook(ctx context.Context, payload *models.P
 	// Fetch order by reference
 	order, err := s.OrderRepo.GetOrderByReference(ctx, data.Reference)
 	if err != nil {
-		log.Warn().Str("reference", data.Reference).Err(err).Msg("Order not found during webhook")
-		return nil
+		// A real database error: let Paystack retry rather than lose a paid order.
+		return fmt.Errorf("load order for webhook: %w", err)
 	}
-
-	if order == nil {
-		log.Warn().Str("reference", data.Reference).Msg("Order not found for webhook reference — skipping")
-		return nil
+		if order == nil {
+		return fmt.Errorf("%w: reference %s", ErrOrderNotFound, data.Reference)
 	}
 
 	// Process order idempotently
@@ -258,7 +264,7 @@ func (s *OrderServiceImpl) finalizeOrder(ctx context.Context, order *models.Orde
 		}); err != nil {
 			log.Error().Err(err).Str("ref", order.Reference).Msg("Failed to close order after upstream failure")
 		}
-		return order, errors.New("transaction verification failed")
+		return order, ErrPaymentFailedUpstream
 	}
 
 	// Amount validation (fraud detection)
@@ -349,7 +355,8 @@ func (s *OrderServiceImpl) finalizeOrder(ctx context.Context, order *models.Orde
 			Status:         "pending",
 		}
 
-		return s.OrderRepo.QueueEmailTx(ctx, tx, outboxEntry)
+		// return s.OrderRepo.QueueEmailTx(ctx, tx, outboxEntry)
+		return s.OrderRepo.QueueEmailOnceTx(ctx, tx, outboxEntry, "ticket:"+order.Reference)
 	})
 
 	if err != nil {
@@ -467,4 +474,18 @@ type StockExhaustionError struct {
 
 func (e *StockExhaustionError) Error() string {
 	return fmt.Sprintf("insufficient stock for tier %s: requested %d, available %d", e.TierName, e.Requested, e.Available)
+}
+
+// IsRetryable reports whether Paystack should redeliver a webhook that ended in err.
+// A failed payment, a wrong amount or an already-handled order cannot be fixed by a
+// retry; anything else (database, network) can.
+func IsRetryable(err error) bool {
+	switch {
+	case err == nil:
+		return false
+	case errors.Is(err, ErrAmountMismatch), errors.Is(err, ErrPaymentFailedUpstream), errors.Is(err, ErrAlreadyProcessed), errors.Is(err, ErrOrderNotFound):
+		return false
+	default:
+		return true
+	}
 }

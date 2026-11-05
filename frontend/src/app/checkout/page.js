@@ -1,111 +1,81 @@
-// frontend/src/app/checkout/page.js
+// frontend/src/app/checkout/page.
 
 "use client";
 
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useCart } from "@/context/cartContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, User } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
-// Components
 import PaystackCheckout from "@/components/checkoutUI/checkout";
 import CustomerForm from "@/components/checkoutUI/customerForm";
 import OrderSummary from "@/components/checkoutUI/orderSummaryCard";
+import SecureCheckoutPanel from "@/components/checkoutUI/secureCheckoutPanel";
 import CheckoutSectionBoundary from "@/components/errorBoundary/checkoutSectionBoundary";
 
-// Utils
 import {
   calculateCartTotals,
   formatOrderMetadata,
 } from "./utils/calculateCartTotals";
 
+const EMPTY_CUSTOMER = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  city: "",
+  state: "",
+  country: "Nigeria",
+};
+
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, itemCount } = useCart();
 
-  const [customerInfo, setCustomerInfo] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    city: "",
-    state: "",
-    country: "Nigeria",
-  });
+  const [customerInfo, setCustomerInfo] = useState(EMPTY_CUSTOMER);
   const [isFormValid, setIsFormValid] = useState(false);
-  const [userData, setUserData] = useState(null);
 
-  // Get user data from localStorage once on mount
-  useEffect(() => {
-    const storedUser = localStorage.getItem("userData");
-    if (!storedUser) return;
-
-    try {
-      const user = JSON.parse(storedUser);
-      console.log("🟢 CheckoutPage: User Data loaded:", user);
-      setUserData(user);
-    } catch (error) {
-      console.error("Error parsing user data:", error);
-    }
-  }, []);
-
-  // Calculate cart totals using new fee structure
-  // 🎯 DEFENSIVE CODING: Wrap calculations in try-catch for safety
   const cartTotals = useMemo(() => {
     try {
-      console.log("🟢 CheckoutPage: Calculating cart totals for items:", items);
-      const totals = calculateCartTotals(items);
-      console.log("🟢 CheckoutPage: Cart Totals:", totals);
-      return totals;
+      return calculateCartTotals(items);
     } catch (error) {
-      console.error("🔴 Cart calculation error:", error);
-      // Return safe defaults if calculation fails
+      console.error("Cart calculation error:", error);
       return {
         subtotal: 0,
         finalTotal: 0,
         finalTotalKobo: 0,
         hasMixedTiers: false,
         serviceCharge: 0,
+        serviceFee: 0,
         vat: 0,
+        itemsBreakdown: [],
       };
     }
   }, [items]);
 
-  // Stable callback for customer info updates
-  const handleCustomerInfoChange = useCallback((info) => {
-    console.log("🟢 CheckoutPage: Received customer info from form:", info);
-    setCustomerInfo(info);
-  }, []);
+  const handleCustomerInfoChange = useCallback(
+    (info) => setCustomerInfo(info),
+    [],
+  );
+  const handleFormValidation = useCallback(
+    (valid) => setIsFormValid(valid),
+    [],
+  );
 
-  // Stable callback for validation status
-  const handleFormValidation = useCallback((isValid) => {
-    console.log("🟢 CheckoutPage: Form validation status:", isValid);
-    setIsFormValid(isValid);
-  }, []);
-
-  // Memoize payment metadata
   const paymentMetadata = useMemo(() => {
     try {
-      const metadata = formatOrderMetadata(cartTotals, customerInfo, items);
-      console.log("🟢 CheckoutPage: Payment metadata created:", metadata);
-      return metadata;
+      return formatOrderMetadata(cartTotals, customerInfo, items);
     } catch (error) {
-      console.error("🔴 Metadata formatting error:", error);
+      console.error("Metadata formatting error:", error);
       return null;
     }
   }, [cartTotals, customerInfo, items]);
 
-  // Log when customerInfo changes to debug the flow
-  useEffect(() => {
-    console.log("🟢 CheckoutPage: Customer info state updated:", customerInfo);
-  }, [customerInfo]);
-
-  // Redirect if cart is empty
   if (itemCount === 0) {
     return (
-      <div className="p-8 text-center min-h-[60vh] flex flex-col justify-center items-center">
-        <p className="text-xl font-medium text-gray-700 mb-4">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center p-8 text-center">
+        <p className="mb-4 text-xl font-medium text-gray-700">
           Your cart is empty. Nothing to checkout.
         </p>
         <Link href="/events" className="text-blue-600 hover:underline">
@@ -116,114 +86,50 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8">
+    <div className="mx-auto max-w-6xl p-4 pb-28 md:p-8 md:pb-28 lg:pb-8">
       <button
         onClick={() => router.back()}
-        className="mb-6 flex items-center text-gray-600 hover:text-red-600 transition-colors font-medium"
+        className="mb-6 flex items-center font-medium text-gray-600 transition-colors hover:text-red-600"
       >
         <ArrowLeft size={20} className="mr-2" />
-        Back to Cart
+        Back to cart
       </button>
 
-      <h1 className="text-3xl font-extrabold text-gray-900 mb-6 border-b pb-2">
-        Secure Checkout
+      <h1 className="mb-6 border-b pb-2 text-3xl font-extrabold text-gray-900">
+        Secure checkout
       </h1>
 
-      <div className="grid lg:grid-cols-3 gap-8">
-        {/* Left Column - Customer Info & Payment */}
-        <div className="lg:col-span-2 space-y-8">
-          {/* 🎯 BOUNDARY 1: Customer Form (Medium Priority) */}
+      <div className="grid gap-8 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
           <CheckoutSectionBoundary
             section="Customer Information"
-            minHeight="400px" // Match approximate form height
+            minHeight="400px"
           >
-            <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
               <CustomerForm
                 onCustomerInfoChange={handleCustomerInfoChange}
                 onValidationChange={handleFormValidation}
-                initialData={{ user: userData }}
               />
             </div>
           </CheckoutSectionBoundary>
 
-          {/* 🎯 BOUNDARY 2: Payment Section (CRITICAL - Third-party) */}
-          <CheckoutSectionBoundary
-            section="Payment Gateway"
-            minHeight="300px" // Match payment section height
-          >
-            <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-              <h2 className="text-2xl font-bold text-red-700 mb-6">
-                Payment Method
-              </h2>
-
-              {/* Debug Info - Remove in production */}
-              {process.env.NODE_ENV === "development" && (
-                <div className="mb-4 p-3 bg-gray-100 rounded text-xs font-mono">
-                  <div>
-                    <strong>Debug Info:</strong>
-                  </div>
-                  <div>Form Valid: {isFormValid.toString()}</div>
-                  <div>Email: {customerInfo.email || "empty"}</div>
-                  <div>FirstName: {customerInfo.firstName || "empty"}</div>
-                  <div>LastName: {customerInfo.lastName || "empty"}</div>
-                  <div>Phone: {customerInfo.phone || "empty"}</div>
-                  <div>
-                    Final Total: ₦{cartTotals.finalTotal.toLocaleString()}
-                  </div>
-                  <div>Amount in Kobo: {cartTotals.finalTotalKobo}</div>
-                  <div>
-                    Has Mixed Tiers: {cartTotals.hasMixedTiers.toString()}
-                  </div>
-                  <div>Metadata exists: {paymentMetadata ? "YES" : "NO"}</div>
-                </div>
-              )}
-
-              {isFormValid && customerInfo.email ? (
-                <>
-                  {/* Fee Structure Notice */}
-                  {cartTotals.hasMixedTiers && (
-                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                      <p className="font-medium mb-1">
-                        ℹ️ Mixed Fee Structure Applied
-                      </p>
-                      <p className="text-xs">
-                        Your cart contains tickets with different fee
-                        structures: Small tickets (≤₦5,000) have a 10% fee,
-                        premium tickets (&gt;₦5,000) have 7% + ₦50 + VAT.
-                      </p>
-                    </div>
-                  )}
-
-                  <PaystackCheckout
-                    amountInKobo={cartTotals.finalTotalKobo}
-                    email={customerInfo.email}
-                    totalAmount={cartTotals.finalTotal}
-                    metadata={paymentMetadata}
-                  />
-                </>
-              ) : (
-                <div className="text-center p-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                  <User className="mx-auto mb-4 text-gray-400" size={48} />
-                  <h3 className="text-lg font-medium text-gray-700 mb-2">
-                    Complete Customer Information
-                  </h3>
-                  <p className="text-gray-500">
-                    Please fill in all required customer details above to
-                    proceed with payment.
-                  </p>
-                </div>
-              )}
-            </div>
+          <CheckoutSectionBoundary section="Payment Gateway" minHeight="300px">
+            <SecureCheckoutPanel
+              customerInfo={customerInfo}
+              isFormValid={isFormValid}
+            >
+              <PaystackCheckout
+                amountInKobo={cartTotals.finalTotalKobo}
+                email={customerInfo.email}
+                totalAmount={cartTotals.finalTotal}
+                metadata={paymentMetadata}
+              />
+            </SecureCheckoutPanel>
           </CheckoutSectionBoundary>
         </div>
 
-        {/* Right Column - Order Summary */}
-        {/* 🎯 BOUNDARY 3: Order Summary (Low Priority, but prevents cart breaking) */}
         <div className="lg:col-span-1">
-          <CheckoutSectionBoundary
-            section="Order Summary"
-            minHeight="500px" // Match summary card height
-          >
+          <CheckoutSectionBoundary section="Order Summary" minHeight="400px">
             <OrderSummary
               customerInfo={customerInfo}
               itemCount={itemCount}

@@ -46,6 +46,7 @@ func (r *subscriptionRepository) GetNeedingPaymentEmail(ctx context.Context) ([]
 		WHERE s.status = 'active'
 		  AND s.payment_success_sent_at IS NULL
 		  AND s.last_payment_date IS NOT NULL
+		  AND s.last_payment_date > NOW() - INTERVAL '3 days'
 		ORDER BY s.last_payment_date ASC
 		LIMIT 100
 	`
@@ -77,10 +78,9 @@ func (r *subscriptionRepository) GetNeedingReminder7D(ctx context.Context) ([]Em
 		JOIN vendors v ON s.vendor_id = v.id
 		JOIN users u ON v.owner_id = u.id
 		WHERE s.status = 'active'
-		  AND s.auto_renew = true
 		  AND s.reminder_7d_sent_at IS NULL
+		  AND s.expires_at > NOW() + INTERVAL '3 days'
 		  AND s.expires_at <= NOW() + INTERVAL '7 days'
-		  AND s.expires_at > NOW() + INTERVAL '6 days'
 		  AND u.allow_reminder_emails = true
 		ORDER BY s.expires_at ASC
 		LIMIT 100
@@ -113,10 +113,9 @@ func (r *subscriptionRepository) GetNeedingReminder3D(ctx context.Context) ([]Em
 		JOIN vendors v ON s.vendor_id = v.id
 		JOIN users u ON v.owner_id = u.id
 		WHERE s.status = 'active'
-		  AND s.auto_renew = true
 		  AND s.reminder_3d_sent_at IS NULL
+		  AND s.expires_at > NOW() + INTERVAL '1 day'
 		  AND s.expires_at <= NOW() + INTERVAL '3 days'
-		  AND s.expires_at > NOW() + INTERVAL '2 days'
 		  AND u.allow_reminder_emails = true
 		ORDER BY s.expires_at ASC
 		LIMIT 100
@@ -149,10 +148,9 @@ func (r *subscriptionRepository) GetNeedingReminder1D(ctx context.Context) ([]Em
 		JOIN vendors v ON s.vendor_id = v.id
 		JOIN users u ON v.owner_id = u.id
 		WHERE s.status = 'active'
-		  AND s.auto_renew = true
 		  AND s.reminder_1d_sent_at IS NULL
-		  AND s.expires_at <= NOW() + INTERVAL '1 day'
 		  AND s.expires_at > NOW()
+		  AND s.expires_at <= NOW() + INTERVAL '1 day'
 		  AND u.allow_reminder_emails = true
 		ORDER BY s.expires_at ASC
 		LIMIT 100
@@ -186,6 +184,10 @@ func (r *subscriptionRepository) GetNeedingExpiredNotice(ctx context.Context) ([
 		JOIN users u ON v.owner_id = u.id
 		WHERE s.status = 'expired'
 		  AND s.expired_notice_sent_at IS NULL
+		  AND s.expires_at > NOW() - INTERVAL '7 days'
+		  AND NOT EXISTS (
+		      SELECT 1 FROM subscriptions a
+		      WHERE a.vendor_id = s.vendor_id AND a.status = 'active' AND a.expires_at > NOW())
 		ORDER BY s.expires_at DESC
 		LIMIT 100
 	`
@@ -241,5 +243,18 @@ func (r *subscriptionRepository) UpdateEmailTracking(ctx context.Context, params
 		return err
 	}
 
+	return nil
+}
+
+// QueueEmailOnce adds one email to the outbox. A repeated dedupeKey is ignored.
+func (r *subscriptionRepository) QueueEmailOnce(ctx context.Context, to, subject, template, payloadJSON, dedupeKey string) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO email_outbox (recipient_email, subject, template_type, payload, status, dedupe_key)
+		VALUES ($1, $2, $3, $4::jsonb, 'pending', $5)
+		ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
+		to, subject, template, payloadJSON, dedupeKey)
+	if err != nil {
+		return fmt.Errorf("queue email: %w", err)
+	}
 	return nil
 }

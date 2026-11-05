@@ -1,4 +1,6 @@
 // backend/main.go
+
+
 package main
 
 import (
@@ -15,9 +17,11 @@ import (
 	"github.com/eventify/backend/pkg/db"
 	"github.com/eventify/backend/pkg/routes"
 	"github.com/eventify/backend/pkg/utils"
+	"github.com/joho/godotenv" //(https://github.com/joho/godotenv)"
+	"github.com/rs/zerolog/log"
+	"github.com/gin-gonic/gin"
 
-
-
+	
 	// Repositories (aliased)
 	repoauth "github.com/eventify/backend/pkg/repository/auth"
 	repoevent "github.com/eventify/backend/pkg/repository/event"
@@ -25,22 +29,24 @@ import (
 	repoinquiries "github.com/eventify/backend/pkg/repository/inquiries"
 	repoorder "github.com/eventify/backend/pkg/repository/order"
 	reporeview "github.com/eventify/backend/pkg/repository/review"
-	repovendor "github.com/eventify/backend/pkg/repository/vendor"
 	reposubscription "github.com/eventify/backend/pkg/repository/subscription"
+	repovendor "github.com/eventify/backend/pkg/repository/vendor"
+	repowebhook "github.com/eventify/backend/pkg/repository/webhook"
 
 	// Services (aliased)
 	serviceanalytics "github.com/eventify/backend/pkg/services/analytics"
+	serviceauth "github.com/eventify/backend/pkg/services/auth"
+	serviceemail "github.com/eventify/backend/pkg/services/email"
 	serviceevent "github.com/eventify/backend/pkg/services/event"
 	servicefeedback "github.com/eventify/backend/pkg/services/feedback"
 	serviceinquiries "github.com/eventify/backend/pkg/services/inquiries"
 	servicejwt "github.com/eventify/backend/pkg/services/jwt"
-	serviceauth "github.com/eventify/backend/pkg/services/auth"
 	serviceorder "github.com/eventify/backend/pkg/services/order"
+	servicepaystack "github.com/eventify/backend/pkg/services/paystack"
 	servicepricing "github.com/eventify/backend/pkg/services/pricing"
 	servicereview "github.com/eventify/backend/pkg/services/review"
-	servicevendor "github.com/eventify/backend/pkg/services/vendor"
-	servicepaystack  "github.com/eventify/backend/pkg/services/paystack"
 	servicesubscription "github.com/eventify/backend/pkg/services/subscription"
+	servicevendor "github.com/eventify/backend/pkg/services/vendor"
 
 	// Handlers (aliased)
 	handleranalytics "github.com/eventify/backend/pkg/handlers/analytics"
@@ -50,11 +56,9 @@ import (
 	handlerinquiries "github.com/eventify/backend/pkg/handlers/inquiries"
 	handlerorder "github.com/eventify/backend/pkg/handlers/order"
 	handlerreview "github.com/eventify/backend/pkg/handlers/review"
-	handlervendor "github.com/eventify/backend/pkg/handlers/vendor"
 	handlersubscription "github.com/eventify/backend/pkg/handlers/subscription"
+	handlervendor "github.com/eventify/backend/pkg/handlers/vendor"
 
-	"github.com/gin-gonic/gin"
-	"github.com/rs/zerolog/log"
 )
 
 const serviceName = "eventify-api"
@@ -62,27 +66,29 @@ const serviceName = "eventify-api"
 // startTokenCleanup schedules periodic cleanup of expired refresh tokens
 func startTokenCleanup(refreshRepo repoauth.RefreshTokenRepository, authRepo repoauth.AuthRepository) {
 	ticker := time.NewTicker(24 * time.Hour)
-	
-	// Helper to run both cleanups
-	runCleanup := func() {
-		ctx := context.Background()
-		
-		// 1. Clean up Expired Refresh Tokens
-		deletedTokens, err := refreshRepo.CleanupExpiredTokens(ctx)
-		if err != nil {
-			utils.LogError(serviceName, "token-cleanup", "Refresh token cleanup failed", err)
-		} else if deletedTokens > 0 {
-			utils.LogInfo(serviceName, "token-cleanup", fmt.Sprintf("🧹 Cleaned up %d expired refresh tokens", deletedTokens))
-		}
 
-		// 2. NEW: Clean up Expired Blacklisted Access Tokens
-		deletedBlacklist, err := authRepo.CleanupBlacklist(ctx)
-		if err != nil {
-			utils.LogError(serviceName, "token-cleanup", "Blacklist cleanup failed", err)
-		} else if deletedBlacklist > 0 {
-			utils.LogInfo(serviceName, "token-cleanup", fmt.Sprintf("🛡️ Cleaned up %d expired blacklist entries", deletedBlacklist))
-		}
-	}
+	// Helper to run both cleanups
+runCleanup := func() {
+        ctx := context.Background()
+
+        // 1. Clean up Expired Refresh Tokens
+        deletedTokens, err := refreshRepo.CleanupExpiredTokens(ctx)
+        if err != nil {
+            utils.LogError(serviceName, "token-cleanup", "Refresh token cleanup failed", err)
+        } else if deletedTokens > 0 {
+            // ✅ Fix: Pass the format string and variable directly
+            utils.LogInfo(serviceName, "token-cleanup", "🧹 Cleaned up %d expired refresh tokens", deletedTokens)
+        }
+
+        // 2. NEW: Clean up Expired Blacklisted Access Tokens
+        deletedBlacklist, err := authRepo.CleanupBlacklist(ctx)
+        if err != nil {
+            utils.LogError(serviceName, "token-cleanup", "Blacklist cleanup failed", err)
+        } else if deletedBlacklist > 0 {
+            // ✅ Fix: Pass the format string and variable directly
+            utils.LogInfo(serviceName, "token-cleanup", "🛡️ Cleaned up %d expired blacklist entries", deletedBlacklist)
+        }
+    }
 
 	// Initial cleanup on startup
 	go runCleanup()
@@ -98,14 +104,79 @@ func startTokenCleanup(refreshRepo repoauth.RefreshTokenRepository, authRepo rep
 }
 
 func main() {
-	// ============================================================================
-	// STEP 1: LOGGING CONFIGURATION
-	// ============================================================================
-	utils.InitLogger()
-	env := os.Getenv("NODE_ENV")
-	if env == "" {
-		env = "development"
+
+// ============================================================================
+    // STEP 0: LOAD ENVIRONMENT VARIABLES & VERIFY VITAL CONFIGS
+    // ============================================================================
+    envPaths := []string{".env", "backend/.env"}
+    if p := os.Getenv("EVENTIFY_ENV_FILE"); p != "" {
+        envPaths = []string{p}
+    }
+    loaded := false
+    for _, p := range envPaths {
+        if err := godotenv.Load(p); err == nil {
+            log.Info().Str("path", p).Msg("Loaded environment file")
+            loaded = true
+            break
+        }
+    }
+    if !loaded {
+        log.Info().Msg("No .env file found; using the process environment")
+    }
+
+    // Print current working directory for debugging
+    // Print current working directory and verify required settings by name only.
+	// No part of any secret value is ever logged.
+	wd, _ := os.Getwd()
+	log.Info().Str("working_dir", wd).Msg("Current working directory")
+
+	missing := false
+	for _, k := range []string{"PAYSTACK_SECRET_KEY", "POSTGRES_URI"} {
+		if os.Getenv(k) == "" {
+			log.Error().Str("key", k).Msg("required environment variable is not set")
+			missing = true
+		}
 	}
+	
+	if missing && os.Getenv("GIN_MODE") == "release" {
+		log.Fatal().Msg("refusing to start in release mode with missing configuration")
+	}
+
+    // List of all vital environment variables required by your server
+    // vitalEnvs := []string{
+    //     "PAYSTACK_SECRET_KEY",
+    //     "DATABASE_URL",
+    //     "PORT",
+    //     // Add any other vital keys your app needs here (e.g., "JWT_SECRET", "CLIENT_URL")
+    // }
+
+    // Loop through each vital env, validate it, and print a redacted version (last 4 chars)
+    // for _, envKey := range vitalEnvs {
+    //     val := os.Getenv(envKey)
+    //     if val == "" {
+    //         log.Error().Str("key", envKey).Msg("❌ CRITICAL: Vital environment variable is EMPTY!")
+    //     } else {
+    //         // Redact everything except the last 4 characters
+    //         masked := "****"
+    //         if len(val) > 4 {
+    //             masked = "****" + val[len(val)-4:]
+    //         }
+    //         log.Info().
+    //             Str("key", envKey).
+    //             Str("masked_value", masked).
+    //             Msg("✅ Environment variable verified")
+    //     }
+    // }
+
+
+    // ============================================================================
+    // STEP 1: LOGGING CONFIGURATION
+    // ============================================================================
+    utils.InitLogger()
+    env := os.Getenv("NODE_ENV")
+    if env == "" {
+        env = "development"
+    }
 
 	utils.LogInfo(serviceName, "startup", "🚀 Starting Eventify API [env=%s]", env)
 
@@ -153,37 +224,37 @@ func main() {
 	eventRepo := repoevent.NewPostgresEventRepository(dbClient)
 
 	analyticsRepo := analytics.NewPostgresAnalyticsRepository(dbClient)
-    vendorAnalyticsOptimizedRepo := repovendor.NewVendorAnalyticsOptimizedRepository(dbClient)
+	vendorAnalyticsOptimizedRepo := repovendor.NewVendorAnalyticsOptimizedRepository(dbClient)
 	vendorLeaderboardRepo := repovendor.NewVendorLeaderboardRepo(dbClient)
 	subscriptionRepo := reposubscription.NewSubscriptionRepository(dbClient)
 
 	utils.LogSuccess(serviceName, "repositories", "All repositories initialized")
 
-// STEP 6: SERVICE INITIALIZATION
+	// STEP 6: SERVICE INITIALIZATION
 
-authService := serviceauth.NewAuthService(
-    authRepo, 
-    refreshTokenRepo, 
-    vendorRepo,
-    eventRepo,
-    jwtService,
-)
+	authService := serviceauth.NewAuthService(
+		authRepo,
+		refreshTokenRepo,
+		vendorRepo,
+		eventRepo,
+		jwtService,
+	)
 	eventService := serviceevent.NewEventService(dbClient, eventRepo)
 	vendorService := servicevendor.NewVendorService(vendorRepo)
 	reviewService := servicereview.NewReviewService(reviewRepo, vendorRepo, inquiryRepo)
 	inquiryService := serviceinquiries.NewInquiryService(inquiryRepo, inquiryRepo, vendorRepo)
 	feedbackService := servicefeedback.NewFeedbackService(feedbackRepo)
 	analyticsService := serviceanalytics.NewAnalyticsService(analyticsRepo)
-	
-vendorAnalyticsService := servicevendor.NewVendorAnalyticsService(
-    vendorAnalyticsOptimizedRepo,
-)
+
+	vendorAnalyticsService := servicevendor.NewVendorAnalyticsService(
+		vendorAnalyticsOptimizedRepo,
+	)
 	vendorLeaderboardService := servicevendor.NewVendorLeaderboardService(vendorLeaderboardRepo)
 
-paystackClient := servicepaystack.NewClient(
-    os.Getenv("PAYSTACK_SECRET_KEY"),
-    &http.Client{Timeout: 10 * time.Second},
-)
+	paystackClient := servicepaystack.NewClient(
+		os.Getenv("PAYSTACK_SECRET_KEY"),
+		&http.Client{Timeout: 10 * time.Second},
+	)
 
 	pricingService := servicepricing.NewPricingService(eventRepo)
 	orderService := serviceorder.NewOrderService(
@@ -192,7 +263,7 @@ paystackClient := servicepaystack.NewClient(
 		pricingService,
 		paystackClient,
 	)
-		subscriptionService := servicesubscription.NewSubscriptionService(
+	subscriptionService := servicesubscription.NewSubscriptionService(
 		vendorRepo,
 		subscriptionRepo,
 		authRepo,
@@ -212,32 +283,49 @@ paystackClient := servicepaystack.NewClient(
 	reviewHandler := handlerreview.NewReviewHandler(reviewService)
 	inquiryHandler := handlerinquiries.NewInquiryHandler(inquiryService)
 	feedbackHandler := handlerfeedback.NewFeedbackHandler(feedbackService)
-	orderHandler := handlerorder.NewOrderHandler(orderService)
-    eventHandler := handlerevent.NewEventHandler(eventService)
+	orderHandler := handlerorder.NewOrderHandler(orderService, subscriptionService).WithInbox(repowebhook.NewInbox(dbClient))
+	//orderHandler := handlerorder.NewOrderHandler(orderService, subscriptionService)
+	eventHandler := handlerevent.NewEventHandler(eventService)
 	analyticsHandler := handleranalytics.NewAnalyticsHandler(analyticsService)
-	
-    vendorAnalyticsHandler := handlervendor.NewVendorAnalyticsHandler(vendorAnalyticsService, dbClient)
+
+	vendorAnalyticsHandler := handlervendor.NewVendorAnalyticsHandler(vendorAnalyticsService, dbClient)
 	subscriptionHandler := handlersubscription.NewSubscriptionHandler(subscriptionService, vendorRepo)
 
 	utils.LogSuccess(serviceName, "handlers", "All handlers initialized")
 
-// ============================================================================
-// STEP 8: START BACKGROUND JOBS
-// ============================================================================
-log.Info().Msg("Starting background workers...")
-startTokenCleanup(refreshTokenRepo, authRepo) 
-go orderService.StartStockReleaseWorker(context.Background(), 1*time.Minute, 15*time.Minute)
-go subscriptionService.StartExpiryWorker(context.Background(), 1*time.Hour)
-go servicevendor.StartLeaderboardRefreshWorker(context.Background(), dbClient, 1*time.Hour)
-go servicevendor.StartAnalyticsRefreshWorker(
-	context.Background(),
-	dbClient,
-	1*time.Hour,
-)
-log.Info().Msg("All background workers started successfully")
+	// ============================================================================
+	// STEP 8: START BACKGROUND JOBS
+	// ============================================================================
+	workerCtx, stopWorkers := context.WithCancel(context.Background())
+	defer stopWorkers()
+
+	log.Info().Msg("Starting background workers...")
+
+	startTokenCleanup(refreshTokenRepo, authRepo)
+	go orderService.StartStockReleaseWorker(workerCtx, 1*time.Minute, 15*time.Minute)
+		subInterval := time.Hour
+	if d, err := time.ParseDuration(os.Getenv("SUBSCRIPTION_WORKER_INTERVAL")); err == nil && d > 0 {
+		subInterval = d
+	}
+	//go subscriptionService.StartExpiryWorker(context.Background(), subInterval)
+	go subscriptionService.StartExpiryWorker(workerCtx, subInterval)
+	go servicevendor.StartLeaderboardRefreshWorker(workerCtx, dbClient, 1*time.Hour)
+	go servicevendor.StartAnalyticsRefreshWorker(
+		workerCtx,
+		dbClient,
+		1*time.Hour,
+	)
+
+	if emailSender, err := serviceemail.NewSenderFromEnv(); err != nil {
+		utils.LogError(serviceName, "email", "Email worker NOT started", err)
+	} else {
+		go serviceemail.NewEmailWorker(dbClient, emailSender).Start(workerCtx, 5*time.Second)
+	}
+
+	log.Info().Msg("All background workers started successfully")
 
 	// STEP 9: ROUTER CONFIGURATION
-router := routes.ConfigureRouter(
+	router := routes.ConfigureRouter(
 		authHandler,              // 1
 		eventHandler,             // 2
 		vendorHandler,            // 3
@@ -246,7 +334,7 @@ router := routes.ConfigureRouter(
 		feedbackHandler,          // 6
 		orderHandler,             // 7
 		subscriptionHandler,      // 8
-		authRepo,                 // 9 
+		authRepo,                 // 9
 		analyticsHandler,         // 10
 		vendorAnalyticsHandler,   // 11
 		vendorLeaderboardHandler, // 12
@@ -267,17 +355,17 @@ router := routes.ConfigureRouter(
 	serverAddr := fmt.Sprintf(":%s", port)
 
 	srv := &http.Server{
-		Addr:         serverAddr,
-		Handler:      router,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 20 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              serverAddr,
+		Handler:           router,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      20 * time.Second,
+		IdleTimeout:       60 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	// Start server in goroutine
 	go func() {
-		utils.LogInfo(serviceName, "server", "🎉 Server listening on %s - All systems operational", serverAddr)
+		utils.LogInfo(serviceName, "server", "🎉 Server listening on %s All systems operational", serverAddr)
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal().
@@ -294,7 +382,9 @@ router := routes.ConfigureRouter(
 	// ============================================================================
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
 	<-quit
+	stopWorkers()
 
 	utils.LogWarn(serviceName, "shutdown", "Shutdown signal received - initiating graceful shutdown", nil)
 

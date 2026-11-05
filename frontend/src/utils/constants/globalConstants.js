@@ -255,7 +255,7 @@ export const SUBSCRIPTION_TIERS = {
   FEATURED: {
     id: "featured",
     name: "Featured",
-    price: 20000,
+    price: 25000,
     features: [
       "Top of Search Results",
       "Social Media Shoutout",

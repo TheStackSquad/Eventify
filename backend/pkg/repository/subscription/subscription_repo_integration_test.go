@@ -14,9 +14,11 @@ import (
 	"fmt"
 	"testing"
 	"time"
+	"sync"
 
 	"github.com/eventify/backend/pkg/models"
 	reposub "github.com/eventify/backend/pkg/repository/subscription"
+	"github.com/jmoiron/sqlx"
 	"github.com/eventify/backend/pkg/testhelper"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -516,3 +518,262 @@ func TestUniquePaymentReferenceConstraint(t *testing.T) {
 	_, err = repo.Create(ctx, sub2)
 	assert.Error(t, err, "unique_payment_reference constraint must reject duplicate references")
 }
+
+func (s *SubscriptionRepoSuite) TestPaymentLedger_CreateGetAndMarkFailed() {
+	db := testhelper.NewTestDB(s.T())
+	vendorID := testhelper.CreateTestVendor(s.T(), db, testhelper.VendorSeedOpts{})
+	ref := uuid.NewString()
+	p := &models.SubscriptionPayment{Reference: ref, VendorID: vendorID, Tier: models.TierPremium, AmountKobo: 1_000_000, Currency: "NGN"}
+
+	s.Require().NoError(s.repo.CreatePayment(s.ctx, p))
+	s.Error(s.repo.CreatePayment(s.ctx, p), "duplicate reference must be rejected")
+
+	got, err := s.repo.GetPaymentByReference(s.ctx, ref)
+	s.Require().NoError(err)
+	s.Equal(models.PaymentInitiated, got.Status)
+	s.Equal(int64(1_000_000), got.AmountKobo)
+
+	s.Require().NoError(s.repo.MarkPaymentFailed(s.ctx, ref, "gateway down"))
+	got, err = s.repo.GetPaymentByReference(s.ctx, ref)
+	s.Require().NoError(err)
+	s.Equal(models.PaymentFailed, got.Status)
+
+	_, err = s.repo.GetPaymentByReference(s.ctx, "nope")
+	s.ErrorIs(err, reposub.ErrPaymentNotFound)
+}
+
+func (s *SubscriptionRepoSuite) ledger(vendorID uuid.UUID, tier models.SubscriptionTier, kobo int64) string {
+	ref := uuid.NewString()
+	s.Require().NoError(s.repo.CreatePayment(s.ctx, &models.SubscriptionPayment{
+		Reference: ref, VendorID: vendorID, Tier: tier, AmountKobo: kobo, Currency: "NGN"}))
+	return ref
+}
+
+func paid(ref string, kobo int64, currency string) reposub.SettleInput {
+	now := time.Now().UTC()
+	return reposub.SettleInput{Reference: ref, PaidAmountKobo: kobo, PaidCurrency: currency, Channel: "card", PaidAt: now, Now: now}
+}
+
+func (s *SubscriptionRepoSuite) activeCount(db *sqlx.DB, vendorID uuid.UUID) int {
+	var n int
+	s.Require().NoError(db.Get(&n, `SELECT count(*) FROM subscriptions WHERE vendor_id = $1 AND status = 'active'`, vendorID))
+	return n
+}
+
+func (s *SubscriptionRepoSuite) TestSettle_NewSubscriber_ActivatesAndTriggerSyncsTier() {
+	db := testhelper.NewTestDB(s.T())
+	vendorID := testhelper.CreateTestVendor(s.T(), db, testhelper.VendorSeedOpts{SubscriptionTier: "free"})
+	ref := s.ledger(vendorID, models.TierPremium, 1_000_000)
+
+	out, err := s.repo.SettlePayment(s.ctx, paid(ref, 1_000_000, "NGN"))
+
+	s.Require().NoError(err)
+	s.Equal(reposub.SettleApplied, out)
+	sub, err := s.repo.GetActiveByVendorID(s.ctx, vendorID)
+	s.Require().NoError(err)
+	s.Require().NotNil(sub)
+	s.Equal(models.TierPremium, sub.Tier)
+	s.WithinDuration(models.NextExpiry(time.Now().UTC(), time.Time{}), sub.ExpiresAt.Time, 10*time.Second)
+	var tier string
+	s.Require().NoError(db.Get(&tier, `SELECT subscription_tier FROM vendors WHERE id = $1`, vendorID))
+	s.Equal("premium", tier, "the trigger is the only writer of vendors.subscription_tier")
+	p, err := s.repo.GetPaymentByReference(s.ctx, ref)
+	s.Require().NoError(err)
+	s.Equal(models.PaymentApplied, p.Status)
+}
+
+func (s *SubscriptionRepoSuite) TestSettle_Renewal_ExtendsFromCurrentExpiry() {
+	db := testhelper.NewTestDB(s.T())
+	vendorID := testhelper.CreateTestVendor(s.T(), db, testhelper.VendorSeedOpts{})
+	subID := testhelper.CreateTestSubscription(s.T(), db, testhelper.SubscriptionSeedOpts{
+		VendorID: vendorID, Tier: "premium", Status: "active"})
+	oldExpiry := time.Now().UTC().Add(5 * 24 * time.Hour)
+	db.MustExec(`UPDATE subscriptions SET expires_at = $2 WHERE id = $1`, subID, oldExpiry)
+	ref := s.ledger(vendorID, models.TierPremium, 1_000_000)
+
+	out, err := s.repo.SettlePayment(s.ctx, paid(ref, 1_000_000, "NGN"))
+
+	s.Require().NoError(err)
+	s.Equal(reposub.SettleApplied, out)
+	got, err := s.repo.GetByID(s.ctx, subID)
+	s.Require().NoError(err)
+	s.WithinDuration(models.NextExpiry(time.Now().UTC(), oldExpiry), got.ExpiresAt.Time, 10*time.Second)
+	s.Equal(ref, got.PaymentReference.String)
+	s.Equal(1, s.activeCount(db, vendorID), "renewal extends the row; it never adds one")
+}
+
+func (s *SubscriptionRepoSuite) TestSettle_LapsedButUnsweptRow_IsExpiredAndReplaced() {
+	db := testhelper.NewTestDB(s.T())
+	vendorID := testhelper.CreateTestVendor(s.T(), db, testhelper.VendorSeedOpts{})
+	oldID := testhelper.CreateTestSubscription(s.T(), db, testhelper.SubscriptionSeedOpts{
+		VendorID: vendorID, Tier: "premium", Status: "active"})
+	db.MustExec(`UPDATE subscriptions SET expires_at = $2 WHERE id = $1`, oldID, time.Now().UTC().Add(-24*time.Hour))
+	ref := s.ledger(vendorID, models.TierPremium, 1_000_000)
+
+	out, err := s.repo.SettlePayment(s.ctx, paid(ref, 1_000_000, "NGN"))
+
+	s.Require().NoError(err)
+	s.Equal(reposub.SettleApplied, out)
+	old, err := s.repo.GetByID(s.ctx, oldID)
+	s.Require().NoError(err)
+	s.Equal(models.SubStatusExpired, old.Status)
+	cur, err := s.repo.GetActiveByVendorID(s.ctx, vendorID)
+	s.Require().NoError(err)
+	s.Require().NotNil(cur)
+	s.NotEqual(oldID, cur.ID)
+	s.WithinDuration(models.NextExpiry(time.Now().UTC(), time.Time{}), cur.ExpiresAt.Time, 10*time.Second)
+}
+
+func (s *SubscriptionRepoSuite) TestSettle_WrongAmountOrCurrency_HeldForReview_NothingActivated() {
+	db := testhelper.NewTestDB(s.T())
+	vendorID := testhelper.CreateTestVendor(s.T(), db, testhelper.VendorSeedOpts{})
+	ref := s.ledger(vendorID, models.TierPremium, 1_000_000)
+
+	out, err := s.repo.SettlePayment(s.ctx, paid(ref, 100, "NGN"))
+	s.Require().NoError(err)
+	s.Equal(reposub.SettleNeedsReview, out)
+
+	ref2 := s.ledger(vendorID, models.TierPremium, 1_000_000)
+	out, err = s.repo.SettlePayment(s.ctx, paid(ref2, 1_000_000, "USD"))
+	s.Require().NoError(err)
+	s.Equal(reposub.SettleNeedsReview, out)
+
+	s.Equal(0, s.activeCount(db, vendorID))
+	p, err := s.repo.GetPaymentByReference(s.ctx, ref)
+	s.Require().NoError(err)
+	s.Equal(models.PaymentNeedsReview, p.Status)
+	s.True(p.ReviewReason.Valid)
+
+	// a held payment is never auto-applied later, even if a retry looks correct
+	out, err = s.repo.SettlePayment(s.ctx, paid(ref, 1_000_000, "NGN"))
+	s.Require().NoError(err)
+	s.Equal(reposub.SettleNeedsReview, out)
+	s.Equal(0, s.activeCount(db, vendorID))
+}
+
+func (s *SubscriptionRepoSuite) TestSettle_SecondCallIsNoOp_AndUnknownReferenceErrors() {
+	db := testhelper.NewTestDB(s.T())
+	vendorID := testhelper.CreateTestVendor(s.T(), db, testhelper.VendorSeedOpts{})
+	ref := s.ledger(vendorID, models.TierBasic, 350_000)
+
+	first, err := s.repo.SettlePayment(s.ctx, paid(ref, 350_000, "NGN"))
+	s.Require().NoError(err)
+	
+	before, err := s.repo.GetActiveByVendorID(s.ctx, vendorID)
+	s.Require().NoError(err)
+	s.Require().NotNil(before)
+
+	second, err := s.repo.SettlePayment(s.ctx, paid(ref, 350_000, "NGN"))
+	s.Require().NoError(err)
+	
+	after, err := s.repo.GetActiveByVendorID(s.ctx, vendorID)
+	s.Require().NoError(err)
+	s.Require().NotNil(after)
+
+	s.Equal(reposub.SettleApplied, first)
+	s.Equal(reposub.SettleAlreadyApplied, second)
+	s.True(before.ExpiresAt.Time.Equal(after.ExpiresAt.Time), "a repeat must not extend the expiry")
+
+	_, err = s.repo.SettlePayment(s.ctx, paid("nope", 1, "NGN"))
+	s.ErrorIs(err, reposub.ErrPaymentNotFound)
+}
+func (s *SubscriptionRepoSuite) TestSettle_ConcurrentSameReference_AppliesExactlyOnce() {
+	db := testhelper.NewTestDB(s.T())
+	vendorID := testhelper.CreateTestVendor(s.T(), db, testhelper.VendorSeedOpts{})
+	ref := s.ledger(vendorID, models.TierPremium, 1_000_000)
+
+	const workers = 8
+	outcomes := make([]reposub.SettleOutcome, workers)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			out, err := s.repo.SettlePayment(s.ctx, paid(ref, 1_000_000, "NGN"))
+			s.NoError(err)
+			outcomes[i] = out
+		}(i)
+	}
+	wg.Wait()
+
+	applied := 0
+	for _, o := range outcomes {
+		if o == reposub.SettleApplied {
+			applied++
+		}
+	}
+	s.Equal(1, applied, "a webhook and a verify call racing must credit once")
+	s.Equal(1, s.activeCount(db, vendorID))
+}
+
+func (s *SubscriptionRepoSuite) TestSettle_TwoPaymentsSameVendorConcurrently_NothingLost() {
+	db := testhelper.NewTestDB(s.T())
+	vendorID := testhelper.CreateTestVendor(s.T(), db, testhelper.VendorSeedOpts{})
+	refs := []string{
+		s.ledger(vendorID, models.TierPremium, 1_000_000),
+		s.ledger(vendorID, models.TierPremium, 1_000_000),
+	}
+
+	var wg sync.WaitGroup
+	for _, ref := range refs {
+		wg.Add(1)
+		go func(ref string) {
+			defer wg.Done()
+			_, err := s.repo.SettlePayment(s.ctx, paid(ref, 1_000_000, "NGN"))
+			s.NoError(err)
+		}(ref)
+	}
+	wg.Wait()
+
+	s.Equal(1, s.activeCount(db, vendorID), "two tabs, two payments: still one active row")
+	var applied int
+	s.Require().NoError(db.Get(&applied,
+		`SELECT count(*) FROM subscription_payments WHERE vendor_id = $1 AND status = 'applied'`, vendorID))
+	s.Equal(2, applied, "both payments are credited")
+	sub, err := s.repo.GetActiveByVendorID(s.ctx, vendorID)
+	s.Require().NoError(err)
+	now := time.Now().UTC()
+	s.WithinDuration(models.NextExpiry(now, models.NextExpiry(now, time.Time{})), sub.ExpiresAt.Time, 10*time.Second,
+		"the vendor receives two paid months")
+}
+
+func (s *SubscriptionRepoSuite) TestIncrementWebhookAttempts_CountsOnLedgerWhileStillInitiated() {
+	db := testhelper.NewTestDB(s.T())
+	vendorID := testhelper.CreateTestVendor(s.T(), db, testhelper.VendorSeedOpts{})
+	ref := s.ledger(vendorID, models.TierBasic, 350_000)
+
+	s.Require().NoError(s.repo.IncrementWebhookAttempts(s.ctx, ref))
+	s.Require().NoError(s.repo.IncrementWebhookAttempts(s.ctx, ref))
+
+	p, err := s.repo.GetPaymentByReference(s.ctx, ref)
+	s.Require().NoError(err)
+	s.Equal(2, p.WebhookAttempts)
+}
+
+func (s *SubscriptionRepoSuite) TestReconcileWindow_AndAbandon() {
+	db := testhelper.NewTestDB(s.T())
+	vendorID := testhelper.CreateTestVendor(s.T(), db, testhelper.VendorSeedOpts{})
+	fresh := s.ledger(vendorID, models.TierBasic, 350_000)
+	due := s.ledger(vendorID, models.TierBasic, 350_000)
+	stale := s.ledger(vendorID, models.TierBasic, 350_000)
+	db.MustExec(`UPDATE subscription_payments SET created_at = now() - interval '30 minutes' WHERE reference = $1`, due)
+	db.MustExec(`UPDATE subscription_payments SET created_at = now() - interval '80 hours' WHERE reference = $1`, stale)
+
+	now := time.Now().UTC()
+	refs, err := s.repo.ListInitiatedBetween(s.ctx, now.Add(-72*time.Hour), now.Add(-10*time.Minute), 1000)
+	s.Require().NoError(err)
+	s.Contains(refs, due)
+	s.NotContains(refs, fresh, "too new: the webhook and redirect get first go")
+	s.NotContains(refs, stale, "too old: abandoned, not reconciled")
+
+	n, err := s.repo.AbandonStalePayments(s.ctx, now.Add(-72*time.Hour))
+	s.Require().NoError(err)
+	s.GreaterOrEqual(n, int64(1))
+	p, err := s.repo.GetPaymentByReference(s.ctx, stale)
+	s.Require().NoError(err)
+	s.Equal(models.PaymentFailed, p.Status)
+	p, err = s.repo.GetPaymentByReference(s.ctx, fresh)
+	s.Require().NoError(err)
+	s.Equal(models.PaymentInitiated, p.Status)
+}
+

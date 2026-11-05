@@ -416,13 +416,22 @@ export default function Header() {
       <header className="w-full sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 md:h-20">
-            <Link href="/" className="group flex-shrink-0">
+            <Link
+              href="/"
+              className="group flex-shrink-0"
+              aria-label="Bandhit home"
+            >
               <motion.div
-                className="text-lg font-display font-bold text-gray-900 transition-all duration-300 group-hover:text-primary group-hover:scale-105"
+                className="flex w-fit flex-col items-center"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                Bandhit
+                <span className="font-display text-lg font-bold leading-none text-gray-900 transition-colors duration-300 group-hover:text-primary">
+                  Bandhit
+                </span>
+                <span className="mt-1.5 whitespace-nowrap font-display text-[10px] font-medium tracking-wide text-gray-500">
+                  One Band. Every Event.
+                </span>
               </motion.div>
             </Link>
 

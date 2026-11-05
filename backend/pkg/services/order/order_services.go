@@ -48,12 +48,12 @@ type OrderService interface {
 // IMPLEMENTATION
 
 type OrderServiceImpl struct {
-	OrderRepo       repoorder.OrderRepository
-	EventRepo       repoevent.EventRepository
-	PricingService  PricingService
-	PaystackClient  paystack.Client
-	FrontendBaseURL string
-	PaystackSecret  string
+    OrderRepo      repoorder.OrderRepository
+    EventRepo      repoevent.EventRepository
+    PricingService PricingService
+    PaystackClient paystack.Client
+    FrontendURL    string
+    PaystackSecret string
 }
 
 func NewOrderService(
@@ -62,12 +62,14 @@ func NewOrderService(
 	pricingService PricingService,
 	psClient paystack.Client,
 ) OrderService {
+	feURL, _ := utils.FrontendBaseURL()
 	return &OrderServiceImpl{
 		OrderRepo:       orderRepo,
 		EventRepo:       eventRepo,
 		PricingService:  pricingService,
 		PaystackClient:  psClient,
-		FrontendBaseURL: os.Getenv("FRONTEND_BASE_URL"),
+		//FrontendBaseURL: os.Getenv("FRONTEND_BASE_URL"),
+		FrontendURL:    feURL,
 		PaystackSecret:  os.Getenv("PAYSTACK_SECRET_KEY"),
 	}
 }
@@ -145,7 +147,7 @@ func (s *OrderServiceImpl) InitializePendingOrder(
 	}
 
 	// 5. EXTERNAL HANDSHAKE
-	callbackURL := fmt.Sprintf("%s/checkout/confirmation", s.FrontendBaseURL)
+	callbackURL := fmt.Sprintf("%s/checkout/confirmation", s.FrontendURL)
 	metadata := map[string]string{
 		"payment_type": "ticket_purchase",
 		"order_id":     pendingOrder.ID.String(),
@@ -161,10 +163,10 @@ func (s *OrderServiceImpl) InitializePendingOrder(
 		callbackURL,
 	)
 
-	if err != nil {
-		// Note: We don't rollback the DB here. If Paystack fails, the order stays 'pending'
-		// and the StockReleaseWorker will recover the stock after the timeout.
-		return nil, "", fmt.Errorf("payment gateway initialization failed: %w", err)
+		if err != nil {
+		// Nobody can pay for this order: give the tickets back now instead of holding them for 15 minutes.
+		s.releaseFailedInitialization(pendingOrder)
+		return nil, "", fmt.Errorf("%w: %w", ErrPaymentGatewayUnavailable, err)
 	}
 
 	return pendingOrder, authURL, nil

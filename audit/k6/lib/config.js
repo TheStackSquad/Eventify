@@ -1,6 +1,6 @@
 //audit/k6/lib/config.
 
-export const BASE = __ENV.BASE_URL || "http://localhost:8081";
+export const BASE = __ENV.BASE_URL || "http://localhost:18081";
 export const STUB = __ENV.STUB_URL || "http://localhost:9099";
 export const SECRET = __ENV.WEBHOOK_SECRET || "sk_test_local_loadtest_only";
 const SPOOF = __ENV.SPOOF_IP !== "0"; // see finding E: each fake IP gets its own limiter bucket

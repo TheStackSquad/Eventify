@@ -94,9 +94,9 @@ export const SUBSCRIPTION_TIERS = {
   FEATURED: {
     id: "featured",
     name: "Featured",
-    price: 20000,
-    priceKobo: 2000000,
-    priceDisplay: "₦20,000",
+    price: 25000,
+    priceKobo: 2500000,
+    priceDisplay: "₦25,000",
     billingCycle: "month",
     recommended: false,
     badge: { show: true, text: "Gold", color: "#FFD700", icon: "🥇" },

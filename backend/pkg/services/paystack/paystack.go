@@ -14,6 +14,9 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"errors"
+	"net/url"
+	//"time"
 
 	"github.com/eventify/backend/pkg/models"
 )
@@ -21,6 +24,12 @@ import (
 // ---------------------------------------------------------------------------
 // Client interface — both order and subscription inject this
 // ---------------------------------------------------------------------------
+
+var (
+	ErrTransactionNotFound = errors.New("paystack: transaction not found")
+	ErrUnavailable         = errors.New("paystack: gateway unavailable") // network, 5xx, 429, unreadable body
+	ErrRejected            = errors.New("paystack: request rejected")    // other 4xx, e.g. bad key
+)
 
 // Client handles all external Paystack API communications.
 type Client interface {
@@ -135,37 +144,47 @@ func (c *ClientImpl) InitializeTransaction(ctx context.Context, email string, am
 // ---------------------------------------------------------------------------
 
 func (c *ClientImpl) VerifyTransaction(ctx context.Context, reference string) (*models.PaystackVerificationResponse, error) {
-	url := fmt.Sprintf("%s/transaction/verify/%s", c.base(), reference)
+	endpoint := fmt.Sprintf("%s/transaction/verify/%s", c.base(), url.PathEscape(reference))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("paystack verify: failed to create request: %w", err)
 	}
-
 	req.Header.Set("Authorization", "Bearer "+c.SecretKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("paystack verify: request failed: %w", err)
+		return nil, fmt.Errorf("%w: verify request failed: %v", ErrUnavailable, err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("paystack verify: returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("%w: reading verify response: %v", ErrUnavailable, err)
 	}
 
-	var paystackResponse models.PaystackVerificationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&paystackResponse); err != nil {
-		return nil, fmt.Errorf("paystack verify: failed to decode response: %w", err)
+	switch {
+	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
+		return nil, fmt.Errorf("%w: status %d", ErrUnavailable, resp.StatusCode)
+	case resp.StatusCode != http.StatusOK:
+		// Paystack reports unknown references as a 4xx "not found" message.
+		var e struct{ Message string `json:"message"` }
+		_ = json.Unmarshal(body, &e)
+		if resp.StatusCode == http.StatusNotFound || strings.Contains(strings.ToLower(e.Message), "not found") {
+			return nil, ErrTransactionNotFound
+		}
+		return nil, fmt.Errorf("%w: status %d", ErrRejected, resp.StatusCode)
 	}
 
-	if !paystackResponse.Status {
-		return nil, fmt.Errorf("paystack verify: %s", paystackResponse.Message)
+	var out models.PaystackVerificationResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("%w: undecodable verify response: %v", ErrUnavailable, err)
 	}
-
-	return &paystackResponse, nil
+	if !out.Status {
+		return nil, fmt.Errorf("%w: %s", ErrRejected, out.Message)
+	}
+	return &out, nil
 }
 
 // ---------------------------------------------------------------------------

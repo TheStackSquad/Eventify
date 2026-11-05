@@ -40,6 +40,7 @@ type OrderRepository interface {
 	InsertOrderItemsTx(ctx context.Context, tx *sqlx.Tx, order *models.Order) error
 	InsertTicketsTx(ctx context.Context, tx *sqlx.Tx, order *models.Order, tickets []models.Ticket) error
 	QueueEmailTx(ctx context.Context, tx *sqlx.Tx, outbox *models.EmailOutbox) error
+	QueueEmailOnceTx(ctx context.Context, tx *sqlx.Tx, outbox *models.EmailOutbox, dedupeKey string) error
 	LoadOrderRelations(ctx context.Context, order *models.Order) error
 }
 
@@ -189,6 +190,20 @@ func (r *PostgresOrderRepository) QueueEmailTx(ctx context.Context, tx *sqlx.Tx,
 		VALUES (:recipient_email, :subject, :template_type, :payload, :status)`
 	
 	_, err := tx.NamedExecContext(ctx, query, outbox)
+	if err != nil {
+		return fmt.Errorf("failed to queue email: %w", err)
+	}
+	return nil
+}
+
+// QueueEmailOnceTx queues an email in the caller's transaction. A second call with the same
+// dedupeKey is ignored, so one order can never queue two ticket emails.
+func (r *PostgresOrderRepository) QueueEmailOnceTx(ctx context.Context, tx *sqlx.Tx, o *models.EmailOutbox, dedupeKey string) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO email_outbox (recipient_email, subject, template_type, payload, status, dedupe_key)
+		VALUES ($1, $2, $3, $4::jsonb, 'pending', $5)
+		ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
+		o.RecipientEmail, o.Subject, o.TemplateType, string(o.Payload), dedupeKey)
 	if err != nil {
 		return fmt.Errorf("failed to queue email: %w", err)
 	}

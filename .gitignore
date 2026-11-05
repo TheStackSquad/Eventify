@@ -54,3 +54,9 @@ audit/env/*.env
 audit/docker/keys/
 
 audit/k6/data/
+
+eventify_backup.dump
+*.dump
+audit/docker/.env
+audit/config/audit.env
+audit/results/raw/

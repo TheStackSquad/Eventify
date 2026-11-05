@@ -1,6 +1,10 @@
 // backend/pkg/models/paystack_models.go
 package models
 
+import(
+	"encoding/json"
+)
+
 // PAYSTACK WEBHOOK MODELS
 
 // PaystackWebhook represents the webhook payload sent by Paystack.
@@ -10,6 +14,16 @@ type PaystackWebhook struct {
 	Data  *PaystackData `json:"data"`
 }
 
+type webhookEvent struct {
+	Event string `json:"event"`
+	Data  struct {
+		Reference string          `json:"reference"`
+		Status    string          `json:"status"`
+		Amount    int64           `json:"amount"`
+		Currency  string          `json:"currency"`
+		Metadata  json.RawMessage `json:"metadata"` // an object, null, or occasionally a string
+	} `json:"data"`
+}
 // ============================================================================
 // PAYSTACK VERIFICATION RESPONSE
 // ============================================================================
@@ -73,7 +87,7 @@ type PaystackData struct {
 	Subaccount         interface{} `json:"subaccount"`
 	Connect            interface{} `json:"connect"`
 	PosTransactionData interface{} `json:"pos_transaction_data"`
-	Source             *string     `json:"source"`
+	Source             interface{} `json:"source,omitempty"`
 }
 
 // ============================================================================
@@ -127,8 +141,8 @@ type PaystackMetadata struct {
 	Reference    string      `json:"reference"`
 	Timestamp    string      `json:"timestamp"`
 	CustomerInfo interface{} `json:"customer_info,omitempty"`
-	CartItems    string      `json:"cart_items,omitempty"`
-	Referrer     string      `json:"referrer,omitempty"`
+	CartItems    interface{} `json:"cart_items,omitempty"`
+	Referrer     interface{} `json:"referrer,omitempty"`
 	
 	// Structured custom fields
 	CustomFields []CustomField `json:"custom_fields,omitempty"`
@@ -138,7 +152,7 @@ type PaystackMetadata struct {
 type CustomField struct {
 	DisplayName  string `json:"display_name"`
 	VariableName string `json:"variable_name"`
-	Value        string `json:"value"`
+	Value        interface{} `json:"value"`
 }
 
 // ============================================================================

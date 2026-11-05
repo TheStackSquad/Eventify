@@ -62,7 +62,7 @@ export function usePaymentVerification(trxref) {
           if (retryCount < 3) {
             const backoffDelay = Math.min(
               3000 * Math.pow(1.5, retryCount),
-              10000
+              10000,
             );
 
             retryTimeoutRef.current = setTimeout(() => {
@@ -78,15 +78,35 @@ export function usePaymentVerification(trxref) {
           setVerificationStatus("failed");
         }
       } catch (error) {
-        hasVerifiedRef.current = true;
+        const status = error.response?.status;
+        const code = error.response?.data?.code;
 
-        if (error.response?.status === 404) {
-          setVerificationStatus("not_found");
-        } else if (error.response?.status === 400) {
-          setVerificationStatus("failed");
-        } else {
-          setVerificationStatus("error");
+        // Payment still in flight: keep polling instead of showing an error
+        if (status === 402 && code === "PAYMENT_PENDING") {
+          setVerificationStatus("pending");
+          if (retryCount < 3) {
+            const backoffDelay = Math.min(
+              3000 * Math.pow(1.5, retryCount),
+              10000,
+            );
+            retryTimeoutRef.current = setTimeout(() => {
+              setRetryCount((prev) => prev + 1);
+              hasVerifiedRef.current = false;
+            }, backoffDelay);
+          } else {
+            hasVerifiedRef.current = true;
+            setVerificationStatus("pending_timeout");
+          }
+          return;
         }
+
+        hasVerifiedRef.current = true;
+                if (status === 404) setVerificationStatus("not_found");
+                else if (status === 409 && code === "PAID_NOT_FULFILLED")
+                  setVerificationStatus("paid_not_fulfilled");
+                else if (status === 409 || status === 400)
+                  setVerificationStatus("failed");
+                else setVerificationStatus("error");
       }
     };
 

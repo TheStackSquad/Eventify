@@ -1,0 +1,38 @@
+?   	github.com/eventify/backend/pkg/analytics	[no test files]
+?   	github.com/eventify/backend/pkg/db	[no test files]
+?   	github.com/eventify/backend/pkg/handlers/analytics	[no test files]
+?   	github.com/eventify/backend/pkg/handlers/auth	[no test files]
+?   	github.com/eventify/backend/pkg/handlers/event	[no test files]
+?   	github.com/eventify/backend/pkg/handlers/feedback	[no test files]
+?   	github.com/eventify/backend/pkg/handlers/inquiries	[no test files]
+?   	github.com/eventify/backend/pkg/handlers/order	[no test files]
+?   	github.com/eventify/backend/pkg/handlers/review	[no test files]
+?   	github.com/eventify/backend/pkg/handlers/subscription	[no test files]
+?   	github.com/eventify/backend/pkg/handlers/vendor	[no test files]
+ok  	github.com/eventify/backend/pkg/middleware	1.067s
+ok  	github.com/eventify/backend/pkg/models	1.030s
+ok  	github.com/eventify/backend/pkg/repository/auth	2.547s
+?   	github.com/eventify/backend/pkg/repository/event	[no test files]
+?   	github.com/eventify/backend/pkg/repository/feedback	[no test files]
+?   	github.com/eventify/backend/pkg/repository/inquiries	[no test files]
+?   	github.com/eventify/backend/pkg/repository/order	[no test files]
+?   	github.com/eventify/backend/pkg/repository/review	[no test files]
+ok  	github.com/eventify/backend/pkg/repository/subscription	21.445s
+ok  	github.com/eventify/backend/pkg/repository/vendor	31.545s
+?   	github.com/eventify/backend/pkg/routes	[no test files]
+?   	github.com/eventify/backend/pkg/services/analytics	[no test files]
+ok  	github.com/eventify/backend/pkg/services/auth	1.719s
+ok  	github.com/eventify/backend/pkg/services/email	1.037s
+?   	github.com/eventify/backend/pkg/services/event	[no test files]
+?   	github.com/eventify/backend/pkg/services/feedback	[no test files]
+?   	github.com/eventify/backend/pkg/services/inquiries	[no test files]
+ok  	github.com/eventify/backend/pkg/services/jwt	1.181s
+ok  	github.com/eventify/backend/pkg/services/order	1.356s
+ok  	github.com/eventify/backend/pkg/services/paystack	1.050s
+?   	github.com/eventify/backend/pkg/services/pricing	[no test files]
+?   	github.com/eventify/backend/pkg/services/review	[no test files]
+ok  	github.com/eventify/backend/pkg/services/subscription	1.031s
+ok  	github.com/eventify/backend/pkg/services/vendor	12.979s
+?   	github.com/eventify/backend/pkg/shared	[no test files]
+?   	github.com/eventify/backend/pkg/testhelper	[no test files]
+?   	github.com/eventify/backend/pkg/utils	[no test files]
