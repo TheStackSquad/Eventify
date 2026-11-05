@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"os"
 
 	"github.com/eventify/backend/pkg/models"
 	repoauth "github.com/eventify/backend/pkg/repository/auth"
@@ -21,6 +22,13 @@ import (
 type fakeVendorRepo struct {
 	repovendor.VendorRepository
 	vendor models.Vendor
+}
+
+func init() {
+    // Ensure test environment has a valid frontend URL fallback if not already provided
+    if os.Getenv("FRONTEND_BASE_URL") == "" && os.Getenv("FRONTEND_URL") == "" {
+        os.Setenv("FRONTEND_BASE_URL", "http://localhost:3000")
+    }
 }
 
 func (f fakeVendorRepo) GetByID(context.Context, uuid.UUID) (models.Vendor, error) {
