@@ -260,11 +260,18 @@ func (s *OrderServiceImpl) finalizeOrder(
 
     // 2. LOAD RELATIONS (CRITICAL FIX)
     // We fetch the Items (Venues, Dates, Titles) now so we can use them for the email payload.
-    // This call uses the updated OrderItem struct with all 17 database columns.
     if err := s.OrderRepo.LoadOrderRelations(ctx, order); err != nil {
-        log.Error().Err(err).Str("ref", order.Reference).Msg("Failed to hydrate order relations")
-        return order, fmt.Errorf("failed to load order details: %w", err)
-    }
+    // If this fails, the INNER JOIN found nothing. 
+    // We log it as a critical integrity failure.
+    log.Error().Err(err).Str("ref", order.Reference).Msg("CRITICAL: Order items missing event relations")
+    return order, err 
+}
+
+// Explicit Guard: Account for all fields before payload building
+firstItem := order.Items[0]
+if firstItem.EventTitle == "" || firstItem.EventStartDate.IsZero() {
+    return order, errors.New("incomplete event data: cannot finalize order")
+}
 
     // 3. PAYMENT STATUS CHECK
     if data.Status != "success" {

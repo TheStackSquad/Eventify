@@ -38,72 +38,82 @@ func NewOrderHandler(orderService serviceorder.OrderService) *OrderHandler {
 	}
 }
 
-
 func (h *OrderHandler) InitializeOrder(c *gin.Context) {
-	var req models.OrderInitializationRequest
+    var req models.OrderInitializationRequest
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Error().Err(err).Msg("400 Bad Request: Invalid order payload")
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid request format: " + err.Error()})
-		return
-	}
+    // 1. Bind JSON
+    if err := c.ShouldBindJSON(&req); err != nil {
+        log.Error().Err(err).Msg("400 Bad Request: Invalid order payload")
+        c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid request format"})
+        return
+    }
 
-	// 1. Extract Identity consistently
-	var userID *uuid.UUID
-	if val, exists := c.Get("user_id"); exists {
-		if u, ok := val.(uuid.UUID); ok {
-			userID = &u
-		}
-	}
+    // 2. ENFORCEMENT: Explicit Validation
+    // This accounts for all fields (EventID, TicketTierID, Quantity) as required.
+    if err := req.Validate(); err != nil {
+        log.Warn().Err(err).Msg("Validation failed for order initialization")
+        c.JSON(http.StatusUnprocessableEntity, gin.H{
+            "status":  "error",
+            "message": err.Error(),
+        })
+        return
+    }
 
-	// Try context first (from middleware), fallback to cookie for validation
-	guestIDVal, exists := c.Get("guest_id")
-	guestID := ""
-	if exists {
-		guestID = guestIDVal.(string)
-	} else {
-		guestID, _ = c.Cookie("guest_id")
-	}
+    // 3. Extract Identity
+    var userID *uuid.UUID
+    if val, exists := c.Get("user_id"); exists {
+        if u, ok := val.(uuid.UUID); ok {
+            userID = &u
+        }
+    }
 
-	if userID == nil && guestID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Identity could not be established."})
-		return
-	}
+    guestIDVal, exists := c.Get("guest_id")
+    guestID := ""
+    if exists {
+        guestID = guestIDVal.(string)
+    } else {
+        guestID, _ = c.Cookie("guest_id")
+    }
 
-	// 2. Initialize Order via Service
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
-	defer cancel()
+    if userID == nil && guestID == "" {
+        c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Identity could not be established."})
+        return
+    }
 
-	// NOTE: We expect InitializePendingOrder to now return the Order AND the Paystack Auth URL
-	order, authURL, err := h.OrderService.InitializePendingOrder(ctx, &req, userID, guestID)
+    // 4. Initialize Order via Service
+    // Increased timeout to 30s to handle Paystack latency + DB transactions safely
+    ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+    defer cancel()
 
-	if err != nil {
-		log.Error().Err(err).Msg("Order initialization failed")
-		
-		// Handle Sold Out / Stock issues with 409 Conflict
-		if strings.Contains(strings.ToLower(err.Error()), "stock") || 
-		   strings.Contains(strings.ToLower(err.Error()), "available") {
-			c.JSON(http.StatusConflict, gin.H{
-				"status": "error", 
-				"message": "One or more items are sold out or have insufficient stock.",
-			})
-			return
-		}
+    order, authURL, err := h.OrderService.InitializePendingOrder(ctx, &req, userID, guestID)
 
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to initialize order"})
-		return
-	}
+    if err != nil {
+        log.Error().Err(err).Msg("Order initialization failed")
+        
+        // Specific error handling for strict inventory rules
+        if strings.Contains(strings.ToLower(err.Error()), "stock") || 
+           strings.Contains(strings.ToLower(err.Error()), "available") {
+            c.JSON(http.StatusConflict, gin.H{
+                "status": "error", 
+                "message": "Insufficient stock for requested items.",
+            })
+            return
+        }
 
-	// 3. Return the payload for the frontend to redirect
-	c.JSON(http.StatusCreated, gin.H{
-		"status": "success",
-		"data": gin.H{
-			"reference":         order.Reference,
-			"order_id":          order.ID.String(),
-			"amount_kobo":       order.FinalTotal,
-			"authorization_url": authURL, // The frontend will use window.location.href = authURL
-		},
-	})
+        c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to initialize order"})
+        return
+    }
+
+    // 5. Successful Response
+    c.JSON(http.StatusCreated, gin.H{
+        "status": "success",
+        "data": gin.H{
+            "reference":         order.Reference,
+            "order_id":          order.ID.String(),
+            "amount_kobo":       order.FinalTotal,
+            "authorization_url": authURL,
+        },
+    })
 }
 
 func (h *OrderHandler) GetOrderByReference(c *gin.Context) {

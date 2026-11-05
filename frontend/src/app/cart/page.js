@@ -1,5 +1,4 @@
 // src/app/cart/page.js
-
 "use client";
 
 import { useMemo, useState } from "react";
@@ -9,20 +8,44 @@ import { useCart } from "@/context/cartContext";
 import CartUI from "@/components/cart/cartUI";
 import toastAlert from "@/components/common/toast/toastAlert";
 import Link from "next/link";
-import { useRouter } from "next/navigation"; 
-import { formatCurrency } from "@/utils/currency";
+import { useRouter } from "next/navigation";
 
-// --- Fee & Currency Configuration ---
-const SERVICE_FEE = 500; // Mock Service Fee in Naira (₦)
-const VAT_RATE = 0.075; // 7.5% VAT (Standard Nigerian VAT)
-
+// --- Fee Configuration Constants ---
+const VAT_RATE = 0.075; // 7.5% VAT on service fees only
+const TIER_THRESHOLD = 5000; // ₦5,000 threshold
+const SMALL_TICKET_RATE = 0.1; // 10% flat for tickets ≤ ₦5,000 (VAT included)
+const PREMIUM_TICKET_RATE = 0.07; // 7% for tickets > ₦5,000
+const PREMIUM_TICKET_FLAT = 50; // ₦50 flat fee for premium tickets
 
 /**
- * CartPage Component (Container)
- * Manages state, handles logic (checkout, quantity changes), and passes data to CartUI.
+ * Calculate service fee for a single item based on price per ticket
  */
+const calculateItemServiceFee = (pricePerTicket, quantity) => {
+  const price = Number(pricePerTicket) || 0;
+
+  if (price <= TIER_THRESHOLD) {
+    // Small ticket: 10% flat (VAT already included)
+    const feePerTicket = price * SMALL_TICKET_RATE;
+    return feePerTicket * quantity;
+  } else {
+    // Premium ticket: 7% + ₦50 (VAT will be added later)
+    const percentageFee = price * PREMIUM_TICKET_RATE;
+    const totalFeePerTicket = percentageFee + PREMIUM_TICKET_FLAT;
+    return totalFeePerTicket * quantity;
+  }
+};
+
+/**
+ * Format currency (already in naira)
+ */
+const formatCurrency = (amount) => {
+  if (amount === 0) return "FREE";
+  if (!amount || amount < 0) return "Price TBD";
+  return `₦${amount.toLocaleString()}`;
+};
+
 export default function CartPage() {
-  const router = useRouter(); // 💡 Initialize router
+  const router = useRouter();
   const {
     items,
     itemCount,
@@ -33,26 +56,51 @@ export default function CartPage() {
   } = useCart();
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Calculate Subtotal, VAT, and Final Total
-  const subtotal = useMemo(() => {
-    // Use totalAmount from context if available, otherwise calculate from items
-    if (totalAmount !== undefined && totalAmount !== null) return totalAmount;
+  // Calculate subtotal, service fees, VAT, and final total
+  const { subtotal, serviceFee, vatAmount, finalTotal, itemFees } =
+    useMemo(() => {
+      // Calculate subtotal
+      const subtotalCalc =
+        totalAmount !== undefined && totalAmount !== null
+          ? totalAmount
+          : items.reduce(
+              (sum, item) => sum + (Number(item.price) || 0) * item.quantity,
+              0,
+            );
 
-    return items.reduce(
-      (sum, item) => sum + (Number(item.price) || 0) * item.quantity,
-      0
-    );
-  }, [items, totalAmount]);
+      // Calculate service fees per item
+      const itemFeesCalc = items.map((item) => ({
+        ...item,
+        serviceFee: calculateItemServiceFee(item.price, item.quantity),
+      }));
 
-  const vatAmount = subtotal * VAT_RATE;
-  const finalTotal = subtotal + SERVICE_FEE + vatAmount;
+      // Total service fee
+      const serviceFeeCalc = itemFeesCalc.reduce(
+        (sum, item) => sum + item.serviceFee,
+        0,
+      );
+
+      // VAT is 7.5% of service fee only (not subtotal)
+      const vatAmountCalc = serviceFeeCalc * VAT_RATE;
+
+      // Final total
+      const finalTotalCalc = subtotalCalc + serviceFeeCalc + vatAmountCalc;
+
+      return {
+        subtotal: subtotalCalc,
+        serviceFee: serviceFeeCalc,
+        vatAmount: vatAmountCalc,
+        finalTotal: finalTotalCalc,
+        itemFees: itemFeesCalc,
+      };
+    }, [items, totalAmount]);
 
   // Handler to manage quantity changes via the CartContext
   const handleQuantityChange = (cartId, newQuantity) => {
     updateItemQuantity(cartId, newQuantity);
   };
 
-  // Mock checkout handler (REFACTORED for REDIRECTION)
+  // Mock checkout handler
   const handleCheckout = () => {
     if (itemCount === 0) {
       toastAlert.error("Your cart is empty. Please add items to checkout.");
@@ -62,10 +110,22 @@ export default function CartPage() {
     setIsProcessing(true);
     toastAlert.info("Preparing order for checkout...");
 
+    // Prepare cart data for checkout
+    const checkoutData = {
+      items: itemFees,
+      subtotal,
+      serviceFee,
+      vatAmount,
+      finalTotal,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Store in sessionStorage for checkout page
+    sessionStorage.setItem("checkoutData", JSON.stringify(checkoutData));
+
     // Simulate a brief validation delay before redirecting
     setTimeout(() => {
       setIsProcessing(false);
-      // 💡 REDIRECT TO CHECKOUT PAGE 💡
       router.push("/checkout");
     }, 500);
   };
@@ -97,11 +157,11 @@ export default function CartPage() {
   // --- Render the Presentation Component ---
   return (
     <CartUI
-      items={items}
+      items={itemFees} // Pass items with calculated service fees
       itemCount={itemCount}
       subtotal={subtotal}
       vatAmount={vatAmount}
-      serviceFee={SERVICE_FEE}
+      serviceFee={serviceFee}
       total={finalTotal}
       isProcessing={isProcessing}
       handleQuantityChange={handleQuantityChange}

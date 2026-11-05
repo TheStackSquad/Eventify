@@ -1,43 +1,29 @@
 // src/app/events/[id]/page.js
-
 import { notFound } from "next/navigation";
 import EventDetailClient from "@/app/events/[id]/eventDetailClient";
 
 // Fetch single event by ID
 async function fetchEventById(eventId) {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
-
-  console.log(`🔍 [DEBUG] Fetching event ${eventId} from: ${baseUrl}`);
-
+  console.log(`🔍 Fetching event ${eventId} from: ${baseUrl}`);
   try {
     const url = `${baseUrl}/events/${eventId}`;
-    console.log(`📡 [DEBUG] Full URL: ${url}`);
-
+    console.log(`📡 Full URL: ${url}`);
     const res = await fetch(url, {
-      // Cache strategy: Revalidate every 5 minutes
-      next: {
-        revalidate: 300,
-        tags: [`event-${eventId}`],
-      },
-      headers: {
-        "Content-Type": "application/json",
-      },
+      next: { revalidate: 300, tags: [`event-${eventId}`] },
+      headers: { "Content-Type": "application/json" },
     });
-
-    console.log(`📊 [DEBUG] Response status: ${res.status}`);
-
+    console.log(`📊 Response status: ${res.status}`);
     if (res.status === 404) {
       console.log(`⚠️ Event not found: ${eventId}`);
       return null;
     }
-
     if (!res.ok) {
       console.error(`❌ Failed to fetch event ${eventId}: ${res.status}`);
       const errorText = await res.text();
       console.error(`❌ Error response: ${errorText}`);
       throw new Error(`Failed to fetch event: ${res.status}`);
     }
-
     const data = await res.json();
     console.log(`✅ Server fetched event: ${data.eventTitle}`);
     return data;
@@ -47,63 +33,53 @@ async function fetchEventById(eventId) {
   }
 }
 
-
 export async function generateStaticParams() {
   // Don't fetch during build if backend is down
-  // Return empty array to let Next.js generate pages on-demand
-  if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
-    console.log('⚠️ Skipping static generation - API URL not available');
+  if (
+    process.env.NODE_ENV === "production" &&
+    !process.env.NEXT_PUBLIC_API_URL
+  ) {
+    console.log("⚠️ Skipping static generation - API URL not available");
     return [];
   }
-
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081";
-
   try {
     const res = await fetch(`${baseUrl}/events?limit=50`, {
-      // Add timeout to prevent hanging
       signal: AbortSignal.timeout(5000), // 5 second timeout
     });
-
     if (!res.ok) return [];
-
     const data = await res.json();
-    const eventsArray = data.events || data.data || (Array.isArray(data) ? data : []);
-
+    const eventsArray =
+      data.events || data.data || (Array.isArray(data) ? data : []);
     if (!Array.isArray(eventsArray)) {
       console.warn("⚠️ API did not return an array in the expected format");
       return [];
     }
-
     return eventsArray.slice(0, 50).map((event) => ({
       id: event.id.toString(),
     }));
   } catch (error) {
     console.error("Error generating static params:", error);
-    // Return empty array instead of throwing - pages will be generated on-demand
     return [];
   }
 }
 
-// PREMIUM SEO METADATA GENERATION - FIXED
+// FIXED: generateMetadata - params is already resolved
 export async function generateMetadata({ params }) {
-  // ✅ FIXED: params is already an object, don't await it
+  // ✅ FIX: params is already an object with id property
   const { id } = params;
+  console.log(`📝 Generating metadata for event ID: ${id}`);
 
   const event = await fetchEventById(id);
-
   // Handle 404 case
   if (!event) {
     return {
       title: "Event Not Found",
       description: "The event you are looking for could not be found.",
-      robots: {
-        index: false,
-        follow: true,
-      },
+      robots: { index: false, follow: true },
     };
   }
 
-  // ... rest of your metadata code remains the same ...
   // Extract event details
   const eventTitle = event.eventTitle || "Untitled Event";
   const eventDescription = event.eventDescription || "";
@@ -113,6 +89,21 @@ export async function generateMetadata({ params }) {
   const city = event.city || "Location TBA";
   const startDate = event.startDate ? new Date(event.startDate) : null;
   const startingPrice = event.tickets?.[0]?.price || 0;
+
+  // Debug price format
+  console.log(`💰 Starting price debug:`, {
+    raw: startingPrice,
+    type: typeof startingPrice,
+    formatted: `₦${startingPrice.toLocaleString()}`,
+    tickets: event.tickets
+      ? event.tickets.map((t) => ({
+          name: t.tierName,
+          price: t.price,
+          type: typeof t.price,
+          formatted: `₦${t.price?.toLocaleString() || "0"}`,
+        }))
+      : "No tickets",
+  });
 
   // Format date for display
   const formattedDate = startDate
@@ -125,14 +116,7 @@ export async function generateMetadata({ params }) {
     : "Date TBA";
 
   // Create rich description
-  const richDescription = `${eventDescription.slice(
-    0,
-    155,
-  )}... Join us at ${venueName} in ${city} on ${formattedDate}. ${
-    startingPrice === 0
-      ? "Free entry!"
-      : `Tickets from ₦${startingPrice.toLocaleString()}`
-  }`;
+  const richDescription = `${eventDescription.slice(0, 155)}... Join us at ${venueName} in ${city} on ${formattedDate}. ${startingPrice === 0 ? "Free entry!" : `Tickets from ₦${startingPrice.toLocaleString()}`}`;
 
   // Get site URL from env or default
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
@@ -141,28 +125,87 @@ export async function generateMetadata({ params }) {
   return {
     title: `${eventTitle} - ${formattedDate}`,
     description: richDescription,
-    // ... rest of metadata object ...
+    keywords: [eventCategory, venueName, city, "events", "tickets"],
+    openGraph: {
+      title: `${eventTitle} - ${formattedDate}`,
+      description: richDescription,
+      type: "website",
+      url: eventUrl,
+      images: [
+        {
+          url: eventImage,
+          width: 1200,
+          height: 630,
+          alt: eventTitle,
+        },
+      ],
+      siteName: "Eventify",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${eventTitle} - ${formattedDate}`,
+      description: richDescription,
+      images: [eventImage],
+    },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-video-preview": -1,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+      },
+    },
   };
 }
 
-// Main Server Component - FIXED
+// Main Server Component
 export default async function EventDetailPage({ params }) {
-  console.log("Component Mount 2");
-  // ✅ FIXED: params is already an object, don't await it
+  console.log("🚀 EventDetailPage rendering");
+  // ✅ FIX: params is already an object with id property
   const { id } = params;
+  console.log(`📋 Received event ID: ${id}`);
 
   // Fetch event data on the server
   const event = await fetchEventById(id);
 
+  // Debug payload
+  if (event) {
+    console.log("📦 Event payload debug:", {
+      id: event.id,
+      title: event.eventTitle,
+      ticketsCount: event.tickets?.length || 0,
+      tickets: event.tickets?.map((t) => ({
+        name: t.tierName,
+        price: t.price,
+        type: typeof t.price,
+        isNumber: typeof t.price === "number",
+        isString: typeof t.price === "string",
+        formatted: `₦${Number(t.price || 0).toLocaleString()}`,
+      })),
+      totalPayloadSize: JSON.stringify(event).length,
+    });
+  }
+
   // Handle 404 - event not found
   if (!event) {
+    console.log(`❌ Event ${id} not found, calling notFound()`);
     notFound();
   }
 
-  // Pass event data to client component
+  // Log final event data
+  console.log(`🎯 Final event data for ${id}:`, {
+    title: event.eventTitle,
+    date: event.startDate,
+    venue: event.venueName,
+    tickets: event.tickets?.map((t) => t.tierName),
+  });
+
   return (
     <>
-      {/* 🎯 JSON-LD Structured Data for Google Rich Results */}
+      {/* JSON-LD Structured Data for Google Rich Results */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -215,7 +258,6 @@ export default async function EventDetailPage({ params }) {
           }),
         }}
       />
-
       <EventDetailClient event={event} />
     </>
   );

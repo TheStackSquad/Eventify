@@ -67,15 +67,24 @@ type TicketTier struct {
 	UpdatedAt   time.Time  `json:"updatedAt" db:"updated_at"`
 }
 
-
 type TierDetails struct {
+	// Tier Information
+	TicketTierID uuid.UUID `db:"ticket_tier_id"`
+	TierName     string    `db:"name"`
+	PriceKobo    int64     `db:"price_kobo"`
+	Price        float64   `json:"price" db:"-"`
+	TotalStock   int32     `db:"capacity"`
+	SoldCount    int32     `db:"sold"`
+	Available    int32     `db:"available"`
+	
 	EventID      uuid.UUID `db:"event_id"`
 	EventTitle   string    `db:"event_title"`
-	EndDate      time.Time `db:"end_date"`
-	TicketTierID uuid.UUID `db:"ticket_tier_id"`
-	TierName     string    `db:"name"` 
-	PriceKobo    int64     `db:"price_kobo"`
-	TotalStock   int32     `db:"capacity"`
-	SoldCount    int32     `db:"sold"`     
-	Available    int32     `db:"available"`
+	
+	StartDate      time.Time `db:"start_date"`
+	EndDate        time.Time `db:"end_date"`
+	City           string    `db:"city"`
+	State          string    `db:"state"`
+	VenueName      string    `db:"venue_name"`
+	VenueAddress   string    `db:"venue_address"`
+	EventImageURL  string    `db:"event_image_url"`
 }

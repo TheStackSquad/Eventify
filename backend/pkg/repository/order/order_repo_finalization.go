@@ -11,7 +11,7 @@ import (
     "github.com/eventify/backend/pkg/models"
     "github.com/jmoiron/sqlx"
 
-    //"github.com/google/uuid"
+    "github.com/google/uuid"
    // "github.com/rs/zerolog/log"
 )
 
@@ -62,30 +62,101 @@ func (r *PostgresOrderRepository) UpdateOrderToPaidTx(ctx context.Context, tx *s
 	return nil
 }
 
-// InsertOrderItemsTx creates order item records in the database using the transaction.
+
+// InsertOrderItemsTx creates order item records with COMPLETE event snapshot data
 func (r *PostgresOrderRepository) InsertOrderItemsTx(
-    ctx context.Context,
-    tx *sqlx.Tx,
-    order *models.Order,
+	ctx context.Context,
+	tx *sqlx.Tx,
+	order *models.Order,
 ) error {
-    // NOTE: Ensure order.Items has IDs and OrderIDs set BEFORE calling this method
-   itemQuery := `
-        INSERT INTO order_items (
-            id, order_id, event_id, event_title, ticket_tier_id, tier_name, quantity, unit_price, subtotal
-        ) VALUES (
-            :id, :order_id, :event_id, :event_title, :ticket_tier_id, :tier_name, :quantity, :unit_price, :subtotal
-        )
-    `
-    // Use NamedExecContext for bulk insertion via sqlx if supported, otherwise loop (as implemented)
+	if len(order.Items) == 0 {
+		return errors.New("cannot insert order with no items")
+	}
 
-    for _, item := range order.Items {
-        _, err := tx.NamedExecContext(ctx, itemQuery, item)
-        if err != nil {
-            return fmt.Errorf("failed to insert order items: %w", err)
-        }
-    }
+	// ✅ ENFORCEMENT: Validate all items have complete event snapshot BEFORE insert
+	for i, item := range order.Items {
+		if item.EventID == uuid.Nil {
+			return fmt.Errorf("item %d missing event_id", i)
+		}
+		if item.EventTitle == "" {
+			return fmt.Errorf("item %d missing event_title", i)
+		}
+		if item.EventStartDate.IsZero() {
+			return fmt.Errorf("item %d missing event_start_date", i)
+		}
+		if item.EventEndDate.IsZero() {
+			return fmt.Errorf("item %d missing event_end_date", i)
+		}
+		if item.EventCity == "" {
+			return fmt.Errorf("item %d missing event_city", i)
+		}
+		if item.EventState == "" {
+			return fmt.Errorf("item %d missing event_state", i)
+		}
+		if item.EventVenue == "" {
+			return fmt.Errorf("item %d missing event_venue", i)
+		}
+		// Note: EventAddress can be empty (COALESCE handles it)
+		if item.EventThumbnail == "" {
+			return fmt.Errorf("item %d missing event_thumbnail", i)
+		}
+	}
 
-    return nil
+	// ✅ COMPLETE INSERT QUERY with all 16 fields
+	itemQuery := `
+		INSERT INTO order_items (
+			id, 
+			order_id, 
+			event_id, 
+			ticket_tier_id, 
+			event_title,
+			tier_name, 
+			quantity, 
+			unit_price, 
+			subtotal,
+			event_start_date,
+			event_end_date,
+			event_city,
+			event_state,
+			event_venue,
+			event_address,
+			event_thumbnail,
+			created_at
+		) VALUES (
+			:id, 
+			:order_id, 
+			:event_id, 
+			:ticket_tier_id, 
+			:event_title,
+			:tier_name, 
+			:quantity, 
+			:unit_price, 
+			:subtotal,
+			:event_start_date,
+			:event_end_date,
+			:event_city,
+			:event_state,
+			:event_venue,
+			:event_address,
+			:event_thumbnail,
+			:created_at
+		)
+	`
+
+	// Execute insert for each item
+	for _, item := range order.Items {
+		// Ensure created_at is set
+		if item.CreatedAt.IsZero() {
+			item.CreatedAt = time.Now().UTC()
+		}
+
+		_, err := tx.NamedExecContext(ctx, itemQuery, item)
+		if err != nil {
+			return fmt.Errorf("failed to insert order item %s: %w", item.ID, err)
+		}
+	}
+
+	return nil
 }
 
 // InsertTicketsTx creates individual ticket records in the database using the transaction.

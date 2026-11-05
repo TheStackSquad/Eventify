@@ -300,32 +300,105 @@ func (r *postgresEventRepository) GetEventTicketTiers(
 	return tiers, nil
 }
 
-// GetTierDetails retrieves details for a specific tier (for legacy name-based processing)
-func (r *postgresEventRepository) GetTierDetails(
-	ctx context.Context,
-	eventID uuid.UUID,
-	tierName string,
-) (*models.TierDetails, error) { // ✅ Updated return type to models.TierDetails
+// GetTierDetailsByID retrieves complete tier details with event snapshot using only the UUID
+func (r *postgresEventRepository) GetTierDetailsByID(
+	ctx context.Context, 
+	tierID uuid.UUID,
+) (*models.TierDetails, error) {
 	query := `
 		SELECT 
-			e.id as event_id,
-			e.title as event_title, -- Changed from event_title to title to match DB schema
-			e.end_date,
+			-- Tier Information
 			tt.id as ticket_tier_id,
 			tt.name,
 			tt.price_kobo,
 			tt.capacity,
 			tt.sold,
-			tt.available
-		FROM events e
-		JOIN ticket_tiers tt ON e.id = tt.event_id
-		WHERE e.id = $1 
-			AND tt.name = $2 
-			AND e.is_deleted = false
-			AND e.end_date > NOW()
+			tt.available,
+			
+			-- Event Basic Info
+			e.id as event_id,
+			e.event_title,
+			
+			-- ✅ Event Snapshot Fields (CRITICAL for order_items)
+			e.start_date,
+			e.end_date,
+			e.city,
+			e.state,
+			e.venue_name,
+			COALESCE(e.venue_address, '') as venue_address,
+			e.event_image_url
+			
+		FROM ticket_tiers tt
+		INNER JOIN events e ON tt.event_id = e.id
+		WHERE tt.id = $1 
+		  AND e.is_deleted = false
+		  AND e.end_date > NOW()
 	`
+	
+	var details models.TierDetails
+	err := r.db.GetContext(ctx, &details, query, tierID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("ticket tier not found, event deleted, or event has ended")
+		}
+		return nil, fmt.Errorf("failed to get tier details by ID: %w", err)
+	}
+	
+	// ✅ VALIDATION: Ensure all required fields are populated
+	if details.EventTitle == "" {
+		return nil, fmt.Errorf("event title is missing for tier %s", tierID)
+	}
+	if details.City == "" || details.State == "" {
+		return nil, fmt.Errorf("event location is incomplete for tier %s", tierID)
+	}
+	if details.VenueName == "" {
+		return nil, fmt.Errorf("venue name is missing for tier %s", tierID)
+	}
+	if details.EventImageURL == "" {
+		return nil, fmt.Errorf("event image is missing for tier %s", tierID)
+	}
+	
+	return &details, nil
+}
 
-	var details models.TierDetails // ✅ Updated variable type
+// GetTierDetails retrieves details for a specific tier (legacy name-based method)
+func (r *postgresEventRepository) GetTierDetails(
+	ctx context.Context,
+	eventID uuid.UUID,
+	tierName string,
+) (*models.TierDetails, error) {
+	query := `
+		SELECT 
+			-- Tier Information
+			tt.id as ticket_tier_id,
+			tt.name,
+			tt.price_kobo,
+			tt.capacity,
+			tt.sold,
+			tt.available,
+			
+			-- Event Basic Info
+			e.id as event_id,
+			e.event_title,
+			
+			-- ✅ Event Snapshot Fields
+			e.start_date,
+			e.end_date,
+			e.city,
+			e.state,
+			e.venue_name,
+			COALESCE(e.venue_address, '') as venue_address,
+			e.event_image_url
+			
+		FROM ticket_tiers tt
+		INNER JOIN events e ON tt.event_id = e.id
+		WHERE e.id = $1 
+		  AND tt.name = $2 
+		  AND e.is_deleted = false
+		  AND e.end_date > NOW()
+	`
+	
+	var details models.TierDetails
 	err := r.db.GetContext(ctx, &details, query, eventID, tierName)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -333,40 +406,13 @@ func (r *postgresEventRepository) GetTierDetails(
 		}
 		return nil, fmt.Errorf("failed to get fresh tier details: %w", err)
 	}
-
+	
+	// ✅ VALIDATION: Same checks as above
+	if details.EventTitle == "" || details.City == "" || details.State == "" {
+		return nil, fmt.Errorf("event data is incomplete for tier %s", tierName)
+	}
+	
 	return &details, nil
-}
-
-// GetTierDetailsByID retrieves tier details using only the UUID
-func (r *postgresEventRepository) GetTierDetailsByID(ctx context.Context, tierID uuid.UUID) (*models.TierDetails, error) {
-    query := `
-        SELECT 
-            e.id as event_id,
-            e.event_title,
-            e.end_date,
-            tt.id as ticket_tier_id,
-            tt.name,
-            tt.price_kobo,
-            tt.capacity,
-            tt.sold,
-            tt.available
-        FROM events e
-        JOIN ticket_tiers tt ON e.id = tt.event_id
-        WHERE tt.id = $1 
-          AND e.is_deleted = false
-          AND e.end_date > NOW()
-    `
-    
-    var details models.TierDetails // Points to models package now
-    err := r.db.GetContext(ctx, &details, query, tierID)
-    if err != nil {
-        if err == sql.ErrNoRows {
-            return nil, fmt.Errorf("ticket tier not found or event inactive")
-        }
-        return nil, fmt.Errorf("failed to get tier details by ID: %w", err)
-    }
-    
-    return &details, nil
 }
 
 // CheckTicketAvailability checks if a specific tier has enough inventory

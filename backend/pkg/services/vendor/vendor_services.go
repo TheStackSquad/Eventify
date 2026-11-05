@@ -20,7 +20,20 @@ type VendorService interface {
 	DeleteVendor(ctx context.Context, id string) error
 	CalculateAndUpdatePVS(ctx context.Context, vendorID string) error
 	UpdateVerificationStatus(ctx context.Context, vendorID string, field string, isVerified bool, reason string) error
+	
+	// Add analytics methods if they're implemented
+	//GetVendorAnalytics(ctx context.Context, vendorID string) (*models.VendorAnalytics, error)
 }
+
+// Add VendorAnalytics model if needed
+// type VendorAnalytics struct {
+// 	Overview     models.VendorOverview     `json:"overview"`
+// 	Inquiries    models.VendorInquiries    `json:"inquiries"`
+// 	Reviews      models.VendorReviews      `json:"reviews"`
+// 	Trends       models.VendorTrends       `json:"trends"`
+// 	Performance  models.VendorPerformance  `json:"performance"`
+// 	Insights     []models.ActionableInsight `json:"insights"`
+// }
 
 // VendorServiceImpl implements the VendorService interface
 type VendorServiceImpl struct {

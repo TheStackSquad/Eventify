@@ -1,7 +1,6 @@
 // frontend/src/app/events/[id]/utils/ticketUtils.js
 "use client";
 import { useState, useCallback } from "react";
-import { koboToNaira, formatCurrency } from "@/utils/currency";
 
 export const useTicketPurchase = ({ event, addItem, router }) => {
   const [selectedTierId, setSelectedTierId] = useState(
@@ -20,7 +19,7 @@ export const useTicketPurchase = ({ event, addItem, router }) => {
       tierId: selectedTier.id,
       eventTitle: event.eventTitle,
       tierName: selectedTier.tierName,
-      price: selectedTier.price,
+      price: selectedTier.price, // Price as-is (already in naira)
       eventImage: event.eventImage,
       maxQuantity: selectedTier.quantity,
     };
@@ -32,7 +31,7 @@ export const useTicketPurchase = ({ event, addItem, router }) => {
 
   const handleCheckoutNow = useCallback(() => {
     router.push("/cart");
-  }, [router]); // ✅ Removed handleAddToCart - it's not used in this function
+  }, [router]);
 
   const handleQuantityChange = useCallback(
     (newQuantity) => {
@@ -71,4 +70,3 @@ export const useTicketPurchase = ({ event, addItem, router }) => {
 };
 
 export default useTicketPurchase;
-export { koboToNaira, formatCurrency };

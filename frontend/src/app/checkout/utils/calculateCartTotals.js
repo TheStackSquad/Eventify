@@ -1,10 +1,9 @@
 // frontend/src/app/checkout/utils/calculateCartTotals.js
 
-import {
-  calculateServiceFee,
-  koboToNaira,
-  nairaToKobo,
-} from "@/utils/currency";
+import { calculateServiceFee } from "@/utils/currency";
+
+// Helper: Convert naira to kobo for Paystack API
+const nairaToKobo = (naira) => Math.round(Number(naira) * 100);
 
 export const calculateCartTotals = (cartItems) => {
   if (!Array.isArray(cartItems) || cartItems.length === 0) {
@@ -28,11 +27,11 @@ export const calculateCartTotals = (cartItems) => {
 
   // Calculate fees for each item
   cartItems.forEach((item) => {
-    const pricePerTicketNaira = koboToNaira(item.price);
+    const pricePerTicketNaira = Number(item.price); // Already in naira
     const itemQuantity = item.quantity || 1;
     const itemSubtotal = pricePerTicketNaira * itemQuantity;
 
-    // Calculate service fee for this ticket price
+    // Calculate service fee for this ticket price (price already in naira)
     const feeCalc = calculateServiceFee(pricePerTicketNaira);
 
     // Multiply by quantity
@@ -53,7 +52,7 @@ export const calculateCartTotals = (cartItems) => {
       cartId: item.cartId || item.id,
       eventTitle: item.eventTitle,
       tierName: item.tierName,
-      pricePerTicket: pricePerTicketNaira,
+      pricePerTicket: pricePerTicketNaira, // Already in naira
       quantity: itemQuantity,
       subtotal: itemSubtotal,
       serviceFee: itemServiceFee,
@@ -72,9 +71,9 @@ export const calculateCartTotals = (cartItems) => {
     vat: totalVAT,
     totalFees: totalFees,
     finalTotal: finalTotal,
-    finalTotalKobo: nairaToKobo(finalTotal),
+    finalTotalKobo: nairaToKobo(finalTotal), // Convert to kobo ONLY for Paystack
     itemsBreakdown: itemsBreakdown,
-    hasMixedTiers: tiers.size > 1, // True if cart has both small and premium tickets
+    hasMixedTiers: tiers.size > 1,
     itemCount: cartItems.reduce((sum, item) => sum + (item.quantity || 1), 0),
   };
 };

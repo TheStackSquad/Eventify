@@ -65,8 +65,12 @@ export default function NavigationButtons({
         {currentStep < 4 ? (
           <button
             type="button"
-            onClick={onNext}
-            disabled={isNextDisabled}
+            disabled={isNextDisabled} // ← CORRECT: JSX attribute
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onNext();
+            }}
             className={`px-6 py-3 rounded-lg transition font-medium ${
               isNextDisabled
                 ? "bg-gray-800 text-gray-500 cursor-not-allowed"

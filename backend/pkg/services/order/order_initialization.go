@@ -60,18 +60,22 @@ Returns:
   - error:         Validation or database error
 */
 
+
+
 func (s *OrderServiceImpl) InitializePendingOrder(
     ctx context.Context,
     req *models.OrderInitializationRequest,
     userID *uuid.UUID,
     guestID string,
 ) (*models.Order, string, error) {
-    // 1. REQUEST VALIDATION
+    // 1. REQUEST VALIDATION (Already strict via req.Validate())
     if err := req.Validate(); err != nil {
         return nil, "", fmt.Errorf("validation failed: %w", err)
     }
 
     // 2. AUTHORITATIVE PRICING CALCULATION
+    // ENFORCEMENT: CalculateAuthoritativeOrder must return a fully populated 
+    // models.Order including the Items slice with tier names and unit prices.
     pendingOrder, err := s.PricingService.CalculateAuthoritativeOrder(ctx, req)
     if err != nil {
         return nil, "", fmt.Errorf("pricing calculation failed: %w", err)
@@ -86,7 +90,7 @@ func (s *OrderServiceImpl) InitializePendingOrder(
     pendingOrder.CustomerEmail = req.Email
     pendingOrder.CustomerFirstName = req.FirstName
     pendingOrder.CustomerLastName = req.LastName
-    pendingOrder.CustomerPhone = models.ToNullString(req.Phone)
+    pendingOrder.CustomerPhone = models.ToNullString(req.Phone) // Using your helper
     pendingOrder.GuestID = sql.NullString{String: guestID, Valid: guestID != ""}
     pendingOrder.CreatedAt = now
     pendingOrder.UpdatedAt = now
@@ -95,7 +99,7 @@ func (s *OrderServiceImpl) InitializePendingOrder(
         pendingOrder.UserID = userID
     }
 
-    // 4. ATOMIC DATABASE TRANSACTION (Stock Reservation)
+    // 4. ATOMIC DATABASE TRANSACTION
     err = s.OrderRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
         // 4a. SAVE PARENT ORDER RECORD
         orderID, err := s.OrderRepo.SavePendingOrderTx(ctx, tx, pendingOrder)
@@ -104,17 +108,20 @@ func (s *OrderServiceImpl) InitializePendingOrder(
         }
         pendingOrder.ID = orderID
 
-        // 4b. SAVE ORDER ITEMS (PRICE SNAPSHOTS)
+        // 4b. SAVE ORDER ITEMS
         for i := range pendingOrder.Items {
             pendingOrder.Items[i].ID = uuid.New()
             pendingOrder.Items[i].OrderID = orderID
+            // FIELD ACCOUNTABILITY: Ensure EventID is mapped from request if pricing missed it
+            if pendingOrder.Items[i].EventID == uuid.Nil {
+                 pendingOrder.Items[i].EventID = req.Items[i].EventID
+            }
         }
 
         if err := s.OrderRepo.InsertOrderItemsTx(ctx, tx, pendingOrder); err != nil {
             return fmt.Errorf("failed to save order items: %w", err)
         }
 
-        // 4c. RESERVE STOCK (PREVENT OVERSELLING)
         if err := s.applyStockReductionsTx(ctx, tx, pendingOrder); err != nil {
             return fmt.Errorf("failed to reserve stock: %w", err)
         }
@@ -123,22 +130,26 @@ func (s *OrderServiceImpl) InitializePendingOrder(
     })
 
     if err != nil {
-        return nil, "", err // If DB fails, we stop here
+        return nil, "", err 
     }
 
-    // 5. EXTERNAL HANDSHAKE: Initialize Paystack Transaction
-    // We do this OUTSIDE the DB transaction to avoid holding DB locks 
-    // while waiting for an external network response.
+    // 5. EXTERNAL HANDSHAKE: Paystack with Metadata
+    // ENFORCEMENT: We pass order_id and event_id in metadata to prevent "orphaned" sessions.
+    metadata := map[string]string{
+    "order_id": pendingOrder.ID.String(),
+    "event_id": req.Items[0].EventID.String(),
+}
+
     authURL, err := s.PaystackClient.InitializeTransaction(
         ctx, 
         pendingOrder.CustomerEmail, 
         int64(pendingOrder.FinalTotal), 
         pendingOrder.Reference,
+        metadata,
+
     )
     
     if err != nil {
-        // Log this heavily - the stock is reserved but Paystack failed.
-        // The StockReleaseWorker will eventually clean this up if the user abandons.
         return nil, "", fmt.Errorf("payment gateway initialization failed: %w", err)
     }
 

@@ -100,7 +100,7 @@ func (h *VendorAnalyticsHandler) GetVendorAnalytics(c *gin.Context) {
 
 	log.Info().
 		Str("vendor_id", requestedVendorID.String()).
-		Int("total_inquiries", analytics.Inquiries.Total).
+	//	Int("total_inquiries", analytics.Inquiries.Total).
 		Msg("Vendor analytics fetched successfully")
 
 	c.JSON(http.StatusOK, gin.H{

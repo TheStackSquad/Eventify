@@ -24,6 +24,7 @@ type VendorRepository interface {
 	IncrementField(ctx context.Context, id uuid.UUID, field string, delta int) error
 	GetByID(ctx context.Context, id uuid.UUID) (models.Vendor, error)
 	FindPublicVendors(ctx context.Context, filters map[string]string) ([]models.Vendor, error)
+	GetVendorWithSubscription(ctx context.Context, vendorID uuid.UUID) (*models.VendorWithSubscription, error)
 }
 
 type PostgresVendorRepository struct {

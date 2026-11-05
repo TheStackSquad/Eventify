@@ -141,3 +141,4 @@ func CalculatePVS(v *Vendor) int32 {
 	}
 	return score
 }
+

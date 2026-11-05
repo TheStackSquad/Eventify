@@ -3,6 +3,8 @@ package vendor_test
 import (
 	"context"
 	"testing"
+	"database/sql"
+	
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/eventify/backend/pkg/models"
@@ -18,16 +20,16 @@ func TestCreateVendor(t *testing.T) {
 		_, _ = database.Exec("INSERT INTO users (id, email, password) VALUES ($1, $2, $3)", 
 			ownerID, "test@example.com", "hash")
 
-		vendor := &models.Vendor{
-			OwnerID:            ownerID,
-			Name:               "Test Photography",
-			Category:           "Photography",
-			VNIN:               "12345678901",
-			IsIdentityVerified: true,
-			State:              "Lagos",
-			PhoneNumber:        "08011112222",
-			ProfileCompletion:  100.0,
-		}
+	vendor := &models.Vendor{
+    OwnerID:            ownerID,
+    Name:               "Test Photography",
+    Category:           "Photography",
+    VNIN:               sql.NullString{String: "12345678901", Valid: true},
+    IsIdentityVerified: true,
+    State:              "Lagos",
+    PhoneNumber:        sql.NullString{String: "08011112222", Valid: true},
+    ProfileCompletion:  100.0,
+}
 
 		id, err := service.CreateVendor(ctx, vendor)
 		defer cleanupVendor(database, id, ownerID.String())
@@ -35,7 +37,7 @@ func TestCreateVendor(t *testing.T) {
 		assert.NoError(t, err)
 		
 		// Fetch from DB to verify PVS logic
-		saved, _ := service.GetVendorByID(ctx, uuid.MustParse(id))
+	saved, _ := service.GetVendorByID(ctx, id)
 		assert.Equal(t, int32(45), saved.PVSScore, "Expected 30 (Identity) + 15 (Completion)")
 	})
 }

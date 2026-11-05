@@ -70,6 +70,7 @@ const navItems = [
     // ],
   },
   { path: "/vendor", label: "Vendor" },
+  { path: "/for-you", label: "For You" },
   { path: "/dashboard", label: "Dashboard" },
   { path: "/about-us", label: "About Us" },
 ];

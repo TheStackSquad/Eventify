@@ -1,27 +1,24 @@
 // frontend/src/app/events/[id]/ticketUI/OrderSummary.js
 import { ShoppingCart, CheckCircle } from "lucide-react";
-import { koboToNaira, formatCurrency } from "@/utils/currency";
 
 const OrderSummary = ({
   selectedTier,
   quantity,
-  totalPrice, // This should be in kobo
+  totalPrice, // Already in naira
   isSoldOut,
   isAdded,
   handleAddToCart,
   handleCheckoutNow,
 }) => {
-  // Helper to format price - handles both kobo and naira values
+  // Format price (already in naira)
   const formatPrice = (price) => {
     if (price === 0) return "FREE";
     if (price === null || typeof price !== "number" || price < 0) {
       return "Price TBD";
     }
 
-    // If the price is in kobo (> 100), convert to naira first
-    // Prices in kobo are typically large numbers (e.g., 2000000 for ₦20,000)
-    const priceInNaira = price > 100 ? koboToNaira(price) : price;
-    return formatCurrency(priceInNaira);
+    // Price is already in naira (e.g., 35000 = ₦35,000)
+    return `₦${price.toLocaleString()}`;
   };
 
   return (
@@ -68,15 +65,15 @@ const OrderSummary = ({
             isSoldOut
               ? "bg-gray-300 text-gray-500 cursor-not-allowed"
               : isAdded
-              ? "bg-green-500 text-white"
-              : "bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-md hover:shadow-lg"
+                ? "bg-green-500 text-white"
+                : "bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-md hover:shadow-lg"
           }`}
           aria-label={
             isSoldOut
               ? "Tickets sold out"
               : isAdded
-              ? "Added to cart"
-              : "Add to cart"
+                ? "Added to cart"
+                : "Add to cart"
           }
         >
           {isAdded ? (

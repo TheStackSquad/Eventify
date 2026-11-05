@@ -184,7 +184,7 @@ export default function CheckoutPage() {
                   {cartTotals.hasMixedTiers && (
                     <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
                       <p className="font-medium mb-1">
-                        ℹ️ Mixed Fee Structure Applied
+                        Mixed Fee Structure Applied
                       </p>
                       <p className="text-xs">
                         Your cart contains tickets with different fee

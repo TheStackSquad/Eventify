@@ -4,15 +4,22 @@
 import React, { Suspense } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { ArrowRight, Menu, CheckCircle, Shield } from "lucide-react";
+import {
+  ArrowRight,
+  Menu,
+  CheckCircle,
+  Shield,
+  User,
+  LogIn,
+} from "lucide-react";
 
-// ✅ Lazy load carousel (below fold, heavy component)
+//  Lazy load carousel (below fold, heavy component)
 const Carousel = dynamic(() => import("@/components/homepage/carousel"), {
   loading: () => <CarouselSkeleton />,
   ssr: false, // Don't render on server if it has client-side dependencies
 });
 
-// ✅ Skeleton for carousel (prevents layout shift)
+//  Skeleton for carousel (prevents layout shift)
 function CarouselSkeleton() {
   return (
     <div className="relative overflow-hidden rounded-2xl h-[400px] sm:h-[450px] md:h-[500px] lg:h-[550px] bg-gray-200 animate-pulse">
@@ -24,14 +31,14 @@ function CarouselSkeleton() {
 export default function Hero() {
   return (
     <section className="relative bg-gradient-to-b from-white via-gray-50 to-white pt-2 pb-2 md:pt-2 md:pb-3 lg:pb-4 overflow-hidden">
-      {/* ✅ OPTIMIZED: Reduced blur, simpler gradients, will-change for GPU */}
+      {/*  OPTIMIZED: Reduced blur intensity for performance */}
       <div
-        className="absolute top-0 right-0 w-96 h-96 bg-red-100/20 rounded-full blur-2xl -translate-y-48 translate-x-48 pointer-events-none opacity-60"
+        className="absolute top-0 right-0 w-96 h-96 bg-red-100/15 rounded-full blur-xl -translate-y-48 translate-x-48 pointer-events-none opacity-50"
         style={{ willChange: "transform" }}
         aria-hidden="true"
       />
       <div
-        className="absolute bottom-0 left-0 w-96 h-96 bg-blue-100/15 rounded-full blur-2xl translate-y-48 -translate-x-48 pointer-events-none opacity-60"
+        className="absolute bottom-0 left-0 w-96 h-96 bg-blue-100/10 rounded-full blur-xl translate-y-48 -translate-x-48 pointer-events-none opacity-50"
         style={{ willChange: "transform" }}
         aria-hidden="true"
       />
@@ -42,58 +49,50 @@ export default function Hero() {
         <div className="flex flex-col lg:flex-row items-center justify-between gap-10 lg:gap-16">
           {/* Left Column: Text & CTA */}
           <div className="flex-1 max-w-full lg:max-w-xl xl:max-w-2xl space-y-6 md:space-y-8 hero-fade-in order-2 lg:order-1">
-            {/* ✅ OPTIMIZED: Link instead of <a>, lucide icons */}
+            {/* OPTIMIZED: Dual-link pill button with separate clickable areas */}
+            {/* Refined Split Button */}
             <div className="flex justify-start">
-              <Link
-                href=""
-                className="group inline-flex items-center gap-2.5 px-6 py-3 md:px-7 md:py-3.5 text-sm md:text-base font-bold text-red-600 bg-gradient-to-r from-red-50 to-red-100 rounded-full shadow-lg shadow-red-200/50 transition-all duration-300 hover:shadow-xl hover:shadow-red-300/60 hover:from-red-100 hover:to-red-200 active:scale-95 border border-red-200/80"
-                prefetch={false}
+              <div
+                className="group inline-flex items-center bg-white rounded-full shadow-md border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-lg focus-within:ring-2 focus-within:ring-red-500/40 focus-within:ring-offset-2"
+                role="group"
+                aria-label="Account options"
               >
-                <svg
-                  className="w-5 h-5 md:w-5 md:h-5 transition-transform duration-300 group-hover:scale-110"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
+                {/* Left Side: For You */}
+                <Link
+                  href="/for-you"
+                  className="inline-flex items-center gap-2 px-6 py-3 text-sm md:text-base font-bold text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200 active:bg-red-100"
+                  prefetch={false}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14c-5.14 0-8 2.45-8 6h16c0-3.55-2.86-6-8-6z"
-                  />
-                </svg>
-                <Link href="/dashboard" className="your-link-class-if-needed">
-                  <span className="tracking-wide">For you / Sign In</span>
+                  <User className="w-4 h-4 md:w-5 md:h-5" aria-hidden="true" />
+                  <span className="tracking-wide">For you</span>
                 </Link>
-                <svg
-                  className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
+
+                {/* Vertical Divider - Fixed height to look like a "notch" */}
+                <div className="h-5 w-px bg-gray-200" aria-hidden="true" />
+
+                {/* Right Side: Sign In */}
+                <Link
+                  href="/signin"
+                  className="inline-flex items-center gap-2 px-6 py-3 text-sm md:text-base font-bold text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all duration-200 active:bg-red-100"
+                  prefetch={false}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </Link>
+                  <span className="tracking-wide">Sign In</span>
+                  <LogIn className="w-4 h-4 md:w-5 md:h-5" aria-hidden="true" />
+                </Link>
+              </div>
             </div>
 
-            {/* Main Heading - OPTIMIZED: Removed unnecessary spans */}
+            {/* OPTIMIZED: Main Heading with semantic HTML and reduced gradients */}
             <h1 className="text-gray-900 text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-black leading-[1.1] tracking-tight">
               Discover &<br />
-              <span className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-red-600 to-orange-500 bg-clip-text text-transparent">
                 Book Local Events
               </span>
             </h1>
 
-            {/* ✅ OPTIMIZED: Simplified card, removed decorative elements */}
+            {/* ✅ OPTIMIZED: Reduced backdrop blur for performance */}
             <div className="relative max-w-lg">
-              <div className="relative bg-white/80 backdrop-blur-sm p-6 md:p-7 rounded-2xl border border-gray-200/80 shadow-xl">
+              <div className="relative bg-white/90 p-6 md:p-7 rounded-2xl border border-gray-200 shadow-xl">
                 <p className="text-gray-700 text-base md:text-lg leading-relaxed font-medium">
                   Find concerts, workshops, festivals, and more. Get your
                   tickets instantly and never miss out on what&apos;s happening
@@ -102,12 +101,13 @@ export default function Hero() {
               </div>
             </div>
 
-            {/* CTA Buttons */}
+            {/* ✅ OPTIMIZED: Main CTA Buttons with reduced shadows */}
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-5 pt-2">
               <Link
                 href="/events"
-                className="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-red-600 to-red-700 text-white font-bold text-base md:text-lg rounded-xl shadow-lg shadow-red-500/30 hover:shadow-xl hover:shadow-red-500/40 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] border border-red-700/50"
+                className="group inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-red-600 to-red-700 text-white font-bold text-base md:text-lg rounded-xl shadow-lg shadow-red-500/25 hover:shadow-xl hover:shadow-red-500/35 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] border border-red-700/50 focus:outline-none focus:ring-2 focus:ring-red-500/50 focus:ring-offset-2"
                 prefetch={true}
+                aria-label="Browse events near your location"
               >
                 <span>Find Events Near You</span>
                 <ArrowRight
@@ -118,8 +118,9 @@ export default function Hero() {
 
               <Link
                 href="/onboarding"
-                className="group inline-flex items-center justify-center gap-3 px-8 py-4 border-2 border-gray-300 text-gray-800 font-bold text-base md:text-lg rounded-xl shadow-md bg-white hover:bg-gray-50 hover:border-gray-400 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                className="group inline-flex items-center justify-center gap-3 px-8 py-4 border-2 border-gray-300 text-gray-800 font-bold text-base md:text-lg rounded-xl shadow-md bg-white hover:bg-gray-50 hover:border-gray-400 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-gray-400/50 focus:ring-offset-2"
                 prefetch={false}
+                aria-label="Start the onboarding process"
               >
                 <span>Onboarding</span>
                 <Menu
@@ -129,31 +130,37 @@ export default function Hero() {
               </Link>
             </div>
 
-            {/* ✅ OPTIMIZED: Using lucide-react icons */}
-            <div className="flex items-center gap-6 pt-4 text-sm text-gray-600">
+            {/* ✅ OPTIMIZED: Feature list with semantic icons */}
+            <div className="flex flex-wrap items-center gap-4 md:gap-6 pt-4 text-sm text-gray-600">
               <div className="flex items-center gap-2">
                 <CheckCircle
-                  className="w-5 h-5 text-green-500"
+                  className="w-5 h-5 text-green-500 flex-shrink-0"
                   aria-hidden="true"
                 />
-                <span className="font-semibold">Instant Booking</span>
+                <span className="font-semibold whitespace-nowrap">
+                  Instant Booking
+                </span>
               </div>
               <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-blue-500" aria-hidden="true" />
-                <span className="font-semibold">Secure Payment</span>
+                <Shield
+                  className="w-5 h-5 text-blue-500 flex-shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="font-semibold whitespace-nowrap">
+                  Secure Payment
+                </span>
               </div>
             </div>
           </div>
 
           {/* Right Column: Carousel Container */}
           <div className="w-full lg:w-1/2 flex-shrink-0 hero-fade-in-delayed order-1 lg:order-2">
-            <div className="relative bg-gradient-to-br from-pink-50 via-white to-blue-50 p-5 md:p-8 rounded-3xl shadow-2xl border border-gray-200/80">
-              {/* ✅ SIMPLIFIED: Removed heavy decorative corners */}
-
+            {/* ✅ OPTIMIZED: Reduced gradient complexity */}
+            <div className="relative bg-gradient-to-br from-pink-50/80 to-blue-50/80 p-5 md:p-8 rounded-3xl shadow-2xl border border-gray-200/60">
               {/* Carousel with Suspense boundary */}
-              <div className="relative overflow-hidden rounded-2xl shadow-2xl border border-white/50 h-[400px] sm:h-[450px] md:h-[500px] lg:h-[550px] bg-gray-100">
+              <div className="relative overflow-hidden rounded-2xl shadow-xl border border-white/40 h-[400px] sm:h-[450px] md:h-[500px] lg:h-[550px] bg-gray-100">
                 <div
-                  className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/40 to-black/50 z-[1] rounded-2xl pointer-events-none"
+                  className="absolute inset-0 bg-gradient-to-b from-black/20 to-black/40 z-[1] rounded-2xl pointer-events-none"
                   aria-hidden="true"
                 />
 
@@ -163,12 +170,12 @@ export default function Hero() {
                 </Suspense>
               </div>
 
-              {/* Feature badges */}
+              {/* ✅ OPTIMIZED: Feature badges with reduced shadows */}
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center items-center mt-6 sm:mt-8">
-                <div className="bg-white px-4 py-2 rounded-full shadow-lg border border-gray-200 text-xs font-bold text-gray-700 text-center">
+                <div className="bg-white/90 px-4 py-2 rounded-full shadow border border-gray-200 text-xs font-semibold text-gray-700 text-center">
                   🎉 1000+ Events
                 </div>
-                <div className="bg-white px-4 py-2 rounded-full shadow-lg border border-gray-200 text-xs font-bold text-gray-700 text-center">
+                <div className="bg-white/90 px-4 py-2 rounded-full shadow border border-gray-200 text-xs font-semibold text-gray-700 text-center">
                   ⚡ Instant Tickets
                 </div>
               </div>

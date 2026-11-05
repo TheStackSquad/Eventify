@@ -8,7 +8,7 @@ import {
   validateEventForm,
 } from "../services/eventServices";
 import toastAlert from "@/components/common/toast/toastAlert";
-import { ROUTES } from "@/utils/constants/globalConstants";
+import { API_ENDPOINTS } from "@/utils/constants/globalConstants";
 import {
   ERROR_MESSAGES,
   SUCCESS_MESSAGES,
@@ -147,9 +147,9 @@ const handleSubmit = useCallback(
 
       // 6. Navigation with UX Delay
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      router.push(ROUTES.BASE);
+      router.push(API_ENDPOINTS.EVENTS.BASE);
     } catch (error) {
-      console.group("❌ SUBMISSION ERROR");
+      console.group(" SUBMISSION ERROR");
       console.error("Error details:", error);
 
       if (shouldRollbackImage && newImageUrl) {

@@ -12,22 +12,30 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// MODELS & TYPES
-
-// TierDetails contains consolidated ticket tier information
+// TierDetails contains consolidated ticket tier information with event snapshot
 type TierDetails struct {
-	EventID      uuid.UUID `db:"event_id"`
-	EventTitle   string    `db:"event_title"`
-	EndDate      time.Time `db:"end_date"`
+	// Tier Information
 	TicketTierID uuid.UUID `db:"ticket_tier_id"`
 	TierName     string    `db:"name"`
-	PriceKobo   int32     `json:"-" db:"price_kobo"`
-	Price       float64   `json:"price" db:"-"`
+	PriceKobo    int32     `json:"-" db:"price_kobo"`
+	Price        float64   `json:"price" db:"-"`
 	TotalStock   int32     `db:"capacity"`
-	SoldCount    int32     `db:"sold"`     
+	SoldCount    int32     `db:"sold"`
 	Available    int32     `db:"available"`
+	
+	// Event Basic Info
+	EventID      uuid.UUID `db:"event_id"`
+	EventTitle   string    `db:"event_title"`
+	
+	// ✅ NEW: Event Snapshot Fields (Required for order_items)
+	StartDate      time.Time `db:"start_date"`
+	EndDate        time.Time `db:"end_date"`
+	City           string    `db:"city"`
+	State          string    `db:"state"`
+	VenueName      string    `db:"venue_name"`
+	VenueAddress   string    `db:"venue_address"`
+	EventImageURL  string    `db:"event_image_url"`
 }
-
 // EventFilters defines parameters for filtering events
 type EventFilters struct {
 	OrganizerID *uuid.UUID
@@ -50,9 +58,7 @@ type EventWithStats struct {
 	TotalTicketsSold int32
 }
 
-// ============================================================================
 // REPOSITORY INTERFACE
-// ============================================================================
 
 // EventRepository defines the contract for event data operations
 type EventRepository interface {

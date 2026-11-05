@@ -1,5 +1,3 @@
-// backend/pkg/services/pricing/pricing_service.
-
 package pricing
 
 import (
@@ -33,26 +31,38 @@ func (s *PricingServiceImpl) CalculateAuthoritativeOrder(
 		Str("email", req.Email).
 		Int("item_count", len(req.Items)).
 		Msg("Starting authoritative pricing calculation")
+
 	var orderItems []models.OrderItem
 	subtotalKobo := int64(0)
+
 	for _, clientItem := range req.Items {
-		// 1. Fetch live tier data using the UUID (TicketTierID)
+		// 1. Fetch complete tier data WITH event snapshot
 		tierDetails, err := s.EventRepo.GetTierDetailsByID(ctx, clientItem.TicketTierID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch pricing for tier %s: %w", clientItem.TicketTierID, err)
 		}
+
 		// 2. Validate stock availability
 		if clientItem.Quantity > tierDetails.Available {
-			return nil, fmt.Errorf("insufficient stock for %s: requested %d, only %d available", tierDetails.TierName, clientItem.Quantity, tierDetails.Available)
+			return nil, fmt.Errorf(
+				"insufficient stock for %s: requested %d, only %d available",
+				tierDetails.TierName,
+				clientItem.Quantity,
+				tierDetails.Available,
+			)
 		}
+
 		// 3. Calculate Item Subtotals
 		unitPrice := int64(tierDetails.PriceKobo)
 		quantity := int64(clientItem.Quantity)
 		itemSubtotal := unitPrice * quantity
+
 		if itemSubtotal < 0 {
 			return nil, errors.New("price calculation overflow error")
 		}
-	orderItem := models.OrderItem{
+
+		// 4. ✅ BUILD COMPLETE ORDER ITEM with event snapshot
+		orderItem := models.OrderItem{
 			TicketTierID: tierDetails.TicketTierID,
 			EventID:      tierDetails.EventID,
 			EventTitle:   tierDetails.EventTitle,
@@ -60,27 +70,42 @@ func (s *PricingServiceImpl) CalculateAuthoritativeOrder(
 			Quantity:     clientItem.Quantity,
 			UnitPrice:    unitPrice,
 			Subtotal:     itemSubtotal,
+			
+			// ✅ CRITICAL: Populate event snapshot fields
+			EventStartDate: tierDetails.StartDate,
+			EventEndDate:   tierDetails.EndDate,
+			EventCity:      tierDetails.City,
+			EventState:     tierDetails.State,
+			EventVenue:     tierDetails.VenueName,
+			EventAddress:   tierDetails.VenueAddress,
+			EventThumbnail: tierDetails.EventImageURL,
 		}
+
 		orderItems = append(orderItems, orderItem)
 		subtotalKobo += itemSubtotal
 	}
-	// 4. Authoritative Fee Calculation (Tiered Logic)
+
+	// 5. Authoritative Fee Calculation (Tiered Logic)
 	serviceFeeKobo := models.CalculateServiceFee(subtotalKobo)
 	vatKobo := models.CalculateVAT(subtotalKobo, serviceFeeKobo)
 	finalTotalKobo := subtotalKobo + serviceFeeKobo + vatKobo
-	// 5. Internal Financial Tracking (Paystack Cut & Platform Profit)
+
+	// 6. Internal Financial Tracking (Paystack Cut & Platform Profit)
 	paystackFeeKobo := models.CalculatePaystackFee(finalTotalKobo)
 	appProfitKobo := (serviceFeeKobo + vatKobo) - paystackFeeKobo
+
 	log.Info().
 		Int64("subtotal", subtotalKobo).
 		Int64("service_fee", serviceFeeKobo).
 		Int64("vat", vatKobo).
 		Int64("final_total", finalTotalKobo).
 		Msg("Order totals calculated successfully")
+
 	if finalTotalKobo < 0 {
 		return nil, errors.New("negative total order amount calculated")
 	}
-	// 6. Build Final Order Object
+
+	// 7. Build Final Order Object
 	order := &models.Order{
 		Subtotal:          subtotalKobo,
 		ServiceFee:        serviceFeeKobo,
@@ -94,9 +119,11 @@ func (s *PricingServiceImpl) CalculateAuthoritativeOrder(
 		CustomerFirstName: req.FirstName,
 		CustomerLastName:  req.LastName,
 	}
+
 	log.Info().
 		Int("items", len(orderItems)).
 		Int64("final_amount", order.FinalTotal).
 		Msg("Authoritative order calculation complete")
+
 	return order, nil
 }

@@ -1,7 +1,6 @@
 // frontend/src/app/events/[id]/components/ticketSelector.js
 "use client";
 import { ChevronDown } from "lucide-react";
-import { formatPrice } from "@/utils/currency";
 
 const TicketSelector = ({
   event,
@@ -11,6 +10,13 @@ const TicketSelector = ({
   handleTierSelect,
   selectedTierId,
 }) => {
+  // Format price directly (already in naira)
+  const formatPrice = (price) => {
+    if (price === 0) return "FREE";
+    if (!price || price < 0) return "Price TBD";
+    return `₦${price.toLocaleString()}`;
+  };
+
   return (
     <div className="space-y-2">
       <label
@@ -91,15 +97,15 @@ const TicketSelector = ({
                             isOutOfStock
                               ? "text-red-600 font-semibold"
                               : isLowStock
-                              ? "text-orange-600 font-medium"
-                              : "text-gray-500"
+                                ? "text-orange-600 font-medium"
+                                : "text-gray-500"
                           }`}
                         >
                           {isOutOfStock
                             ? "SOLD OUT"
                             : isLowStock
-                            ? `Only ${tier.quantity} left!`
-                            : `${tier.quantity} available`}
+                              ? `Only ${tier.quantity} left!`
+                              : `${tier.quantity} available`}
                         </span>
                       </div>
                     </div>

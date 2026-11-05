@@ -69,8 +69,6 @@ type Order struct {
 	Items []OrderItem `json:"items,omitempty" db:"-"`
 }
 
-// models/order_item.go
-
 type OrderItem struct {
     ID             uuid.UUID `json:"id" db:"id"`
     OrderID        uuid.UUID `json:"orderId" db:"order_id"`
@@ -83,7 +81,6 @@ type OrderItem struct {
     EventTitle     string    `json:"eventTitle" db:"event_title"`
     EventThumbnail string    `json:"eventThumbnail" db:"event_thumbnail"`
     
-    // Catch the COALESCE and JOIN fields from itemsQuery
     EventStartDate time.Time `json:"eventStartDate" db:"event_start_date"`
     EventEndDate   time.Time `json:"eventEndDate" db:"event_end_date"`
     EventCity      string    `json:"eventCity" db:"event_city"`
