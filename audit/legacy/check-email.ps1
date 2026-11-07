@@ -1,3 +1,5 @@
+#audit/legacy/check-email.ps1
+
 $root = Split-Path $PSScriptRoot -Parent
 Set-Location $root
 $dc = 'audit\docker\docker-compose.loadtest.yml'

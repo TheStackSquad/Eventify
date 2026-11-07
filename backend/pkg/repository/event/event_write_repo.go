@@ -172,6 +172,7 @@ func (r *postgresEventRepository) DecrementTicketStockTx(
 
 	return nil
 }
+
 // IncrementTicketStockTx releases reserved tickets back to inventory using the UUID
 func (r *postgresEventRepository) IncrementTicketStockTx(
 	ctx context.Context,
