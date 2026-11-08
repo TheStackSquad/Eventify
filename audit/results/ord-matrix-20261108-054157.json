@@ -1,0 +1,189 @@
+{
+  "run": {
+    "suite": "ORD",
+    "mode": "rig",
+    "generated": "2026-11-08T05:41:57.6996282+01:00",
+    "commit": "dfcd359",
+    "branch": "desh/ord-p0",
+    "uncommittedPaths": 13,
+    "migrationVersion": "5",
+    "dbZone": "Etc/UTC",
+    "paystack": "local stub from the compose rig (not real Paystack)",
+    "stub": "http://localhost:9099"
+  },
+  "counts": {
+    "FAIL": 5,
+    "INFO": 4,
+    "PASS": 12
+  },
+  "results": [
+    {
+      "Id": "S0",
+      "Name": "rig settings read from the compose file",
+      "Expected": "db, backend, signing key, stub",
+      "Actual": "db:55432 backend:8081 stub:http://localhost:9099 worker:20s",
+      "Outcome": "INFO",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-A1",
+      "Name": "rig backend reachable",
+      "Expected": "200 on /health",
+      "Actual": "200",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-F1",
+      "Name": "fixtures ready",
+      "Expected": "4 events, 10 tiers",
+      "Actual": "4 events, 10 tiers",
+      "Outcome": "INFO",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-A2",
+      "Name": "organizer session works",
+      "Expected": "200 on /auth/me",
+      "Actual": "200",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-A3",
+      "Name": "buyer session works",
+      "Expected": "200 on /auth/me",
+      "Actual": "200",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-A4",
+      "Name": "a guest gets an identity cookie",
+      "Expected": "guest_id cookie issued",
+      "Actual": "issued",
+      "Outcome": "PASS",
+      "Note": "Guest checkout and guest-owned verify depend on this cookie."
+    },
+    {
+      "Id": "ORD-S1",
+      "Name": "the tables the order path needs exist",
+      "Expected": "8 tables",
+      "Actual": "8 tables",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S2",
+      "Name": "order_status has every label the code writes",
+      "Expected": "pending,processing,success,failed,refunded,fraud,expired",
+      "Actual": "pending,processing,success,failed,refunded,fraud,expired",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S3",
+      "Name": "ticket_status has active and used",
+      "Expected": "active, used",
+      "Actual": "active,used,canceled,cancelled",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S3b",
+      "Name": "ticket_status has two spellings of cancel",
+      "Expected": "one spelling",
+      "Actual": "active,used,canceled,cancelled",
+      "Outcome": "INFO",
+      "Note": "F213: no Go code writes either today. Refund and void logic will use cancelled (matches subscriptions); a later check asserts nothing writes canceled."
+    },
+    {
+      "Id": "ORD-S4",
+      "Name": "email_outbox dedupe_key has a unique index",
+      "Expected": ">= 1",
+      "Actual": "1",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S5",
+      "Name": "orders.reference is unique",
+      "Expected": ">= 1 unique index",
+      "Actual": "2",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S6",
+      "Name": "ticket_tiers stock CHECK constraints present",
+      "Expected": "3",
+      "Actual": "3",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S7",
+      "Name": "order tables guard totals, amounts and quantities with CHECK constraints",
+      "Expected": ">= 1",
+      "Actual": "0",
+      "Outcome": "FAIL",
+      "Note": "known finding F211"
+    },
+    {
+      "Id": "ORD-S8",
+      "Name": "money columns are bigint",
+      "Expected": "0 columns narrower than bigint",
+      "Actual": "9",
+      "Outcome": "FAIL",
+      "Note": "known finding F218"
+    },
+    {
+      "Id": "ORD-S9",
+      "Name": "order_items timestamps carry a time zone",
+      "Expected": "0 columns without one",
+      "Actual": "2",
+      "Outcome": "FAIL",
+      "Note": "known finding F214"
+    },
+    {
+      "Id": "ORD-S10",
+      "Name": "no identical duplicate indexes on the order tables",
+      "Expected": "0 duplicate groups",
+      "Actual": "4",
+      "Outcome": "FAIL",
+      "Note": "known finding F212"
+    },
+    {
+      "Id": "ORD-S11",
+      "Name": "orders has a status-transition guard",
+      "Expected": ">= 1 trigger besides updated_at",
+      "Actual": "0",
+      "Outcome": "FAIL",
+      "Note": "known finding F211"
+    },
+    {
+      "Id": "ORD-S12",
+      "Name": "a partial index for pending orders (the reaper query)",
+      "Expected": ">= 1",
+      "Actual": "0",
+      "Outcome": "INFO",
+      "Note": "F219: the reaper scans (status, created_at). P1 measures it with EXPLAIN under load."
+    },
+    {
+      "Id": "ORD-S13",
+      "Name": "ORD fixtures are present",
+      "Expected": "4 events, 10 tiers",
+      "Actual": "4 events, 10 tiers",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S14",
+      "Name": "stock, tickets, emails and totals agree for every ORD order",
+      "Expected": "no violations",
+      "Actual": "none",
+      "Outcome": "PASS",
+      "Note": ""
+    }
+  ]
+}
