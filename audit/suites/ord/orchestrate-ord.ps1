@@ -7,7 +7,8 @@
     audit\matrix\helpers.ps1, setup.ps1 read-only: HTTP, SQL, recording, rig and tunnel setup
     audit\suites\ord\ord-helpers.ps1    safety, invariants, sessions
     audit\suites\ord\fixtures-ord.ps1   AUDIT-ORD events and tiers
-    audit\suites\ord\checks-*.ps1       the checks (P0: schema)
+    audit\suites\ord\ord-api.ps1        order API helpers (bodies, initialize call, order lookups)
+    audit\suites\ord\checks-*.ps1       the checks (P0 schema, P1a initialize and pricing)
     audit\suites\ord\hints-ord.ps1, report-ord.ps1
   Exit codes: 0 all good, 1 a check failed, 2 a step failed.
 #>
@@ -72,7 +73,10 @@ $HelperFiles = @(
     'matrix\setup.ps1',
     'suites\ord\ord-helpers.ps1',
     'suites\ord\fixtures-ord.ps1',
+    'suites\ord\ord-api.ps1',
     'suites\ord\checks-schema.ps1',
+    'suites\ord\checks-initialize.ps1',
+    'suites\ord\checks-pricing.ps1',
     'suites\ord\hints-ord.ps1',
     'suites\ord\report-ord.ps1'
 )
@@ -135,6 +139,12 @@ try {
     else {
         Write-Host "`n=== ORD checks ===" -ForegroundColor Cyan
         Invoke-Step -Name 'Schema parity and data integrity (ORD-S)' -Detailed -Action { Test-OrdSchema $Ctx } -Solution $CheckCrashSolution
+        Invoke-Step -Name 'Starting the order checks from clean ORD data' -Action { Reset-OrdState $Ctx } -Solution 'Check the output of audit\sql\ord_reset.sql above.'
+        Invoke-Step -Name 'Initialize checks (ORD-I)' -Detailed -Action { Test-OrdInitialize $Ctx } -Solution $CheckCrashSolution
+        Invoke-Step -Name 'Pricing and fee checks (ORD-P)' -Detailed -Action { Test-OrdPricing $Ctx } -Solution $CheckCrashSolution
+        if ($script:OrdRateWaits -gt 0) {
+            Add-Result 'ORD-A5' 'the rate limiter delayed the run' 'no 429 on initialize' ("{0} wait(s) of 15 s" -f $script:OrdRateWaits) 'INFO' 'Checks waited out 429 answers. If this is slow, tell the ORD agent the WriteLimiter settings so the rig can relax them.'
+        }
     }
 }
 catch {
