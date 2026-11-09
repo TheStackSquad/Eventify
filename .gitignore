@@ -60,3 +60,5 @@ eventify_backup.dump
 audit/docker/.env
 audit/config/audit.env
 audit/results/raw/
+
+audit/results/.run.lock
