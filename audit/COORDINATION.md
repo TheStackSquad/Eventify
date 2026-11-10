@@ -19,3 +19,31 @@ DECISIONS v1 (ORD agent + SUB/rig agent, applied by the owner)
   inbox row processed with last_error "HELD:...". No new inbox status.
 - Stub: additive only, new files, never touch /__reset. Webhook bodies come from real fixtures.
 - Branches: desh/ord-*, desh/sub-*. The owner applies patches and merges.
+
+
+## SUB/rig agent
+
+### Status
+- L1a: core/lock.ps1, core/suites.ps1, audit/suites/sub/suite.psd1, QueueAdminAlert (log-only).
+- L1b: manifest-driven launcher (-List), run lock in the door, Doctor checks (suites, migration order vs origin/main,
+  baseline snapshot, database version, lock), parametrised Write-Report, scoped SUB reset, rig compose
+  (migrate service, stub command), -DbTimezone for rig mode.
+
+### Claims
+- Migrations 000010 to 000013 (confirmed free by ORD): 000010 order money columns to bigint (F218),
+  000011 non-negative CHECKs on order tables (F211), 000012 exact-duplicate index and constraint cleanup (F212),
+  000013 order_items event dates to timestamptz (F214). Authored by SUB/rig at ORD's request; Go changes stay with ORD.
+
+### Decisions v2 (proposed)
+1. -Reset: the door resets SUB's rows only when SUB is selected (webhook_inbox delete scoped to SUB's references);
+   each suite resets itself through its own -Reset.
+2. Evidence files are <id>-matrix-<ts>; SUB moves from subscription-matrix to sub-matrix.
+3. The stub folder holds no *_test.go files (the compose runs `go run *.go`).
+4. Manifest required keys: Id, Orchestrator, Modes, Order. Unknown keys are ignored.
+5. The Doctor checks each suite's Requires against the migration files and the database version.
+6. A suite's orchestrator receives only the options it declares as parameters.
+
+### Requests to ORD
+- Raise Requires in suite.psd1 as your migrations land (13 when 000013 merges).
+- After 000010, update the ORD-S schema checks for bigint money columns.
+- Use forward slashes in Orchestrator (backslashes are accepted but won't work off Windows).

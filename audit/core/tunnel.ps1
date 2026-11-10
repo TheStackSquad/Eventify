@@ -47,23 +47,23 @@ function Clear-DbTimezone {
     Write-Host 'Database time zone restored.' -ForegroundColor Yellow
 }
 
-function Invoke-TunnelRun($Paths, [hashtable]$Orch, [hashtable]$Opt) {
-    if ($Opt.Up) {
-        Invoke-Doctor $Paths 'tunnel' $Opt.ComposeFile $Opt.EnvFile
-        if ((Show-Checks) -gt 0) { Write-Host 'Fix the failures above, then run -Up again.' -ForegroundColor Red; return 2 }
-        Start-TunnelDatabase $Paths $Opt.Reset
-        Write-Host 'The rig database is ready and migrated. Run without -Up to start the matrix.' -ForegroundColor Green
-        return 0
-    }
-    $ids = @(Select-Suites $Opt.Suite $Opt.Tag $Opt.All 'tunnel')
-    if (-not $ids.Count) { return 2 }
-    Start-TunnelDatabase $Paths $Opt.Reset
-    $zone = [string]$Opt.DbTimezone
-    try {
-        if ($zone) { Set-DbTimezone $zone }
-        $note = if ($zone) { ", database zone $zone" } else { '' }
-        Write-Host ('Running: {0} (tunnel mode{1})' -f ($ids -join ', '), $note) -ForegroundColor Cyan
-        return (Invoke-Orchestrator $Paths $Orch)
-    }
-    finally { if ($zone) { Clear-DbTimezone } }
-}
+# function Invoke-TunnelRun($Paths, [hashtable]$Orch, [hashtable]$Opt) {
+#     if ($Opt.Up) {
+#         Invoke-Doctor $Paths 'tunnel' $Opt.ComposeFile $Opt.EnvFile
+#         if ((Show-Checks) -gt 0) { Write-Host 'Fix the failures above, then run -Up again.' -ForegroundColor Red; return 2 }
+#         Start-TunnelDatabase $Paths $Opt.Reset
+#         Write-Host 'The rig database is ready and migrated. Run without -Up to start the matrix.' -ForegroundColor Green
+#         return 0
+#     }
+#     $ids = @(Select-Suites $Opt.Suite $Opt.Tag $Opt.All 'tunnel')
+#     if (-not $ids.Count) { return 2 }
+#     Start-TunnelDatabase $Paths $Opt.Reset
+#     $zone = [string]$Opt.DbTimezone
+#     try {
+#         if ($zone) { Set-DbTimezone $zone }
+#         $note = if ($zone) { ", database zone $zone" } else { '' }
+#         Write-Host ('Running: {0} (tunnel mode{1})' -f ($ids -join ', '), $note) -ForegroundColor Cyan
+#         return (Invoke-Orchestrator $Paths $Orch)
+#     }
+#     finally { if ($zone) { Clear-DbTimezone } }
+# }

@@ -1,0 +1,638 @@
+{
+  "run": {
+    "suite": "ORD",
+    "mode": "tunnel",
+    "generated": "2026-11-10T01:33:51.0548365+01:00",
+    "commit": "3c8f35f",
+    "branch": "desh/sub-infrastructure",
+    "uncommittedPaths": 20,
+    "migrationVersion": "5",
+    "dbZone": "Etc/UTC",
+    "paystack": "test mode (real Paystack)",
+    "stub": ""
+  },
+  "counts": {
+    "FAIL": 14,
+    "INFO": 6,
+    "PASS": 55,
+    "SKIP": 2
+  },
+  "results": [
+    {
+      "Id": "ORD-A1",
+      "Name": "backend reachable through the ngrok tunnel",
+      "Expected": "200 on /health",
+      "Actual": "200",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-F1",
+      "Name": "fixtures ready",
+      "Expected": "4 events, 10 tiers",
+      "Actual": "4 events, 10 tiers",
+      "Outcome": "INFO",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-A2",
+      "Name": "organizer session works",
+      "Expected": "200 on /auth/me",
+      "Actual": "200",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-A3",
+      "Name": "buyer session works",
+      "Expected": "200 on /auth/me",
+      "Actual": "200",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-A4",
+      "Name": "a guest gets an identity cookie",
+      "Expected": "guest_id cookie issued",
+      "Actual": "issued",
+      "Outcome": "PASS",
+      "Note": "Guest checkout and guest-owned verify depend on this cookie."
+    },
+    {
+      "Id": "ORD-S1",
+      "Name": "the tables the order path needs exist",
+      "Expected": "8 tables",
+      "Actual": "8 tables",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S2",
+      "Name": "order_status has every label the code writes",
+      "Expected": "pending,processing,success,failed,refunded,fraud,expired",
+      "Actual": "pending,processing,success,failed,refunded,fraud,expired",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S3",
+      "Name": "ticket_status has active and used",
+      "Expected": "active, used",
+      "Actual": "active,used,canceled,cancelled",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S3b",
+      "Name": "ticket_status has two spellings of cancel",
+      "Expected": "one spelling",
+      "Actual": "active,used,canceled,cancelled",
+      "Outcome": "INFO",
+      "Note": "F213: no Go code writes either today. Refund and void logic will use cancelled (matches subscriptions); a later check asserts nothing writes canceled."
+    },
+    {
+      "Id": "ORD-S4",
+      "Name": "email_outbox dedupe_key has a unique index",
+      "Expected": ">= 1",
+      "Actual": "1",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S5",
+      "Name": "orders.reference is unique",
+      "Expected": ">= 1 unique index",
+      "Actual": "2",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S6",
+      "Name": "ticket_tiers stock CHECK constraints present",
+      "Expected": "3",
+      "Actual": "3",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S7",
+      "Name": "order tables guard totals, amounts and quantities with CHECK constraints",
+      "Expected": ">= 1",
+      "Actual": "0",
+      "Outcome": "FAIL",
+      "Note": "known finding F211"
+    },
+    {
+      "Id": "ORD-S8",
+      "Name": "money columns are bigint",
+      "Expected": "0 columns narrower than bigint",
+      "Actual": "9",
+      "Outcome": "FAIL",
+      "Note": "known finding F218"
+    },
+    {
+      "Id": "ORD-S9",
+      "Name": "order_items timestamps carry a time zone",
+      "Expected": "0 columns without one",
+      "Actual": "2",
+      "Outcome": "FAIL",
+      "Note": "known finding F214"
+    },
+    {
+      "Id": "ORD-S10",
+      "Name": "no identical duplicate indexes on the order tables",
+      "Expected": "0 duplicate groups",
+      "Actual": "4",
+      "Outcome": "FAIL",
+      "Note": "known finding F212"
+    },
+    {
+      "Id": "ORD-S11",
+      "Name": "orders has a status-transition guard",
+      "Expected": ">= 1 trigger besides updated_at",
+      "Actual": "0",
+      "Outcome": "FAIL",
+      "Note": "known finding F211"
+    },
+    {
+      "Id": "ORD-S12",
+      "Name": "a partial index for pending orders (the reaper query)",
+      "Expected": ">= 1",
+      "Actual": "0",
+      "Outcome": "INFO",
+      "Note": "F219: the reaper scans (status, created_at). P1 measures it with EXPLAIN under load."
+    },
+    {
+      "Id": "ORD-S13",
+      "Name": "ORD fixtures are present",
+      "Expected": "4 events, 10 tiers",
+      "Actual": "4 events, 10 tiers",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S14",
+      "Name": "stock, tickets, emails and totals agree for every ORD order",
+      "Expected": "no violations",
+      "Actual": "none",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I1.1",
+      "Name": "a guest can start an order and gets a reference and a payment link",
+      "Expected": "201 with reference, order_id, amount_kobo, authorization_url",
+      "Actual": "201 TIX_1794270788026_ae2eb362",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I1.2",
+      "Name": "the order is stored pending, owned by the guest, unpaid, and the response amount matches",
+      "Expected": "pending, guest_id = cookie, no user, amount_paid 0, amount_kobo = final_total",
+      "Actual": "status=pending user=none guest_match=True amount_paid=0",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I1.3",
+      "Name": "one order item at the server price, subtotal = price x quantity",
+      "Expected": "1 item, qty 2 at 300000",
+      "Actual": "1 item(s), qty 2 at 300000",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I1.4",
+      "Name": "the two tickets are reserved (sold +2, available -2)",
+      "Expected": "sold +2, available -2",
+      "Actual": "sold +2, available -2",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I1.5",
+      "Name": "no tickets and no email exist before payment",
+      "Expected": "0 tickets, 0 emails",
+      "Actual": "0 tickets, 0 emails",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I1.6",
+      "Name": "the gateway was asked for the same amount",
+      "Expected": "",
+      "Actual": "",
+      "Outcome": "SKIP",
+      "Note": "tunnel mode has no stub to ask; the manual run covers real Paystack"
+    },
+    {
+      "Id": "ORD-I2.1",
+      "Name": "a logged-in buyer owns the order through user_id",
+      "Expected": "201 and user_id = the session user",
+      "Actual": "201, user match=True",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I3.1",
+      "Name": "a request with no cookies at all",
+      "Expected": "observation",
+      "Actual": "201",
+      "Outcome": "INFO",
+      "Note": "If 201: the backend gives every cookie-less call a fresh guest identity, so identity does not limit how many orders one client can open (see F207)."
+    },
+    {
+      "Id": "ORD-I3.2",
+      "Name": "a guest order without a CSRF token",
+      "Expected": "observation",
+      "Actual": "201",
+      "Outcome": "INFO",
+      "Note": "The route has no CSRF middleware by design (guest checkout)."
+    },
+    {
+      "Id": "ORD-I4.1",
+      "Name": "malformed JSON is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.2",
+      "Name": "a missing email is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.3",
+      "Name": "an invalid email is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.4",
+      "Name": "a missing first name is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.5",
+      "Name": "an order with no items is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.6",
+      "Name": "quantity 0 is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.7",
+      "Name": "a negative quantity is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.8",
+      "Name": "more than 10 tickets in one line is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400 INVALID_ORDER, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.9",
+      "Name": "more than 10 tickets across two lines is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400 INVALID_ORDER, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.10",
+      "Name": "a quantity that is not a number is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.11",
+      "Name": "a quantity beyond 32 bits is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.12",
+      "Name": "an unknown ticket tier is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "404 TICKET_UNAVAILABLE, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.13",
+      "Name": "a nil ticket tier id is rejected",
+      "Expected": "4xx and nothing written",
+      "Actual": "400, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.14",
+      "Name": "a first name longer than the column (300 characters) is rejected, not a server error",
+      "Expected": "4xx and nothing written",
+      "Actual": "500 ORDER_FAILED, +0 orders, +0 sold",
+      "Outcome": "FAIL",
+      "Note": "known finding F220"
+    },
+    {
+      "Id": "ORD-I4.15",
+      "Name": "a phone number longer than the column (25 characters) is rejected, not a server error",
+      "Expected": "4xx and nothing written",
+      "Actual": "500 ORDER_FAILED, +0 orders, +0 sold",
+      "Outcome": "FAIL",
+      "Note": "known finding F220"
+    },
+    {
+      "Id": "ORD-I4.16",
+      "Name": "the owner comes from the session, not from userId in the body",
+      "Expected": "201 and no user_id on the order",
+      "Actual": "201, user=none",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I4.17",
+      "Name": "quotes and SQL in a name are stored as plain text",
+      "Expected": "201 and the same text back",
+      "Actual": "201, round trip=True",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I5.1",
+      "Name": "the last single ticket can be reserved",
+      "Expected": "201, +1 order, +1 sold",
+      "Actual": "201, +1 orders, +1 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I5.2",
+      "Name": "a sold-out tier is refused",
+      "Expected": "409 SOLD_OUT and nothing written",
+      "Actual": "409 SOLD_OUT, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I5.3",
+      "Name": "asking for more than is left (6 of 5) reserves nothing",
+      "Expected": "409 SOLD_OUT and nothing written",
+      "Actual": "409 SOLD_OUT, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I5.4",
+      "Name": "two lines that together exceed the stock (3 + 3 of 5) are refused atomically",
+      "Expected": "409 SOLD_OUT and nothing written",
+      "Actual": "409 SOLD_OUT, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I6",
+      "Name": "gateway faults at initialize",
+      "Expected": "",
+      "Actual": "",
+      "Outcome": "SKIP",
+      "Note": "rig mode only: the stub injects the faults"
+    },
+    {
+      "Id": "ORD-I7.1",
+      "Name": "the same submit twice with one Idempotency-Key opens one order",
+      "Expected": "one reference, stock reserved once",
+      "Actual": "same reference=False, reserved 2 ticket(s)",
+      "Outcome": "FAIL",
+      "Note": "known finding F207"
+    },
+    {
+      "Id": "ORD-I10.1",
+      "Name": "an event that already ended cannot be bought",
+      "Expected": "4xx and nothing written",
+      "Actual": "404 TICKET_UNAVAILABLE, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I10.2",
+      "Name": "a deleted event cannot be bought",
+      "Expected": "4xx and nothing written",
+      "Actual": "404 TICKET_UNAVAILABLE, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-I11.1",
+      "Name": "a free ticket is either issued without payment or refused with a clear 4xx, never a server error",
+      "Expected": "201 (free flow) or 4xx",
+      "Actual": "503 PAYMENT_UNAVAILABLE, sold +0",
+      "Outcome": "FAIL",
+      "Note": "known finding F215"
+    },
+    {
+      "Id": "ORD-I99",
+      "Name": "stock, tickets, emails and totals still agree after the initialize checks",
+      "Expected": "no violations",
+      "Actual": "none",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P1.1",
+      "Name": "1 x 3,000 naira: fee, VAT and total match the model, and the response amount equals the stored total",
+      "Expected": "sub 300000 + fee 30000 + vat 0 = 330000",
+      "Actual": "sub 300000 + fee 30000 + vat 0 = 330000; response 330000 (10% on top)",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P1.2",
+      "Name": "1 x 3,000 naira: the stored Paystack fee estimate is 1.5% + 100 naira",
+      "Expected": "14950",
+      "Actual": "14950",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P2.1",
+      "Name": "2 x 3,000 naira (6,000 subtotal): fee, VAT and total match the model, and the response amount equals the stored total",
+      "Expected": "sub 600000 + fee 47000 + vat 3525 = 650525",
+      "Actual": "sub 600000 + fee 47000 + vat 3525 = 650525; response 650525 (8.4% on top)",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P2.2",
+      "Name": "2 x 3,000 naira (6,000 subtotal): the stored Paystack fee estimate is 1.5% + 100 naira",
+      "Expected": "19758",
+      "Actual": "19758",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P2.3",
+      "Name": "2 x 3,000 naira (6,000 subtotal): app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
+      "Expected": "service_fee - paystack_fee = 27242",
+      "Actual": "30767",
+      "Outcome": "FAIL",
+      "Note": "known finding F210"
+    },
+    {
+      "Id": "ORD-P3.1",
+      "Name": "1 x 10,000 naira: fee, VAT and total match the model, and the response amount equals the stored total",
+      "Expected": "sub 1000000 + fee 75000 + vat 5625 = 1080625",
+      "Actual": "sub 1000000 + fee 75000 + vat 5625 = 1080625; response 1080625 (8.1% on top)",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P3.2",
+      "Name": "1 x 10,000 naira: the stored Paystack fee estimate is 1.5% + 100 naira",
+      "Expected": "26209",
+      "Actual": "26209",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P3.3",
+      "Name": "1 x 10,000 naira: app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
+      "Expected": "service_fee - paystack_fee = 48791",
+      "Actual": "54416",
+      "Outcome": "FAIL",
+      "Note": "known finding F210"
+    },
+    {
+      "Id": "ORD-P4.1",
+      "Name": "1 x 5,000.00 naira (threshold): fee, VAT and total match the model, and the response amount equals the stored total",
+      "Expected": "sub 500000 + fee 50000 + vat 0 = 550000",
+      "Actual": "sub 500000 + fee 50000 + vat 0 = 550000; response 550000 (10% on top)",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P4.2",
+      "Name": "1 x 5,000.00 naira (threshold): the stored Paystack fee estimate is 1.5% + 100 naira",
+      "Expected": "18250",
+      "Actual": "18250",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P5.1",
+      "Name": "1 x 5,000.01 naira: fee, VAT and total match the model, and the response amount equals the stored total",
+      "Expected": "sub 500001 + fee 40000 + vat 3000 = 543001",
+      "Actual": "sub 500001 + fee 40000 + vat 3000 = 543001; response 543001 (8.6% on top)",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P5.2",
+      "Name": "1 x 5,000.01 naira: the stored Paystack fee estimate is 1.5% + 100 naira",
+      "Expected": "18145",
+      "Actual": "18145",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P5.3",
+      "Name": "1 x 5,000.01 naira: app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
+      "Expected": "service_fee - paystack_fee = 21855",
+      "Actual": "24855",
+      "Outcome": "FAIL",
+      "Note": "known finding F210"
+    },
+    {
+      "Id": "ORD-P6.1",
+      "Name": "3,000 + 2,000 naira, two events: fee, VAT and total match the model, and the response amount equals the stored total",
+      "Expected": "sub 500000 + fee 50000 + vat 0 = 550000",
+      "Actual": "sub 500000 + fee 50000 + vat 0 = 550000; response 550000 (10% on top)",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P6.2",
+      "Name": "3,000 + 2,000 naira, two events: the stored Paystack fee estimate is 1.5% + 100 naira",
+      "Expected": "18250",
+      "Actual": "18250",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P7.1",
+      "Name": "10 x 3,000 naira (the cap): fee, VAT and total match the model, and the response amount equals the stored total",
+      "Expected": "sub 3000000 + fee 215000 + vat 16125 = 3231125",
+      "Actual": "sub 3000000 + fee 215000 + vat 16125 = 3231125; response 3231125 (7.7% on top)",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P7.2",
+      "Name": "10 x 3,000 naira (the cap): the stored Paystack fee estimate is 1.5% + 100 naira",
+      "Expected": "58467",
+      "Actual": "58467",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-P7.3",
+      "Name": "10 x 3,000 naira (the cap): app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
+      "Expected": "service_fee - paystack_fee = 156533",
+      "Actual": "172658",
+      "Outcome": "FAIL",
+      "Note": "known finding F210"
+    },
+    {
+      "Id": "ORD-P8.1",
+      "Name": "a ticket one kobo above the 5,000 naira threshold does not cost less than one exactly at it",
+      "Expected": "total(500001) >= total(500000)",
+      "Actual": "total(500001) = 543001, total(500000) = 550000",
+      "Outcome": "FAIL",
+      "Note": "known finding F209"
+    },
+    {
+      "Id": "ORD-P8.2",
+      "Name": "two 3,000 naira tickets: one order vs two orders",
+      "Expected": "observation",
+      "Actual": "one order of 2 = 650525; two orders of 1 = 660000",
+      "Outcome": "INFO",
+      "Note": "The tier uses the order subtotal, so one larger order pays a lower rate than two small ones. Decide whether that is intended before changing the fee model (P2)."
+    },
+    {
+      "Id": "ORD-P99",
+      "Name": "stock, tickets, emails and totals still agree after the pricing checks",
+      "Expected": "no violations",
+      "Actual": "none",
+      "Outcome": "PASS",
+      "Note": ""
+    }
+  ]
+}
