@@ -67,6 +67,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       FROM_EMAIL: "Eventify Tickets <tickets@eventify.test>"
+      ADMIN_ALERT_EMAIL: alerts@eventify.test
       SUBSCRIPTION_WORKER_INTERVAL: 20s
     ports: ["8081:8081"]
     deploy: { resources: { limits: { cpus: "${BACKEND_CPUS:-1.0}", memory: "${BACKEND_MEM:-1g}" } } }

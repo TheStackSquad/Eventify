@@ -25,6 +25,7 @@ function Get-SubClaims {
         @{ Text = "A lapsed plan is switched off, the vendor returns to the free tier and is told once; old expiries stay silent."; Needs = @("L2.1", "L1.3") }
         @{ Text = "Every paid month, whether a first purchase or a renewal, produces exactly one receipt email."; Needs = @("L3.1") }
         @{ Text = "Repeated worker passes never send the same email twice."; Needs = @("L4.1") }
+        @{ Text = "A payment held for review raises exactly one admin alert, however many times the worker sees it."; Needs = @("L5.1") }
     )
 }
 

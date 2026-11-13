@@ -4,10 +4,12 @@ package subscription
 import (
 	"context"
 	"time"
+	"fmt"
 	"database/sql"
 	"runtime/debug"
 
 	"github.com/eventify/backend/pkg/models"
+	serviceemail "github.com/eventify/backend/pkg/services/email"
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 )
@@ -48,27 +50,28 @@ func (s *subscriptionServiceImpl) runAllTasksSafely(ctx context.Context) {
 }
 
 // alertPaymentsNeedingReview makes held payments impossible to miss: money was taken and nothing was delivered.
+
 func (s *subscriptionServiceImpl) alertPaymentsNeedingReview(ctx context.Context) error {
-	var held []struct {
-		Reference  string         `db:"reference"`
-		AmountKobo int64          `db:"amount_kobo"`
-		PaidKobo   sql.NullInt64  `db:"paid_amount_kobo"`
-		Reason     sql.NullString `db:"review_reason"`
-		CreatedAt  time.Time      `db:"created_at"`
-	}
-	err := s.subscriptionRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
-		return tx.SelectContext(ctx, &held, `
+	return s.subscriptionRepo.RunInTransaction(ctx, func(tx *sqlx.Tx) error {
+		var held []struct {
+			Reference  string         `db:"reference"`
+			AmountKobo int64          `db:"amount_kobo"`
+			PaidKobo   sql.NullInt64  `db:"paid_amount_kobo"`
+			Reason     sql.NullString `db:"review_reason"`
+			CreatedAt  time.Time      `db:"created_at"`
+		}
+		if err := tx.SelectContext(ctx, &held, `
 			SELECT reference, amount_kobo, paid_amount_kobo, review_reason, created_at
-			FROM subscription_payments WHERE status = 'needs_review' ORDER BY created_at LIMIT 50`)
+			FROM subscription_payments WHERE status = 'needs_review' ORDER BY created_at LIMIT 50`); err != nil {
+			return err
+		}
+		for _, h := range held {
+			detail := fmt.Sprintf("expected %d kobo, paid %d kobo: %s (held since %s)",
+				h.AmountKobo, h.PaidKobo.Int64, h.Reason.String, h.CreatedAt.UTC().Format(time.RFC3339))
+			_ = serviceemail.QueueAdminAlert(ctx, tx, "payment_held", h.Reference, detail)
+		}
+		return nil
 	})
-	if err != nil {
-		return err
-	}
-	for _, h := range held {
-		log.Error().Str("reference", h.Reference).Int64("expected_kobo", h.AmountKobo).Int64("paid_kobo", h.PaidKobo.Int64).
-			Str("reason", h.Reason.String).Time("since", h.CreatedAt).Msg("CRITICAL: a customer payment is held for manual review")
-	}
-	return nil
 }
 
 // runAllTasks orchestrates all subscription maintenance tasks
