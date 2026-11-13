@@ -10,6 +10,12 @@
     "test:watch": "jest --watch",
     "test:file": "jest --testPathPatterns",
     "test:coverage": "jest --coverage",
+    "test:auth": "jest src/__tests__/auth --verbose",
+    "test:checkout": "jest src/__tests__/checkout --verbose",
+    "test:vendors": "jest src/__tests__/vendors --verbose",
+    "test:tickets": "jest src/__tests__/tickets --verbose",
+    "test:api": "jest src/__tests__/api --verbose",
+    "test:common": "jest src/__tests__/common --verbose",
     "lint": "eslint"
   },
   "dependencies": {
