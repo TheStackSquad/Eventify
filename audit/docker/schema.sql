@@ -2,9 +2,9 @@
 -- PostgreSQL database dump
 --
 
-\restrict jKxFl2baYJW7xRpIRATY5Owey2z5OHN9NC9fa6Vy7bQpWsFXvRbb9XnESk3f2Cx
+\restrict fuH6amtbzqKSXVGSCXrB7JrwxPszZ7nGpWHzxdghQVun0qbRm8DU5ShMwV4LTmr
 
--- Dumped from database version 18.1
+-- Dumped from database version 18.6 (Debian 18.6-1.pgdg13+2)
 -- Dumped by pg_dump version 18.1
 
 SET statement_timeout = 0;
@@ -825,43 +825,6 @@ CREATE TABLE public.reviews (
 
 
 --
--- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.schema_migrations (
-    version bigint NOT NULL,
-    dirty boolean NOT NULL
-);
-
-
---
--- Name: subscription_payments; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.subscription_payments (
-    reference character varying(100) NOT NULL,
-    vendor_id uuid NOT NULL,
-    subscription_id uuid,
-    tier character varying(20) NOT NULL,
-    amount_kobo bigint NOT NULL,
-    currency character(3) DEFAULT 'NGN'::bpchar NOT NULL,
-    status character varying(20) DEFAULT 'initiated'::character varying NOT NULL,
-    paid_amount_kobo bigint,
-    paid_currency character(3),
-    channel character varying(30),
-    review_reason text,
-    webhook_attempts integer DEFAULT 0 NOT NULL,
-    paid_at timestamp with time zone,
-    applied_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT sp_valid_status CHECK (((status)::text = ANY ((ARRAY['initiated'::character varying, 'applied'::character varying, 'failed'::character varying, 'needs_review'::character varying])::text[]))),
-    CONSTRAINT sp_valid_tier CHECK (((tier)::text = ANY ((ARRAY['basic'::character varying, 'premium'::character varying, 'featured'::character varying])::text[]))),
-    CONSTRAINT subscription_payments_amount_kobo_check CHECK ((amount_kobo > 0))
-);
-
-
---
 -- Name: subscriptions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -979,7 +942,7 @@ CREATE TABLE public.ticket_tiers (
     id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
     event_id uuid NOT NULL,
     name character varying(100) CONSTRAINT ticket_tiers_tier_name_not_null NOT NULL,
-    price_kobo integer DEFAULT 0.00 CONSTRAINT ticket_tiers_price_not_null NOT NULL,
+    price_kobo integer DEFAULT 0 CONSTRAINT ticket_tiers_price_not_null NOT NULL,
     capacity integer CONSTRAINT ticket_tiers_quantity_not_null NOT NULL,
     description character varying(255),
     sold integer DEFAULT 0 CONSTRAINT ticket_tiers_tickets_sold_not_null NOT NULL,
@@ -1095,97 +1058,6 @@ CREATE TABLE public.vendors (
 --
 
 COMMENT ON TABLE public.vendors IS 'Updated: Removed gender and date_of_birth columns as they are not required for vendor operations';
-
-
---
--- Name: v_subscriptions_needing_1d_reminder; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW public.v_subscriptions_needing_1d_reminder AS
- SELECT s.id AS subscription_id,
-    s.vendor_id,
-    s.tier,
-    s.expires_at,
-    s.price,
-    s.currency,
-    v.owner_id,
-    v.name AS vendor_name,
-    u.id AS user_id,
-    u.email AS user_email,
-    u.name AS user_name,
-    u.allow_reminder_emails
-   FROM ((public.subscriptions s
-     JOIN public.vendors v ON ((s.vendor_id = v.id)))
-     JOIN public.users u ON ((v.owner_id = u.id)))
-  WHERE (((s.status)::text = 'active'::text) AND (s.auto_renew = true) AND (s.reminder_1d_sent_at IS NULL) AND (s.expires_at <= (now() + '1 day'::interval)) AND (s.expires_at > now()) AND (u.allow_reminder_emails = true));
-
-
---
--- Name: v_subscriptions_needing_3d_reminder; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW public.v_subscriptions_needing_3d_reminder AS
- SELECT s.id AS subscription_id,
-    s.vendor_id,
-    s.tier,
-    s.expires_at,
-    s.price,
-    s.currency,
-    v.owner_id,
-    v.name AS vendor_name,
-    u.id AS user_id,
-    u.email AS user_email,
-    u.name AS user_name,
-    u.allow_reminder_emails
-   FROM ((public.subscriptions s
-     JOIN public.vendors v ON ((s.vendor_id = v.id)))
-     JOIN public.users u ON ((v.owner_id = u.id)))
-  WHERE (((s.status)::text = 'active'::text) AND (s.auto_renew = true) AND (s.reminder_3d_sent_at IS NULL) AND (s.expires_at <= (now() + '3 days'::interval)) AND (s.expires_at > (now() + '2 days'::interval)) AND (u.allow_reminder_emails = true));
-
-
---
--- Name: v_subscriptions_needing_7d_reminder; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW public.v_subscriptions_needing_7d_reminder AS
- SELECT s.id AS subscription_id,
-    s.vendor_id,
-    s.tier,
-    s.expires_at,
-    s.price,
-    s.currency,
-    v.owner_id,
-    v.name AS vendor_name,
-    u.id AS user_id,
-    u.email AS user_email,
-    u.name AS user_name,
-    u.allow_reminder_emails
-   FROM ((public.subscriptions s
-     JOIN public.vendors v ON ((s.vendor_id = v.id)))
-     JOIN public.users u ON ((v.owner_id = u.id)))
-  WHERE (((s.status)::text = 'active'::text) AND (s.auto_renew = true) AND (s.reminder_7d_sent_at IS NULL) AND (s.expires_at <= (now() + '7 days'::interval)) AND (s.expires_at > (now() + '6 days'::interval)) AND (u.allow_reminder_emails = true));
-
-
---
--- Name: v_subscriptions_needing_expired_notice; Type: VIEW; Schema: public; Owner: -
---
-
-CREATE VIEW public.v_subscriptions_needing_expired_notice AS
- SELECT s.id AS subscription_id,
-    s.vendor_id,
-    s.tier,
-    s.expires_at,
-    s.price,
-    s.currency,
-    v.owner_id,
-    v.name AS vendor_name,
-    u.id AS user_id,
-    u.email AS user_email,
-    u.name AS user_name
-   FROM ((public.subscriptions s
-     JOIN public.vendors v ON ((s.vendor_id = v.id)))
-     JOIN public.users u ON ((v.owner_id = u.id)))
-  WHERE (((s.status)::text = 'expired'::text) AND (s.expired_notice_sent_at IS NULL));
 
 
 --
@@ -1417,22 +1289,6 @@ ALTER TABLE ONLY public.refresh_tokens
 
 ALTER TABLE ONLY public.reviews
     ADD CONSTRAINT reviews_pkey PRIMARY KEY (id);
-
-
---
--- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schema_migrations
-    ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
-
-
---
--- Name: subscription_payments subscription_payments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.subscription_payments
-    ADD CONSTRAINT subscription_payments_pkey PRIMARY KEY (reference);
 
 
 --
@@ -1876,27 +1732,6 @@ CREATE INDEX idx_reviews_vendor_trust ON public.reviews USING btree (vendor_id, 
 
 
 --
--- Name: idx_sp_needs_review; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sp_needs_review ON public.subscription_payments USING btree (created_at) WHERE ((status)::text = 'needs_review'::text);
-
-
---
--- Name: idx_sp_stale_initiated; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sp_stale_initiated ON public.subscription_payments USING btree (created_at) WHERE ((status)::text = 'initiated'::text);
-
-
---
--- Name: idx_sp_vendor_created; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sp_vendor_created ON public.subscription_payments USING btree (vendor_id, created_at DESC);
-
-
---
 -- Name: idx_stats_cat_lookup; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2324,13 +2159,6 @@ CREATE TRIGGER trg_lock_price_on_sales BEFORE UPDATE ON public.ticket_tiers FOR 
 
 
 --
--- Name: subscription_payments trg_sp_updated_at; Type: TRIGGER; Schema: public; Owner: -
---
-
-CREATE TRIGGER trg_sp_updated_at BEFORE UPDATE ON public.subscription_payments FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-
---
 -- Name: profile_views trigger_cleanup_old_views; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -2538,22 +2366,6 @@ ALTER TABLE ONLY public.reviews
 
 
 --
--- Name: subscription_payments subscription_payments_subscription_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.subscription_payments
-    ADD CONSTRAINT subscription_payments_subscription_id_fkey FOREIGN KEY (subscription_id) REFERENCES public.subscriptions(id) ON DELETE SET NULL;
-
-
---
--- Name: subscription_payments subscription_payments_vendor_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.subscription_payments
-    ADD CONSTRAINT subscription_payments_vendor_id_fkey FOREIGN KEY (vendor_id) REFERENCES public.vendors(id) ON DELETE RESTRICT;
-
-
---
 -- Name: ticket_tiers ticket_tiers_event_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2621,5 +2433,5 @@ ALTER TABLE ONLY public.vendors
 -- PostgreSQL database dump complete
 --
 
-\unrestrict jKxFl2baYJW7xRpIRATY5Owey2z5OHN9NC9fa6Vy7bQpWsFXvRbb9XnESk3f2Cx
+\unrestrict fuH6amtbzqKSXVGSCXrB7JrwxPszZ7nGpWHzxdghQVun0qbRm8DU5ShMwV4LTmr
 

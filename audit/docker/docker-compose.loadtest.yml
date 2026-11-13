@@ -15,10 +15,20 @@ services:
       interval: 3s
       retries: 20
 
+  # One-shot: applies backend/migrations on every start (schema.sql is the pre-migration baseline). Exits 0 when done.
+  migrate:
+    image: migrate/migrate
+    depends_on:
+      db: { condition: service_healthy }
+    volumes:
+      - ../../backend/migrations:/migrations:ro
+    command: ["-path", "/migrations", "-database", "postgres://loadtest:loadtest@db:5432/eventify_loadtest?sslmode=disable", "up"]
+    restart: "no"
+
   stub:
     image: golang:1.25
     working_dir: /stub
-    command: ["go", "run", "paystack_stub.go"]
+    command: ["sh", "-c", "go run *.go"]
     volumes:
       - ./../stub:/stub:ro
     ports:
@@ -40,6 +50,7 @@ services:
     build: { context: ../../backend, dockerfile: dockerfile }
     depends_on:
       db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
       stub: { condition: service_started }
       mailpit: { condition: service_started }
     environment:
@@ -56,6 +67,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       FROM_EMAIL: "Eventify Tickets <tickets@eventify.test>"
+      ADMIN_ALERT_EMAIL: alerts@eventify.test
       SUBSCRIPTION_WORKER_INTERVAL: 20s
     ports: ["8081:8081"]
     deploy: { resources: { limits: { cpus: "${BACKEND_CPUS:-1.0}", memory: "${BACKEND_MEM:-1g}" } } }

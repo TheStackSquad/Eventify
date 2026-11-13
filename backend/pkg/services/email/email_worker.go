@@ -239,6 +239,12 @@ func render(r outboxRow) (subject, body string, err error) {
 		}
 		return r.Subject, renderSubscriptionBody(r.TemplateType, sp), nil
 		
+		case TplAdminAlert:
+		var ap AlertPayload
+		if err := json.Unmarshal([]byte(r.Payload), &ap); err != nil {
+			return "", "", permanentError{fmt.Errorf("unreadable alert payload: %w", err)}
+		}
+		return r.Subject, renderAlertBody(ap), nil
 	default:
 		return "", "", permanentError{fmt.Errorf("unknown template %q", r.TemplateType)}
 	}

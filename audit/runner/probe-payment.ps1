@@ -46,5 +46,5 @@ if ($dir) {
 } else { 'no backend log folder found' }
 
 Section '5. the latest matrix report rows for the payment tests'
-$r = Get-ChildItem audit/results -Filter 'subscription-matrix-*.md' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$r = Get-ChildItem audit/results -Filter '*-matrix-*.md' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($r) { $r.Name; Select-String -Path $r.FullName -Pattern '^\| (T1|T2|T5|T7)\.' | ForEach-Object { $_.Line } }

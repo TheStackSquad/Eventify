@@ -23,5 +23,6 @@
         @{ Name = 'RSA_PUBLIC_KEY'; Load = $false }
         @{ Name = 'BACKEND_PORT'; Check = 'port'; Default = '8081'; Fix = 'the port the local backend listens on' }
         @{ Name = 'NGROK_DOMAIN'; Need = @('tunnel'); Check = 'domain'; Fix = 'your ngrok static domain, for example name.ngrok-free.dev' }
+        @{ Name = 'ADMIN_ALERT_EMAIL'; Check = 'email'; Default = 'alerts@eventify.test'; Fix = 'who receives money-attention alerts' }
     )
 }

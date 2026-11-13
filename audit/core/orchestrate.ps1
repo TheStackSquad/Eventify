@@ -268,6 +268,7 @@ DELETE FROM webhook_inbox;
         Invoke-Step -Name "Oversized webhook body check (T16)" -Detailed -Action { Test-OversizedBody $Ctx } -Solution $CheckCrashSolution
         Invoke-Step -Name "Hostile reference checks (T17)" -Detailed -Action { Test-HostileReferences $Ctx } -Solution $CheckCrashSolution
         Invoke-Step -Name "Subscription lifecycle checks (L1, L2, L4)" -Detailed -Action { Test-SubscriptionLifecycle $Ctx } -Solution $CheckCrashSolution
+        Invoke-Step -Name "Held-payment admin alert (L5)" -Detailed -Action { Test-AdminAlert $Ctx } -Solution $CheckCrashSolution
 
         if ($Burst -gt 0) {
             Invoke-Step -Name "Rate limit burst of $Burst initiate calls (T15)" -Detailed -Action { Test-RateLimit $Ctx } -Solution $CheckCrashSolution

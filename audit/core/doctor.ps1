@@ -46,7 +46,12 @@ function Invoke-Doctor($Paths, [string]$Mode, [string]$ComposeFile, [string]$Env
     Test-Tools $Mode
     Test-Paths $Paths $ComposeFile $Mode
     Test-AuditEnv $Mode $EnvFile
+    Test-Suites $Paths
     Test-MigrationsTracked $Paths
+    Test-MigrationOrder $Paths
+    Test-SnapshotBaseline $Paths
+    Test-SuiteRequires $Paths $Mode $ComposeFile
     Test-SecretHygiene $Paths
+    Test-RunLock
     if ($Mode -eq 'rig') { Test-Rig $ComposeFile } else { Test-Tunnel }
 }

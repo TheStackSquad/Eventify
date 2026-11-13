@@ -92,3 +92,28 @@ function Test-PaymentReceipts($Ctx) {
     $got = (Get-ReceiptCount) - $script:ReceiptBase.Receipts
     Check "L3.1" "each paid month (first purchase or renewal) queues exactly one receipt" "$paid receipt(s)" "$got receipt(s)" ($got -eq $paid)
 }
+
+# L5 a payment held for review raises exactly one admin alert, however many worker passes see it
+function Test-AdminAlert($Ctx) {
+    if (-not $env:SUBSCRIPTION_WORKER_INTERVAL -or -not $env:ADMIN_ALERT_EMAIL -or -not $env:AUDIT_VENDOR2_EMAIL) {
+        Add-Result "L5.1" "a held payment raises exactly one admin alert" "worker interval and alert address set" "not set" "SKIP" "start through the door: it loads both from audit\docker\.env"
+        return
+    }
+    $vid = Get-VendorId $env:AUDIT_VENDOR2_EMAIL
+    Assert-Guid $vid "vendor id"
+    $ref = "ALERT-" + [guid]::NewGuid().ToString()
+    $key = "alert:payment_held:$ref"
+    Invoke-Sql ("INSERT INTO subscription_payments (reference, vendor_id, tier, amount_kobo, currency, status, paid_amount_kobo, paid_currency, review_reason) VALUES ({0}, '{1}', 'basic', 350100, 'NGN', 'needs_review', 350000, 'NGN', 'audit: seeded held payment')" -f (Get-SqlLiteral $ref), $vid) | Out-Null
+    try {
+        $count = { [int](Invoke-Sql ("SELECT count(*) FROM email_outbox WHERE dedupe_key = {0}" -f (Get-SqlLiteral $key))) }
+        $null = Wait-Until { (& $count) -ge 1 } 100
+        $first = & $count
+        Start-Sleep -Seconds 45     # at least two more worker passes
+        $later = & $count
+        Check "L5.1" "a held payment raises exactly one admin alert" "1 alert, still 1 after later passes" "$first, then $later" (($first -eq 1) -and ($later -eq 1))
+    }
+    finally {
+        Invoke-Sql ("DELETE FROM email_outbox WHERE dedupe_key = {0}" -f (Get-SqlLiteral $key)) | Out-Null
+        Invoke-Sql ("DELETE FROM subscription_payments WHERE reference = {0}" -f (Get-SqlLiteral $ref)) | Out-Null
+    }
+}
