@@ -46,6 +46,7 @@ func TestSubscriptionTemplatesContent(t *testing.T) {
 
 func TestSubscriptionTemplatesWithoutSiteURL(t *testing.T) {
 	t.Setenv("FRONTEND_BASE_URL", "")
+	t.Setenv("FRONTEND_URL", "")
 	for _, tpl := range subTemplates {
 		if _, body := renderFor(t, tpl); strings.Contains(body, "http") {
 			t.Errorf("%s: must not print links when FRONTEND_BASE_URL is unset", tpl)
