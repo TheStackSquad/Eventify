@@ -51,7 +51,7 @@ $Suite = @($Suite | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 $Tag = @($Tag | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 
 if ($List)       { Show-AuditSuites (Get-AuditSuites $Paths.Audit); exit 0 }
-if ($Doctor)     { Invoke-Doctor $Paths $Mode $ComposeFile $EnvFile; exit $(if ((Show-Checks) -gt 0) { 1 } else { 0 }) }
+if ($Doctor)     { try { $null = Initialize-AuditConfig $Mode $EnvFile } catch { }; Invoke-Doctor $Paths $Mode $ComposeFile $EnvFile; exit $(if ((Show-Checks) -gt 0) { 1 } else { 0 }) }
 if ($Down)       { exit (Stop-Stack $Mode $ComposeFile) }
 if ($Report)     { Write-Host 'Report rebuild arrives in phase P5. Every run still writes audit/results/ by itself.'; exit 0 }
 if ($ShowConfig) { Show-AuditConfig (Import-AuditConfig -Mode $Mode -EnvFile $EnvFile); exit 0 }
