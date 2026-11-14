@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useCart } from "@/context/cartContext";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -35,24 +35,43 @@ export default function CheckoutPage() {
 
   const [customerInfo, setCustomerInfo] = useState(EMPTY_CUSTOMER);
   const [isFormValid, setIsFormValid] = useState(false);
-
+  const [initialUserData, setInitialUserData] = useState(null);
+  
+    useEffect(() => {
+      if (typeof window === "undefined") return;
+      try {
+        const raw = localStorage.getItem("userData");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object") {
+            setInitialUserData(parsed);
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to read userData from localStorage:", error);
+      }
+    }, []);
+  
   const cartTotals = useMemo(() => {
     try {
-      return calculateCartTotals(items);
-    } catch (error) {
-      console.error("Cart calculation error:", error);
-      return {
-        subtotal: 0,
-        finalTotal: 0,
-        finalTotalKobo: 0,
-        hasMixedTiers: false,
-        serviceCharge: 0,
-        serviceFee: 0,
-        vat: 0,
-        itemsBreakdown: [],
-      };
-    }
-  }, [items]);
+    return calculateCartTotals(items);
+  } catch (error) {
+    console.error("Cart calculation error:", error);
+    return {
+      subtotal: 0,
+      finalTotal: 0,
+      finalTotalKobo: 0,
+      hasMixedTiers: false,
+      serviceCharge: 0,
+      serviceFee: 0,
+      vat: 0,
+      itemsBreakdown: [],
+      hasCalculationError: true,
+      calculationError:
+        `We couldn’t calculate your cart totals accurately. Please refresh or re-add your tickets.`,
+    };
+  }
+}, [items]);
 
   const handleCustomerInfoChange = useCallback(
     (info) => setCustomerInfo(info),
@@ -99,14 +118,31 @@ export default function CheckoutPage() {
         Secure checkout
       </h1>
 
+      {cartTotals.hasCalculationError && (
+        <div
+          role="alert"
+          className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800"
+        >
+          {cartTotals.calculationError ||
+            "There was a problem calculating your cart totals. Please review your cart."}
+        </div>
+      )}
+
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <CheckoutSectionBoundary
             section="Customer Information"
             minHeight="400px"
           >
+            <SecureCheckoutPanel
+              customerInfo={customerInfo}
+              isFormValid={isFormValid && !cartTotals.hasCalculationError}
+            ></SecureCheckoutPanel>
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
               <CustomerForm
+                initialData={
+                  initialUserData ? { user: initialUserData } : undefined
+                }
                 onCustomerInfoChange={handleCustomerInfoChange}
                 onValidationChange={handleFormValidation}
               />

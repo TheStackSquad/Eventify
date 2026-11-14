@@ -26,30 +26,39 @@ const ErrorMessage = ({ field, errors, touched }) =>
 ErrorMessage.displayName = "CustomerFormErrorMessage";
 
 export default function CustomerForm({
+  initialData,
   onCustomerInfoChange,
   onValidationChange,
 }) {
   const [showDraftBanner, setShowDraftBanner] = useState(false);
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
   const initialLoadRef = useRef(true);
+  const userEditedRef = useRef(false);
+
+  const buildInitialForm = useCallback((seedSource) => {
+    const user = seedSource?.user || seedSource || {};
+    return {
+      firstName: user.firstName || user.first_name || "",
+      lastName: user.lastName || user.last_name || "",
+      email: user.email || "",
+      phone: user.phone || user.phoneNumber || "",
+      city: user.city || "",
+      state: user.state || "",
+      country: user.country || "Nigeria",
+    };
+  }, []);
+
+  // Initialize form data
 
   // Initialize form data
   const [formData, setFormData] = useState(() => {
-    const emptyForm = {
-      firstName: "",
-      lastName: "",
-      email: "",
-      phone: "",
-      city: "",
-      state: "",
-      country: "Nigeria",
-    };
+    const seededForm = buildInitialForm(initialData);
 
-    if (typeof window === "undefined") return emptyForm;
+    if (typeof window === "undefined") return seededForm;
 
     // Check if user previously dismissed the draft banner
     const dismissed = sessionStorage.getItem(DRAFT_DISMISSED_KEY);
-    if (dismissed) return emptyForm;
+    if (dismissed) return seededForm;
 
     // Try to load saved draft
     const saved = sessionStorage.getItem(STORAGE_KEY);
@@ -57,28 +66,47 @@ export default function CustomerForm({
       try {
         const parsed = JSON.parse(saved);
         // Only show banner if draft has meaningful data
-        const hasData = Object.values(parsed).some(val => val && val !== "Nigeria");
+        const hasData = Object.values(parsed).some(
+          (val) => val && val !== "Nigeria",
+        );
         if (hasData) {
           setHasSavedDraft(true);
           // Don't auto-restore, show banner instead
-          return emptyForm;
+          return seededForm;
         }
       } catch (e) {
         console.warn("Failed to parse saved draft:", e);
       }
     }
 
-    return emptyForm;
+    return seededForm;
   });
+
+  // Hydrate fields when initialData arrives after mount (e.g. from CheckoutPage localStorage effect)
+  useEffect(() => {
+    if (!initialData || userEditedRef.current) return;
+    const hydrated = buildInitialForm(initialData);
+    const hasSeedData = Object.entries(hydrated).some(
+      ([k, v]) => k !== "country" && Boolean(v),
+    );
+    if (hasSeedData) {
+      setFormData((prev) => ({
+        ...prev,
+        ...Object.fromEntries(
+          Object.entries(hydrated).filter(([, v]) => Boolean(v)),
+        ),
+      }));
+    }
+  }, [initialData, buildInitialForm]);
 
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
 
   // Use optimized persistence hook with longer delay for low-end devices
   const { saveStatus, clearData } = useFormPersistence(
-    formData, 
-    STORAGE_KEY, 
-    1000 // 1 second debounce - good balance for low-end devices
+    formData,
+    STORAGE_KEY,
+    1000, // 1 second debounce - good balance for low-end devices
   );
 
   // Show draft recovery banner only once on mount
@@ -96,16 +124,18 @@ export default function CustomerForm({
 
   // Throttled parent updates to reduce re-renders
   const lastUpdateRef = useRef({ data: null, isValid: null });
-  
+
   useEffect(() => {
-    const dataChanged = JSON.stringify(formData) !== JSON.stringify(lastUpdateRef.current.data);
-    const validityChanged = validationResult.isValid !== lastUpdateRef.current.isValid;
+    const dataChanged =
+      JSON.stringify(formData) !== JSON.stringify(lastUpdateRef.current.data);
+    const validityChanged =
+      validationResult.isValid !== lastUpdateRef.current.isValid;
 
     if (dataChanged || validityChanged) {
       setErrors(validationResult.errors);
       onValidationChange(validationResult.isValid);
       onCustomerInfoChange(formData);
-      
+
       lastUpdateRef.current = {
         data: formData,
         isValid: validationResult.isValid,
@@ -134,7 +164,7 @@ export default function CustomerForm({
   const handleDismissDraft = useCallback(() => {
     setShowDraftBanner(false);
     setHasSavedDraft(false);
-    
+
     if (typeof window !== "undefined") {
       // Mark as dismissed so banner doesn't reappear on refresh
       sessionStorage.setItem(DRAFT_DISMISSED_KEY, "true");
@@ -158,16 +188,48 @@ export default function CustomerForm({
       `w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all duration-200 ${
         errors[field] && touched[field] ? "border-red-500" : "border-gray-300"
       }`,
-    [errors, touched]
+    [errors, touched],
   );
 
   // Array of Nigerian states for dropdown
   const NigerianStates = [
-    "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue",
-    "Borno", "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu",
-    "FCT Abuja", "Gombe", "Imo", "Jigawa", "Kaduna", "Kano", "Katsina",
-    "Kebbi", "Kogi", "Kwara", "Lagos", "Nasarawa", "Niger", "Ogun", "Ondo",
-    "Osun", "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara",
+    "Abia",
+    "Adamawa",
+    "Akwa Ibom",
+    "Anambra",
+    "Bauchi",
+    "Bayelsa",
+    "Benue",
+    "Borno",
+    "Cross River",
+    "Delta",
+    "Ebonyi",
+    "Edo",
+    "Ekiti",
+    "Enugu",
+    "FCT Abuja",
+    "Gombe",
+    "Imo",
+    "Jigawa",
+    "Kaduna",
+    "Kano",
+    "Katsina",
+    "Kebbi",
+    "Kogi",
+    "Kwara",
+    "Lagos",
+    "Nasarawa",
+    "Niger",
+    "Ogun",
+    "Ondo",
+    "Osun",
+    "Oyo",
+    "Plateau",
+    "Rivers",
+    "Sokoto",
+    "Taraba",
+    "Yobe",
+    "Zamfara",
   ];
 
   return (
@@ -188,7 +250,7 @@ export default function CustomerForm({
           <User className="mr-2" size={20} data-testid="user-icon" />
           Customer Information
         </h3>
-        
+
         {/* Save Status Indicator */}
         <SaveStatusIndicator status={saveStatus} />
       </div>
@@ -196,7 +258,10 @@ export default function CustomerForm({
       {/* Name Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
+          <label
+            htmlFor="firstName"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
             First Name *
           </label>
           <input
@@ -215,7 +280,10 @@ export default function CustomerForm({
           <ErrorMessage field="firstName" errors={errors} touched={touched} />
         </div>
         <div>
-          <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
+          <label
+            htmlFor="lastName"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
             Last Name *
           </label>
           <input
@@ -238,7 +306,10 @@ export default function CustomerForm({
       {/* Contact Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-gray-700 mb-2 flex items-center"
+          >
             <Mail className="mr-1" size={16} data-testid="mail-icon" />
             Email Address *
           </label>
@@ -258,7 +329,10 @@ export default function CustomerForm({
           <ErrorMessage field="email" errors={errors} touched={touched} />
         </div>
         <div>
-          <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+          <label
+            htmlFor="phone"
+            className="block text-sm font-medium text-gray-700 mb-2 flex items-center"
+          >
             <Phone className="mr-1" size={16} data-testid="phone-icon" />
             Phone Number *
           </label>
@@ -282,7 +356,10 @@ export default function CustomerForm({
       {/* City & State */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-2">
+          <label
+            htmlFor="city"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
             City *
           </label>
           <input
@@ -301,7 +378,10 @@ export default function CustomerForm({
           <ErrorMessage field="city" errors={errors} touched={touched} />
         </div>
         <div>
-          <label htmlFor="state" className="block text-sm font-medium text-gray-700 mb-2">
+          <label
+            htmlFor="state"
+            className="block text-sm font-medium text-gray-700 mb-2"
+          >
             State *
           </label>
           <select
@@ -335,7 +415,8 @@ export default function CustomerForm({
       >
         <p className="text-sm text-blue-800">
           <strong>📧 Note:</strong> This information will be used for ticket
-          delivery, receipts, and event communications. Your progress is automatically saved as you type.
+          delivery, receipts, and event communications. Your progress is
+          automatically saved as you type.
         </p>
       </motion.div>
     </div>

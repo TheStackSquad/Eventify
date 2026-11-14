@@ -5,9 +5,13 @@ import { memo } from "react";
 import { CheckCircle } from "lucide-react";
 
 const OrderSummary = memo(
-  ({ customerInfo, itemCount, orderBreakdown, items }) => {
+  ({ customerInfo = {}, itemCount = 0, orderBreakdown = {}, items = [] }) => {
     const formatPrice = (amount) => {
-      return `₦${amount.toLocaleString("en-NG")}`;
+      const numeric = Number(amount);
+      if (amount == null || Number.isNaN(numeric)) {
+        return "₦0";
+      }
+      return `₦${numeric.toLocaleString("en-NG")}`;
     };
 
     return (
@@ -58,7 +62,6 @@ const OrderSummary = memo(
             })}
           </div>
         </div>
-
         <div className="space-y-2 text-gray-700 text-sm">
           <div className="flex justify-between">
             <span>
@@ -66,29 +69,29 @@ const OrderSummary = memo(
               )
             </span>
             <span className="font-medium">
-              {formatPrice(orderBreakdown.subtotal)}
+              {formatPrice(orderBreakdown?.subtotal)}
             </span>
           </div>
 
           <div className="flex justify-between">
             <span>Service Fee</span>
             <span className="font-medium">
-              {formatPrice(orderBreakdown.serviceFee)}
+              {formatPrice(orderBreakdown?.serviceFee)}
             </span>
           </div>
 
-          {orderBreakdown.vat > 0 && (
+          {(orderBreakdown?.vat ?? 0) > 0 && (
             <div className="flex justify-between">
               <span>Value Added Tax (VAT)</span>
               <span className="font-medium">
-                {formatPrice(orderBreakdown.vat)}
+                {formatPrice(orderBreakdown?.vat)}
               </span>
             </div>
           )}
 
           <div className="border-t border-gray-300 pt-3 flex justify-between text-lg font-extrabold text-red-600">
             <span>Total Due</span>
-            <span>{formatPrice(orderBreakdown.finalTotal)}</span>
+            <span>{formatPrice(orderBreakdown?.finalTotal)}</span>
           </div>
         </div>
 
