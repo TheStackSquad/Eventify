@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSubscriptionStatus } from "@/utils/hooks/useSubscription";
 import { verifySubscriptionAPI } from "@/services/subscriptionAPI";
@@ -16,44 +16,66 @@ import {
 } from "lucide-react";
 
 export default function VerifyPaymentContent() {
+  const [isVerifying, setIsVerifying] = useState(true);
+
   const searchParams = useSearchParams();
   const router = useRouter();
   const reference = searchParams.get("reference");
 
-  const [isVerifying, setIsVerifying] = useState(true);
   const [status, setStatus] = useState("verifying"); // verifying, success, error
   const { refetch } = useSubscriptionStatus();
 
+  const isMountedRef = useRef(true);
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
+
   useEffect(() => {
-    const confirmPayment = async () => {
-      if (!reference) {
-        setStatus("error");
-        setIsVerifying(false);
-        return;
-      }
-
-      try {
-        // 1. Manually trigger a verification call to our Go backend
-        const result = await verifySubscriptionAPI(reference);
-
-        if (result.status === "success") {
-          // 2. Refresh the global subscription state in React Query
-          await refetch();
-          setStatus("success");
-          toastAlert.success("Subscription activated!");
-        } else {
-          setStatus("error");
-        }
-      } catch (err) {
-        console.error("Verification failed:", err);
-        setStatus("error");
-      } finally {
-        setIsVerifying(false);
-      }
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
     };
+  }, []);
 
-    confirmPayment();
-  }, [reference, refetch]);
+ useEffect(() => {
+   let cancelled = false;
+
+   const confirmPayment = async () => {
+     if (!reference) {
+       if (isMountedRef.current && !cancelled) {
+         setStatus("error");
+       }
+       return;
+     }
+
+     try {
+       // 1. Manually trigger a verification call to our Go backend
+       const result = await verifySubscriptionAPI(reference);
+       if (!isMountedRef.current || cancelled) return;
+
+       if (result.status === "success") {
+         // 2. Refresh the global subscription state in React Query
+         await refetchRef.current?.();
+         if (!isMountedRef.current || cancelled) return;
+
+         setStatus("success");
+         toastAlert.success("Subscription activated!");
+       } else {
+         setStatus("error");
+       }
+     } catch (err) {
+       console.error("Verification failed:", err);
+       if (isMountedRef.current && !cancelled) {
+         setStatus("error");
+       }
+     }
+   };
+
+   confirmPayment();
+
+   return () => {
+     cancelled = true;
+   };
+ }, [reference]);
 
   // Shared container classes for consistent styling
   const containerClasses =

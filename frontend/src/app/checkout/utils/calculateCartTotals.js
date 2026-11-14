@@ -17,62 +17,74 @@ export const calculateCartTotals = (cartItems) => {
     };
   }
 
-  let totalSubtotal = 0;
-  let totalServiceFee = 0;
-  let totalVAT = 0;
-  const itemsBreakdown = [];
-  const tiers = new Set();
+ let totalSubtotal = 0;
+ let totalServiceFee = 0;
+ let totalVAT = 0;
+ let hasCalculationError = false;
+ let calculationError = null;
+ const itemsBreakdown = [];
+ const tiers = new Set();
 
-  cartItems.forEach((item) => {
-    const pricePerTicket = Number(item.price);
-    // ✅ FIX: use null-check instead of || so explicit quantity:0 is preserved.
-    // Previously `0 || 1` promoted zero-quantity items to 1, inflating subtotals.
-    const itemQuantity = item.quantity != null ? item.quantity : 1;
-    const itemSubtotal = pricePerTicket * itemQuantity;
+ cartItems.forEach((item) => {
+   const rawPrice = item?.price;
+   const pricePerTicket =
+     rawPrice === null || rawPrice === undefined || rawPrice === ""
+       ? NaN
+       : Number(rawPrice);
 
-    const feeCalc = calculateServiceFee(pricePerTicket);
-    const itemServiceFee = feeCalc.serviceFee * itemQuantity;
-    const itemVAT = feeCalc.vat * itemQuantity;
+   if (!Number.isFinite(pricePerTicket) || pricePerTicket < 0) {
+     hasCalculationError = true;
+     calculationError =
+       "One or more tickets in your cart have an invalid price. Please review your cart before paying.";
+     return;
+   }
+const itemQuantity = item.quantity != null ? item.quantity : 1;
+const itemSubtotal = pricePerTicket * itemQuantity;
 
-    tiers.add(feeCalc.tier);
+const feeCalc = calculateServiceFee(pricePerTicket);
+const itemServiceFee = feeCalc.serviceFee * itemQuantity;
+const itemVAT = feeCalc.vat * itemQuantity;
 
-    totalSubtotal += itemSubtotal;
-    totalServiceFee += itemServiceFee;
-    totalVAT += itemVAT;
+tiers.add(feeCalc.tier);
 
-    itemsBreakdown.push({
-      cartId: item.cartId || item.id,
-      eventTitle: item.eventTitle,
-      tierName: item.tierName,
-      pricePerTicket: pricePerTicket,
-      quantity: itemQuantity,
-      subtotal: itemSubtotal,
-      serviceFee: itemServiceFee,
-      vat: itemVAT,
-      totalFees: itemServiceFee + itemVAT,
-      tier: feeCalc.tier,
-    });
+totalSubtotal += itemSubtotal;
+totalServiceFee += itemServiceFee;
+totalVAT += itemVAT;
+
+  itemsBreakdown.push({
+    cartId: item.cartId || item.id,
+    eventTitle: item.eventTitle,
+    tierName: item.tierName,
+    pricePerTicket: pricePerTicket,
+    quantity: itemQuantity,
+    subtotal: itemSubtotal,
+    serviceFee: itemServiceFee,
+    vat: itemVAT,
+    totalFees: itemServiceFee + itemVAT,
+    tier: feeCalc.tier,
   });
+ });
 
   const totalFees = totalServiceFee + totalVAT;
   const finalTotal = totalSubtotal + totalFees;
   const finalTotalKobo = Math.round(finalTotal * 100);
 
-  return {
-    subtotal: totalSubtotal,
-    serviceFee: totalServiceFee,
-    vat: totalVAT,
-    totalFees: totalFees,
-    finalTotal: finalTotal,
-    finalTotalKobo: finalTotalKobo,
-    itemsBreakdown: itemsBreakdown,
-    hasMixedTiers: tiers.size > 1,
-    // ✅ FIX: null-check mirrors the itemQuantity fix above — explicit 0 stays 0.
-    itemCount: cartItems.reduce(
-      (sum, item) => sum + (item.quantity != null ? item.quantity : 1),
-      0,
-    ),
-  };
+ return {
+   subtotal: totalSubtotal,
+   serviceFee: totalServiceFee,
+   vat: totalVAT,
+   totalFees: totalFees,
+   finalTotal: finalTotal,
+   finalTotalKobo: finalTotalKobo,
+   itemsBreakdown: itemsBreakdown,
+   hasMixedTiers: tiers.size > 1,
+   hasCalculationError,
+   calculationError,
+   itemCount: cartItems.reduce(
+     (sum, item) => sum + (item.quantity != null ? item.quantity : 1),
+     0,
+   ),
+ };
 };
 
 export const formatOrderMetadata = (cartTotals, customerInfo, cartItems) => {
