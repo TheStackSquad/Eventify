@@ -44,6 +44,12 @@ const nextConfig = {
         hostname: "paystack.com",
         pathname: "/assets/**",
       },
+      {
+        protocol: 'https',
+        hostname: 'example.com',
+        port: '',
+        pathname: '/**', // Matches all paths on this domain
+      },
     ],
   },
 
