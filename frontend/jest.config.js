@@ -108,7 +108,10 @@ const collectCoverageFrom = [
 ];
 
 // ─── Coverage gate (root-level only; Jest ignores it inside projects) ─────────
-// Ratcheted to the current floor. Raise these as coverage improves; never lower.
+// Ratcheted to the current floor. Raise as coverage improves; never lower.
+// Only applies when coverage is on (npm run test:coverage), so domain scripts
+// like `npm run test:auth` are not gated. Do not add --coverage to a domain
+// script: a subset of tests can never satisfy a global threshold.
 const coverageThreshold = {
   global: {
     branches: 70,
@@ -119,19 +122,18 @@ const coverageThreshold = {
 };
 
 // ─── Tests that must run in the node environment ──────────────────────────────
-// Single source of truth: node project runs these, jsdom project ignores them.
-const NODE_TEST_FILES = [
-  "middleware",
-  "eventImageRoute",
-  "feedbackImageRoute",
-  "vendorImageRoute",
+// Single source of truth: the node project runs these, jsdom ignores them.
+//   - everything in src/__tests__/api/  (middleware, feedback/vendor image routes)
+//   - src/__tests__/tickets/eventImageRoute.test.js
+// Recommended: git mv tickets/eventImageRoute.test.js api/ so the second entry
+// can be deleted.
+const nodeTestMatch = [
+  "<rootDir>/src/__tests__/api/**/*.test.js",
+  "<rootDir>/src/__tests__/tickets/eventImageRoute.test.js",
 ];
 
-const nodeTestMatch = NODE_TEST_FILES.map(
-  (name) => `<rootDir>/src/__tests__/${name}.test.js`,
-);
-
-const nodeTestIgnoreRegex = `<rootDir>/src/__tests__/(${NODE_TEST_FILES.join("|")})\\.test\\.js$`;
+const nodeTestIgnoreRegex =
+  "<rootDir>/src/__tests__/(api/.*|tickets/eventImageRoute)\\.test\\.js$";
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 // next/jest returns an async factory. We resolve it once, strip root-only
