@@ -99,6 +99,8 @@ func (h *OrderHandler) InitializeOrder(c *gin.Context) {
 		switch {
 		case errors.Is(err, serviceorder.ErrInvalidOrder):
 			status, code, msg = http.StatusBadRequest, "INVALID_ORDER", err.Error()
+		case errors.Is(err, serviceorder.ErrFreeOrderUnsupported):
+			status, code, msg = http.StatusBadRequest, "FREE_TICKETS_UNSUPPORTED", "Free tickets are not available for online checkout yet."
 		case errors.Is(err, repoevent.ErrNotEnoughStock):
 			status, code, msg = http.StatusConflict, "SOLD_OUT", "One or more items are sold out or have insufficient stock."
 		case errors.Is(err, repoevent.ErrTierUnavailable):

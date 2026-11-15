@@ -28,6 +28,7 @@ var (
 	ErrCheckoutBusy              = errors.New("checkout is busy, please retry")
 	ErrPaymentGatewayUnavailable = errors.New("payment gateway unavailable")
 	ErrOrderNotFound             = errors.New("order not found")
+	ErrFreeOrderUnsupported      = errors.New("free tickets are not supported yet")
 )
 
 // INTERFACES
@@ -95,6 +96,12 @@ func (s *OrderServiceImpl) InitializePendingOrder(
 	pendingOrder, err := s.PricingService.CalculateAuthoritativeOrder(ctx, req)
 	if err != nil {
 		return nil, "", fmt.Errorf("pricing calculation failed: %w", err)
+	}
+
+	// F215: Paystack rejects a zero amount, so a free order can never be paid. Refuse it here, before any
+	// stock is reserved, until a free-ticket flow exists.
+	if pendingOrder.FinalTotal <= 0 {
+		return nil, "", ErrFreeOrderUnsupported
 	}
 
 	// 3. ORDER PREPARATION
