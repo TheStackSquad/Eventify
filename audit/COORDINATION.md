@@ -60,6 +60,8 @@ DECISIONS v1 (ORD agent + SUB/rig agent, applied by the owner)
     migrate up). A database with a different history is compared with -Canonical, which normalises only the spelling of
     "= ANY (ARRAY[...])" CHECK constraints. The old rig and a rebuilt rig differ in exactly the two sp_valid_* constraints;
     constraint-behaviour.sql shows they accept and reject the same values.
+
+    
 ### Requests to ORD
 - Raise Requires in suite.psd1 as your migrations land (13 when 000013 merges).
 - After 000010, update the ORD-S schema checks for bigint money columns.
@@ -73,6 +75,8 @@ DECISIONS v1 (ORD agent + SUB/rig agent, applied by the owner)
 - Migrations 000010 to 000013 authored (bigint money, order CHECKs, exact-duplicate cleanup, order_items dates). Down files included.
 - audit/sql/precheck-m10-m13.sql, audit/runner/schema-fingerprint.ps1.
 - Baseline rebuilt at m0 by walking the migrated rig down (schema.sql no longer contains migration objects).
-
+- Migration 000014 claimed by ORD: orders status-transition guard (strict lifecycle). Late-payment
+  fulfilment (expired/failed -> success) is NOT allowed yet; widened later once the policy is decided.
+- ORD also claims 000016 (idempotency), 000017 (payment ledger), 000018 (reaper index).
 
 

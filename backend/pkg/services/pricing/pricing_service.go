@@ -70,7 +70,7 @@ func (s *PricingServiceImpl) CalculateAuthoritativeOrder(
 	finalTotalKobo := subtotalKobo + serviceFeeKobo + vatKobo
 	// 5. Internal Financial Tracking (Paystack Cut & Platform Profit)
 	paystackFeeKobo := models.CalculatePaystackFee(finalTotalKobo)
-	appProfitKobo := (serviceFeeKobo + vatKobo) - paystackFeeKobo
+	appProfitKobo := serviceFeeKobo - paystackFeeKobo // VAT is collected for the tax authority; it is not profit (F210)
 	log.Info().
 		Int64("subtotal", subtotalKobo).
 		Int64("service_fee", serviceFeeKobo).
