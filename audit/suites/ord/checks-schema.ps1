@@ -9,6 +9,17 @@ function Check-OrdFinding([string]$Id, [string]$Name, [string]$Expected, [string
 }
 
 function Test-OrdSchema($Ctx) {
+    # S0 the database is at the migration level the suite declares (suite.psd1 Requires), and not half-applied
+    $manifest = Import-PowerShellDataFile (Join-Path $AuditDir 'suites\ord\suite.psd1')
+    $need = [int]$manifest.Requires
+    $row = Invoke-Sql "SELECT coalesce(max(version), 0)::text || '|' || coalesce(bool_or(dirty), false)::text FROM schema_migrations"
+    $mp = $row -split '\|'
+    $have = [int]$mp[0]
+    $dirty = ($mp[1] -eq 'true')
+    $shown = "version $have"
+    if ($dirty) { $shown += ' (dirty)' }
+    Check 'ORD-S0' 'the database is migrated to the level this suite needs' ">= $need and not dirty" $shown (($have -ge $need) -and (-not $dirty))
+
     # S1 tables
     $need = "'orders','order_items','tickets','ticket_tiers','events','payments','email_outbox','webhook_inbox'"
     $n = [int](Invoke-Sql "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ($need)")
@@ -39,9 +50,10 @@ function Test-OrdSchema($Ctx) {
     $n = [int](Invoke-Sql "SELECT count(*) FROM pg_constraint WHERE connamespace = 'public'::regnamespace AND conname IN ('check_stock_consistency','check_available_non_negative','check_sold_within_capacity')")
     Check 'ORD-S6' 'ticket_tiers stock CHECK constraints present' '3' "$n" ($n -eq 3)
 
-    # S7 CHECKs on the order tables (F211)
-    $n = [int](Invoke-Sql "SELECT count(*) FROM pg_constraint WHERE contype = 'c' AND connamespace = 'public'::regnamespace AND conrelid::regclass::text IN ('orders','order_items','payments','tickets')")
-    Check-OrdFinding 'ORD-S7' 'order tables guard totals, amounts and quantities with CHECK constraints' '>= 1' "$n" ($n -ge 1) 'F211'
+    # S7 the six CHECK constraints migration 000013 added (F211)
+    $six = "'chk_orders_amounts_non_negative','chk_orders_webhook_attempts_non_negative','chk_order_items_quantity_positive','chk_order_items_amounts_non_negative','chk_payments_amounts_non_negative','chk_tickets_code_not_empty'"
+    $n = [int](Invoke-Sql "SELECT count(*) FROM pg_constraint WHERE contype = 'c' AND connamespace = 'public'::regnamespace AND conname IN ($six)")
+    Check-OrdFinding 'ORD-S7' 'order tables carry the six CHECK constraints (amounts, quantities, attempts, ticket code)' '6' "$n" ($n -eq 6) 'F211'
 
     # S8 money columns are bigint (F218)
     $sql = @'
@@ -71,6 +83,45 @@ SELECT count(*) FROM (
     # S11 an illegal status change is blocked in the database (F211)
     $n = [int](Invoke-Sql "SELECT count(*) FROM information_schema.triggers WHERE trigger_schema = 'public' AND event_object_table = 'orders' AND trigger_name <> 'orders_updated_at'")
     Check-OrdFinding 'ORD-S11' 'orders has a status-transition guard' '>= 1 trigger besides updated_at' "$n" ($n -ge 1) 'F211'
+
+    # S11b the guard allows the legal order lifecycle and blocks everything else. Each case inserts a throwaway order,
+    # tries one status change inside a sub-transaction and deletes the order again (25 transitions: 13 legal, 12 not).
+    $matrix = @'
+DO $$
+DECLARE rec record; oid uuid; ok boolean; bad text := '';
+BEGIN
+  FOR rec IN SELECT * FROM (VALUES
+    ('pending','processing',true),('pending','success',true),('pending','failed',true),('pending','expired',true),('pending','fraud',true),
+    ('processing','success',true),('processing','failed',true),('processing','expired',true),('processing','fraud',true),
+    ('success','refunded',true),('failed','refunded',true),('expired','refunded',true),('fraud','refunded',true),
+    ('success','pending',false),('success','failed',false),('success','expired',false),('success','fraud',false),
+    ('failed','success',false),('expired','success',false),('fraud','success',false),
+    ('processing','pending',false),('pending','refunded',false),('refunded','success',false),('failed','pending',false),('expired','pending',false)
+  ) AS v(f, t, a) LOOP
+    oid := gen_random_uuid();
+    INSERT INTO orders (id, reference, status, subtotal, service_fee, vat_amount, final_total, customer_email, customer_first_name, customer_last_name)
+    VALUES (oid, 'AUDIT_GUARD_' || oid, rec.f::order_status, 100, 10, 0, 110, 'audit-ord-guard@example.com', 'a', 'b');
+    ok := true;
+    BEGIN
+      UPDATE orders SET status = rec.t::order_status WHERE id = oid;
+    EXCEPTION WHEN check_violation THEN ok := false;
+    END;
+    DELETE FROM orders WHERE id = oid;
+    IF ok <> rec.a THEN bad := bad || rec.f || '>' || rec.t || ' '; END IF;
+  END LOOP;
+  IF bad <> '' THEN RAISE EXCEPTION 'GUARD_MISMATCH: %', bad; END IF;
+END $$;
+'@
+    $guardOk = $true
+    $guardShown = 'all 25 transitions behave as designed'
+    try { $null = Invoke-Sql $matrix }
+    catch {
+        $guardOk = $false
+        $gm = $_.Exception.Message
+        if ($gm -match 'GUARD_MISMATCH:\s*([^\r\n]*)') { $guardShown = 'wrong: ' + $Matches[1].Trim() }
+        else { $guardShown = 'could not run: ' + $gm.Substring(0, [math]::Min(160, $gm.Length)) }
+    }
+    Check-OrdFinding 'ORD-S11b' 'order status changes: the legal lifecycle is allowed, everything else is refused' '25 of 25 as designed' $guardShown $guardOk 'F211'
 
     # S12 reaper index (measured with EXPLAIN in P1)
     $n = [int](Invoke-Sql "SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'orders' AND indexdef LIKE '%WHERE%' AND indexdef LIKE '%pending%'")
