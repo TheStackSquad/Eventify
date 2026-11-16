@@ -3,97 +3,70 @@
 import { NextResponse } from "next/server";
 
 /**
- * PRODUCTION VERSION: CAC Business Verification
- * Integration: [Integration Name, e.g., Mono or SmileID]
- * Note: Commented out until API credentials are provided.
+ * CAC business verification.
+ *
+ * Response contract (what CACVerificationField reads):
+ *   success: { success: true,  verified: true,  companyName, registrationNumber, status }
+ *   failure: { success: false, verified: false, message }
+ *
+ * lookupCac() is a MOCK that approves any well-formed RC/BN/IT number. It is refused
+ * in production unless VERIFICATION_MOCK=true (E2E / load-test environments only).
+ * Wire the real registry provider into lookupCac() before launch.
  */
 
-/*
-export async function POST(request) {
-  try {
-    const { cacNumber, companyType } = await request.json();
+const CAC_FORMAT = /^(RC|BN|IT)\d{5,8}$/; // keep in sync with vendorValidate.js
+const MOCK_ALLOWED =
+  process.env.NODE_ENV !== "production" ||
+  process.env.VERIFICATION_MOCK === "true";
 
-    if (!cacNumber) {
-      return NextResponse.json(
-        { success: false, message: "Registration number is required" },
-        { status: 400 }
-      );
-    }
-
-    // 1. External API Call (Example using a 3rd party KYC provider)
-    const response = await fetch("https://api.withmono.com/lookup/cac", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "mono-sec-key": process.env.MONO_SECRET_KEY, // Stored in .env
-      },
-      body: JSON.stringify({ 
-        reg_no: cacNumber,
-        type: companyType // BN, RC, or IT
-      }),
-    });
-
-    const result = await response.json();
-
-    // 2. Handle Provider-specific Errors
-    if (!response.ok) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          message: result.message || "Government registry is currently unreachable." 
-        },
-        { status: response.status }
-      );
-    }
-
-    // 3. Data Normalization
-    // We map the external provider's keys to our internal app's naming convention
-    return NextResponse.json({
-      success: true,
-      data: {
-        entityName: result.data.name,
-        registrationNumber: result.data.registrationNumber,
-        status: result.data.status, // e.g., ACTIVE, DISSOLVED
-        address: result.data.address,
-        registrationDate: result.data.registrationDate,
-      },
-    });
-
-  } catch (error) {
-    console.error("CAC_VERIFICATION_ERROR:", error);
-    return NextResponse.json(
-      { success: false, message: "An internal error occurred during verification." },
-      { status: 500 }
-    );
+async function lookupCac(registrationNumber) {
+  if (!MOCK_ALLOWED) {
+    // TODO(provider): call the registry provider with `registrationNumber` and map the
+    // result to { companyName, status } ("ACTIVE" when the entity is in good standing).
+    throw new Error("CAC_PROVIDER_NOT_CONFIGURED");
   }
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  return { companyName: "OFFICIAL REGISTERED BUSINESS LTD", status: "ACTIVE" };
 }
-*/
 
-// --- MOCK VERSION (Active for Development) ---
+const fail = (message, status) =>
+  NextResponse.json({ success: false, verified: false, message }, { status });
+
 export async function POST(request) {
-  const { cacNumber } = await request.json();
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-
-  if (
-    cacNumber?.toUpperCase().startsWith("BN") ||
-    cacNumber?.toUpperCase().startsWith("RC")
-  ) {
-    return NextResponse.json({
-      success: true,
-      data: {
-        entityName: "OFFICIAL REGISTERED BUSINESS LTD",
-        registrationNumber: cacNumber.toUpperCase(),
-        status: "ACTIVE",
-        address: "123 Government Way, Abuja",
-      },
-    });
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return fail("Invalid request format.", 400);
   }
 
-  return NextResponse.json(
-    {
-      success: false,
-      message: "Invalid CAC Number. Check format (e.g., RC12345).",
-    },
-    { status: 400 },
-  );
+  const registrationNumber = String(body?.cacNumber ?? "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+
+  if (!CAC_FORMAT.test(registrationNumber)) {
+    return fail("Invalid CAC number. Format: RC123456 or BN123456.", 400);
+  }
+
+  try {
+    const record = await lookupCac(registrationNumber);
+
+    if (record.status !== "ACTIVE") {
+      return fail("This registration is not active.", 422);
+    }
+
+    return NextResponse.json({
+      success: true,
+      verified: true,
+      companyName: record.companyName,
+      registrationNumber,
+      status: record.status,
+    });
+  } catch (error) {
+    if (error.message === "CAC_PROVIDER_NOT_CONFIGURED") {
+      return fail("Business verification is temporarily unavailable.", 503);
+    }
+    console.error("CAC_VERIFICATION_ERROR:", error.message);
+    return fail("An internal error occurred during verification.", 500);
+  }
 }

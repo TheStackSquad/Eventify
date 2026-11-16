@@ -176,4 +176,3 @@ func (r *PostgresVendorRepository) Delete(ctx context.Context, id uuid.UUID) (in
     }
     return res.RowsAffected()
 }
-

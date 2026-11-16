@@ -3,7 +3,8 @@
 "use client";
 
 import React, { Suspense } from "react";
-import dynamic from "next/dynamic";
+import VNINVerificationField from "./vNINVerificationField";
+import CACVerificationField from "./CACVerificationField";
 import { DollarSign, FileText } from "lucide-react";
 import VendorInputField from "./vendorInputFields";
 import VendorTextAreaField from "./vendorTextAreaField";

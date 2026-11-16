@@ -120,25 +120,16 @@ export const prepareVendorPayload = (
  
 export const redactSensitiveField = (value, type = "vnin") => {
   if (!value) return "";
-
   const str = String(value);
 
   if (type === "vnin") {
-    // vNIN format: V12345678901A → V12***8901A
-    if (str.length >= 8) {
-      return `${str.slice(0, 3)}***${str.slice(-4)}`;
-    }
-  } else if (type === "cac") {
-    // CAC format: RC-12345678 → RC-***5678
-    if (str.length >= 6) {
-      return `${str.slice(0, 3)}***${str.slice(-4)}`;
-    }
+    // VNIN: show ONLY the last 4 characters, never any leading ones.
+    const clean = str.replace(/[^A-Z0-9]/gi, "");
+    if (clean.length <= 4) return "••••";
+    return `${"•".repeat(12)}${clean.slice(-4)}`;
   }
 
-  // Fallback: show first 3 and last 4 chars
-  if (str.length >= 8) {
-    return `${str.slice(0, 3)}***${str.slice(-4)}`;
-  }
-
+  // CAC numbers come from a public register, so the lighter mask stays.
+  if (str.length >= 6) return `${str.slice(0, 3)}***${str.slice(-4)}`;
   return "***";
 };

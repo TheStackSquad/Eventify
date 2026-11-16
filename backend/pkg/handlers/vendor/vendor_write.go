@@ -15,29 +15,30 @@ import (
 
 // VendorBinding captures the incoming JSON from Next.js
 type VendorBinding struct {
-	Name                string `json:"name" binding:"required"`
-	Category            string `json:"category" binding:"required"`
-	Description         string `json:"description"`
-	ImageURL            string `json:"image_url"`
-	City                string `json:"city"`
-	State               string `json:"state"`
-	PhoneNumber         string `json:"phone_number"`
-	Email               string `json:"email"`
-	VNIN                string `json:"vnin" binding:"required"`
-	VerifiedVNIN        string `json:"verified_vnin"`
-	FirstName           string `json:"first_name"`
-	LastName            string `json:"last_name"`
-	MiddleName          string `json:"middle_name"`
-	CACNumber           string `json:"cac_number"`
-	MinPrice            int32  `json:"min_price"` // In Naira
-	Status              string `json:"status"`
-	IsIdentityVerified  bool   `json:"is_identity_verified"`
-	IsBusinessVerified  bool   `json:"is_business_verified"`
+	Name               string `json:"name" binding:"required,max=255"`
+	Category           string `json:"category" binding:"required,max=100"`
+	Description        string `json:"description" binding:"max=500"`
+	ImageURL           string `json:"image_url" binding:"max=255"`
+	City               string `json:"city" binding:"max=100"`
+	State              string `json:"state" binding:"required,max=100"`
+	PhoneNumber        string `json:"phone_number" binding:"max=20"`
+	Email              string `json:"email" binding:"omitempty,email,max=255"`
+	VNIN               string `json:"vnin" binding:"required,max=20"`
+	VerifiedVNIN       string `json:"verified_vnin" binding:"max=20"`
+	FirstName          string `json:"first_name" binding:"max=100"`
+	LastName           string `json:"last_name" binding:"max=100"`
+	MiddleName         string `json:"middle_name" binding:"max=100"`
+	CACNumber          string `json:"cac_number" binding:"max=20"`
+	MinPrice           int64  `json:"min_price" binding:"gte=0,lte=21474836"` // Naira
+	Status             string `json:"status"`
+	IsIdentityVerified bool   `json:"is_identity_verified"`
+	IsBusinessVerified bool   `json:"is_business_verified"`
 }
 
-// convertNairaToKobo converts Naira to Kobo (multiply by 100)
-func convertNairaToKobo(naira int32) int32 {
-	return naira * 100
+// convertNairaToKobo converts Naira to Kobo. The binding tag bounds the input
+// (<= 21,474,836), so the result always fits in int32 (21,474,836 * 100 = 2,147,483,600).
+func convertNairaToKobo(naira int64) int32 {
+	return int32(naira * 100)
 }
 
 // RegisterVendor handles new vendor registration
@@ -123,8 +124,12 @@ func (h *VendorHandler) RegisterVendor(c *gin.Context) {
 // UpdateVendor handles vendor profile updates
 func (h *VendorHandler) UpdateVendor(c *gin.Context) {
 	vendorIDStr := c.Param("id")
-	userIDVal, _ := c.Get("user_id")
-	requestorID := userIDVal.(uuid.UUID)
+	userIDVal, exists := c.Get("user_id")
+	requestorID, ok := userIDVal.(uuid.UUID)
+	if !exists || !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
 
 	var input VendorBinding
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -133,22 +138,20 @@ func (h *VendorHandler) UpdateVendor(c *gin.Context) {
 		return
 	}
 
-	// Validate and default status
-	status := models.VendorStatus(input.Status)
-	if status == "" {
-		status = models.VendorStatusActive
-	}
-
-	validStatuses := map[models.VendorStatus]bool{
-		models.VendorStatusActive:    true,
-		models.VendorStatusSuspended: true,
-		models.VendorStatusDeleted:   true,
-	}
-	if !validStatuses[status] {
-		log.Warn().Str("status", string(status)).Msg("Invalid vendor status")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid vendor status"})
+	// Ownership and existence check first.
+	existing, err := h.VendorService.GetVendorByID(c.Request.Context(), vendorIDStr)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Vendor not found"})
 		return
 	}
+	if existing.OwnerID != requestorID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You do not own this profile"})
+		return
+	}
+
+	// Moderation status is NEVER owner-controlled: an owner
+	// must not be able to un-suspend (or delete) their own profile via PUT.
+	status := existing.Status
 
 	// Price Conversion: Convert Naira to Kobo
 	minPriceKobo := convertNairaToKobo(input.MinPrice)
@@ -173,7 +176,7 @@ func (h *VendorHandler) UpdateVendor(c *gin.Context) {
 		IsBusinessVerified: sql.NullBool{Bool: input.IsBusinessVerified, Valid: true},
 	}
 
-	err := h.VendorService.UpdateVendor(c.Request.Context(), vendorIDStr, requestorID, &updatedVendor)
+	err = h.VendorService.UpdateVendor(c.Request.Context(), vendorIDStr, requestorID, &updatedVendor)
 	if err != nil {
 		if err.Error() == "unauthorized" {
 			c.JSON(http.StatusForbidden, gin.H{"error": "You do not own this profile"})
@@ -193,11 +196,10 @@ func (h *VendorHandler) UpdateVendor(c *gin.Context) {
 	}
 
 	log.Info().Str("vendor_id", vendorIDStr).Msg("Vendor updated successfully")
-	// Replace the c.JSON in the refreshed block
-c.JSON(http.StatusOK, gin.H{
-    "message": "Vendor profile updated successfully!",
-    "vendor":  refreshed.ToOwnerResponse(),
-})
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Vendor profile updated successfully!",
+		"vendor":  refreshed.ToOwnerResponse(),
+	})
 }
 
 // ToggleIdentityVerification updates vendor identity verification status

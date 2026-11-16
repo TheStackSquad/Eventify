@@ -1,3 +1,4 @@
+//frontend/src/app/api/vnin-verify/route.js
 import { NextResponse } from "next/server";
 
 const IS_DEV = process.env.NODE_ENV === "development";
@@ -38,18 +39,51 @@ export async function POST(request) {
     }
 
     // 3. Mock NIMC response
-    debugLog("Verification successful for:", cleanedVnin);
 
-    return NextResponse.json({
-      success: true,
-      verified: true,
-      firstName: "ZARA",
-      middleName: "ADEYEMI",
-      lastName: "SANTANA",
-      phoneNumber: "08012345678",
-      gender: "FEMALE",
-      dateOfBirth: "1994-05-12",
-    });
+        debugLog("Verification request received", {
+          length: cleanedVnin.length,
+        });
+
+        // 2. Strict format check (mirrors vendorValidate: 2 letters, 12 digits, 2 letters)
+        if (!/^[A-Z]{2}\d{12}[A-Z]{2}$/.test(cleanedVnin)) {
+          return NextResponse.json(
+            {
+              success: false,
+              verified: false,
+              message: "Invalid vNIN format. Check the code and try again.",
+            },
+            { status: 400 },
+          );
+        }
+
+        // 3. The lookup below is a MOCK that approves any well-formed vNIN.
+        // Refuse it in production, or anyone could "verify" as ZARA SANTANA.
+        // VERIFICATION_MOCK=true is for E2E / load-test environments only.
+        if (
+          process.env.NODE_ENV === "production" &&
+          process.env.VERIFICATION_MOCK !== "true"
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              verified: false,
+              message: "Identity verification is temporarily unavailable.",
+            },
+            { status: 503 },
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+
+        // Data minimisation: the browser only needs the names.
+        // Phone, gender and date of birth are NOT returned.
+        return NextResponse.json({
+          success: true,
+          verified: true,
+          firstName: "ZARA",
+          middleName: "ADEYEMI",
+          lastName: "SANTANA",
+        });
   } catch (error) {
     debugLog("Error processing request", { error: error.message });
     return NextResponse.json(

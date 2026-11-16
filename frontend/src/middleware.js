@@ -183,10 +183,13 @@ export function middleware(request) {
     return NextResponse.next();
   }
 
-  // ── Default — inject user ID request header + apply security headers ───────
+  // ── Default — strip client-supplied header first, then inject verified ID ──
   const requestHeaders = new Headers(request.headers);
 
-  // Use the already-decoded payload — no second jwtDecode call.
+  // 1. Never trust a client-supplied identity header; strip it first.
+  requestHeaders.delete("x-user-id");
+
+  // 2. Set it ONLY if the token was successfully verified and contains a user ID.
   if (decodedToken && decodedToken.user_id) {
     requestHeaders.set("x-user-id", String(decodedToken.user_id));
   }
@@ -196,7 +199,6 @@ export function middleware(request) {
   });
 
   // Security response headers.
-  // TODO: lift to a shared helper when auth/public routes also need these.
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");

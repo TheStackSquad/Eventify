@@ -22,30 +22,13 @@ import SelectField from "@/components/vendorUI/components/form/selectedField";
 import VendorFormBoundary from "@/components/errorBoundary/vendorFormBoundary";
 import toastAlert from "@/components/common/toast/toastAlert";
 import { useVendorFormHandler } from "@/components/vendorUI/handlers/useVendorFormHandler";
+import VendorFormPricingVerification from "@/components/vendorUI/components/form/vendorFormPricingVerification";
 import {
   VENDOR_CATEGORIES,
   NIGERIAN_STATES,
   FORM_PLACEHOLDERS,
 } from "@/data/vendorData";
 
-// --- Lazy Loading Section ---
-const VerificationFieldSkeleton = () => (
-  <div className="animate-pulse space-y-4 py-4">
-    <div className="h-3 w-1/4 rounded bg-gray-100"></div>
-    <div className="h-12 rounded-xl border border-gray-100 bg-gray-50"></div>
-    <div className="h-2 w-1/2 rounded bg-gray-50"></div>
-  </div>
-);
-
-const VendorFormPricingVerification = dynamic(
-  () =>
-    import("@/components/vendorUI/components/form/vendorFormPricingVerification"),
-  {
-    ssr: false,
-    loading: () => <VerificationFieldSkeleton />,
-  },
-);
-// ----------------------------
 
 const SectionTitle = ({ children }) => (
   <div className="mb-2 flex items-center gap-2">
@@ -223,6 +206,9 @@ const VendorForm = ({
                   value={formData.phoneNumber}
                   onChange={handleChange}
                   placeholder="08012345678"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
                   error={formErrors.phoneNumber}
                   required
                 />

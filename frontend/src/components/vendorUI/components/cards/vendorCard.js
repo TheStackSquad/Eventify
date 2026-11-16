@@ -10,6 +10,12 @@ import { Star, MapPin, ShieldCheck, Building2 } from "lucide-react";
 import { generateVendorSlug } from "@/utils/helper/vendorSlugHelper";
 import { formatPriceCompact } from "@/utils/currency";
 import PerformanceScore from "../stats/performanceScore";
+import { VENDOR_CATEGORIES } from "@/data/vendorData";
+
+// value -> human label ("planner" -> "Event Planning & Coordination")
+const CATEGORY_LABELS = Object.fromEntries(
+  VENDOR_CATEGORIES.filter((c) => c.value).map((c) => [c.value, c.label]),
+);
 
 // priority: only set true where the card image can be the page's LCP element
 const VendorCard = ({ vendor, priority = false }) => {
@@ -22,12 +28,14 @@ const VendorCard = ({ vendor, priority = false }) => {
     hasReviews,
     reviewCount,
     categoryLabel,
+    location,
+    hasCac,
   } = useMemo(() => {
     const rawMin = vendor.minPrice?.Valid
       ? vendor.minPrice.Int32
       : typeof vendor.minPrice === "number"
-      ? vendor.minPrice
-      : null;
+        ? vendor.minPrice
+        : null;
 
     // pvsScore is already 0-100, so it is used as-is (clamped), never divided by 5
     const pvs = Number(vendor.pvsScore) || 0; // 0-100; the score bar reads vendor.pvsScore itself
@@ -39,7 +47,14 @@ const VendorCard = ({ vendor, priority = false }) => {
       displayRating: (pvs / 20).toFixed(1),
       hasReviews: reviewCount > 0 && pvs > 0,
       reviewCount,
-      categoryLabel: vendor.category?.replace(/_/g, " ") || "Vendor",
+      categoryLabel:
+        CATEGORY_LABELS[vendor.category] ??
+        (vendor.category?.replace(/_/g, " ") || "Vendor"),
+      // city is optional and arrives as null from the API: never print "null"
+      location: [vendor.city, vendor.state].filter(Boolean).join(", "),
+      hasCac:
+        vendor.isBusinessVerified === true ||
+        vendor.isBusinessRegistered === true,
     };
   }, [vendor]);
 
@@ -48,7 +63,7 @@ const VendorCard = ({ vendor, priority = false }) => {
       href={`/vendor/${slug}`}
       className="group block h-full rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-warm-yellow-500 focus-visible:ring-offset-2"
       prefetch={false}
-      aria-label={`View ${vendor.name} profile, ${categoryLabel} vendor in ${vendor.city}`}
+      aria-label={`View ${vendor.name} profile, ${categoryLabel} vendor${location ? ` in ${location}` : ""}`}
     >
       <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:translate-y-0">
         {/* ---------- Image ---------- */}
@@ -98,7 +113,7 @@ const VendorCard = ({ vendor, priority = false }) => {
               <p className="truncate text-[11px] font-semibold uppercase tracking-wider text-warm-yellow-700">
                 {categoryLabel}
               </p>
-              {vendor.isBusinessRegistered && (
+              {hasCac && (
                 <span
                   className="inline-flex flex-shrink-0 items-center gap-1 text-[11px] font-semibold text-emerald-700"
                   aria-label="Registered with CAC"
@@ -119,7 +134,7 @@ const VendorCard = ({ vendor, priority = false }) => {
             <div className="flex items-center gap-1.5 text-gray-500">
               <MapPin size={14} className="flex-shrink-0" aria-hidden="true" />
               <span className="truncate text-sm">
-                {vendor.city}, {vendor.state}
+                {location}, {location}
               </span>
             </div>
           </div>

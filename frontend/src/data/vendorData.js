@@ -57,7 +57,7 @@ export const NIGERIAN_STATES = [
 
 export const PRICE_RANGES = {
   MIN: 1000,
-  MAX: 100000000,
+  MAX: 21474836, // ₦21,474,836 = 2,147,483,600 kobo, the int32 ceiling of vendors.min_price
   STEP: 1000,
 };
 

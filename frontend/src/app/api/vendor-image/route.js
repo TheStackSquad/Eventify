@@ -22,13 +22,12 @@ export async function POST(request) {
     const file = formData.get("file");
     const vendorId = formData.get("vendorId"); // Optional: for organizing uploads
 
-    // Validation: File exists
-    if (!file || typeof file === "string") {
-      return NextResponse.json(
-        { error: "No image file provided." },
-        { status: 400 },
-      );
-    }
+      if (vendorId && !/^[0-9a-f-]{36}$/i.test(String(vendorId))) {
+        return NextResponse.json(
+          { error: "Invalid vendor id." },
+          { status: 400 },
+        );
+      }
 
     // Validation: File size
     if (file.size > MAX_FILE_SIZE) {
@@ -49,9 +48,13 @@ export async function POST(request) {
 
     // Sanitize filename
     const originalFilename = file.name;
-    const sanitizedFilename = originalFilename
-      .replace(/[^a-zA-Z0-9.-]/g, "_")
-      .toLowerCase();
+    const sanitizedFilename =
+          originalFilename
+            .toLowerCase()
+            .replace(/[^a-z0-9.-]/g, "_")
+            .replace(/\.{2,}/g, ".") // collapse ".." sequences
+            .replace(/^[.-]+/, "") // no leading dots or dashes
+            .slice(-100) || "upload";
 
     // Organize by vendorId if provided
     const pathname = vendorId
@@ -129,20 +132,36 @@ export async function DELETE(request) {
       );
     }
 
-    // Validation: URL is from Vercel Blob
-    if (!url.includes("blob.vercel-storage.com")) {
+    // Must be an https Vercel Blob URL under /vendor-images/.
+    // (.includes() is bypassable: https://evil.com/blob.vercel-storage.com/x.jpg)
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid Vercel Blob URL" },
+        { status: 400 },
+      );
+    }
+    const host = parsed.hostname;
+    const isBlobHost =
+      host === "blob.vercel-storage.com" ||
+      host.endsWith(".blob.vercel-storage.com");
+    if (
+      parsed.protocol !== "https:" ||
+      !isBlobHost ||
+      !parsed.pathname.startsWith("/vendor-images/")
+    ) {
       return NextResponse.json(
         { error: "Invalid Vercel Blob URL" },
         { status: 400 },
       );
     }
 
-    console.log("🗑️ Deleting vendor image from Vercel Blob:", url);
-
     // Delete from Vercel Blob
     await del(url);
 
-    console.log("✅ Vendor image deletion successful");
+   // console.log("✅ Vendor image deletion successful");
 
     return NextResponse.json(
       { message: "Vendor image deleted successfully", url },
