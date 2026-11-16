@@ -49,6 +49,10 @@ type Order struct {
 	PaymentChannel    sql.NullString `json:"paymentChannel,omitempty" db:"payment_channel"`
 	PaystackFee       int64          `json:"paystackFee" db:"paystack_fee"`
 	AppProfit         int64          `json:"appProfit" db:"app_profit"`
+	IdempotencyKey    sql.NullString `json:"-" db:"idempotency_key"`
+	IdempotencyHash   sql.NullString `json:"-" db:"idempotency_hash"`
+	AuthorizationURL  sql.NullString `json:"-" db:"authorization_url"`
+	Replayed          bool           `json:"-" db:"-"`
 	PaidAt            sql.NullTime   `json:"paidAt,omitempty" db:"paid_at"`
 	ProcessedBy       sql.NullString `json:"processedBy,omitempty" db:"processed_by"`
 	WebhookAttempts   int            `json:"webhookAttempts" db:"webhook_attempts"`

@@ -92,6 +92,13 @@ func (s *OrderServiceImpl) InitializePendingOrder(
 		return nil, "", fmt.Errorf("%w: %w", ErrInvalidOrder, err)
 	}
 
+	// Idempotency (F207): a retry with the same key and the same request gets the original order back.
+	if req.IdempotencyKey != "" {
+		if existing, existingURL, found, lerr := s.replayIdempotent(ctx, req, userID, guestID); lerr != nil || found {
+			return existing, existingURL, lerr
+		}
+	}
+
 	// 2. AUTHORITATIVE PRICING CALCULATION
 	pendingOrder, err := s.PricingService.CalculateAuthoritativeOrder(ctx, req)
 	if err != nil {
@@ -117,6 +124,10 @@ func (s *OrderServiceImpl) InitializePendingOrder(
 	pendingOrder.GuestID = sql.NullString{String: guestID, Valid: guestID != ""}
 	pendingOrder.CreatedAt = now
 	pendingOrder.UpdatedAt = now
+	if req.IdempotencyKey != "" {
+		pendingOrder.IdempotencyKey = sql.NullString{String: req.IdempotencyKey, Valid: true}
+		pendingOrder.IdempotencyHash = sql.NullString{String: req.IdempotencyHash(), Valid: true}
+	}
 
 	if userID != nil {
 		pendingOrder.UserID = userID
@@ -150,6 +161,13 @@ func (s *OrderServiceImpl) InitializePendingOrder(
 	})
 
 	if err != nil {
+		if req.IdempotencyKey != "" && isIdempotencyConflict(err) {
+			// Another request with the same key inserted its order first: return it, or ask the client to retry.
+			if existing, existingURL, found, lerr := s.replayIdempotent(ctx, req, userID, guestID); lerr != nil || found {
+				return existing, existingURL, lerr
+			}
+			return nil, "", ErrIdempotencyInProgress
+		}
 		return nil, "", err
 	}
 
@@ -174,6 +192,13 @@ func (s *OrderServiceImpl) InitializePendingOrder(
 		// Nobody can pay for this order: give the tickets back now instead of holding them for 15 minutes.
 		s.releaseFailedInitialization(pendingOrder)
 		return nil, "", fmt.Errorf("%w: %w", ErrPaymentGatewayUnavailable, err)
+	}
+
+	// Remember the payment link so a retry with the same Idempotency-Key can return it (F207).
+	if req.IdempotencyKey != "" {
+		if uerr := s.OrderRepo.SetAuthorizationURL(ctx, pendingOrder.ID, authURL); uerr != nil {
+			log.Error().Err(uerr).Str("ref", pendingOrder.Reference).Msg("Could not store the payment link; a retry with the same Idempotency-Key will be asked to wait")
+		}
 	}
 
 	return pendingOrder, authURL, nil

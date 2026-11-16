@@ -1,7 +1,7 @@
 # ORD findings (F200-F299)
 
 Status: **predicted** = read from the code, not yet proven; **confirmed** / **cleared** = a check proved it (id in the last column).
-Evidence: P0 baseline ord-matrix-20261108-054157, P1a ord-matrix-20261108-082618, P2a1 ord-matrix-20261115-102437 (FAIL=3 INFO=7 PASS=72). P1b covers webhook, verify, reaper, tickets, concurrency and DB statement budgets.
+Evidence: P0 baseline ord-matrix-20261108-054157, P1a ord-matrix-20261108-082618, P2a1 ord-matrix-20261115-102437 (FAIL=3), P2a2 ord-matrix-20261115-124928 (FAIL=2 INFO=7 PASS=73). P1b covers webhook, verify, reaper, tickets, concurrency and DB statement budgets.
 
 | ID | Finding | Status | Check |
 |---|---|---|---|
@@ -12,7 +12,7 @@ Evidence: P0 baseline ord-matrix-20261108-054157, P1a ord-matrix-20261108-082618
 | F204 | Amount mismatch sets fraud and releases stock; no review state; the update is not guarded by status | predicted | P1b |
 | F205 | An order with no items panics in finalizeOrder (`order.Items[0]`) | predicted | P1b |
 | F206 | Ticket codes use 8 random hex characters of the reference; a collision fails finalize as a retryable error. Dev secret fallback | predicted | P1b |
-| F207 | No idempotency on initialize; a double submit reserves stock twice; cookie-less calls mint new guests | **confirmed**, open (next patch: migration 000016) | ORD-I7.1, I3.1 |
+| F207 | No idempotency on initialize; a double submit reserves stock twice; cookie-less calls mint new guests | **confirmed**; fix in P2a3 (migration 000016, Idempotency-Key header, replay 200, concurrent race, CORS). Cookie-less calls still mint new guests: by design, a key is scoped to the caller | ORD-I7.1 to I7.7, I3.1 |
 | F208 | No payment ledger for orders (`payments` table exists, nothing writes to it) | confirmed (grep) | - |
 | F209 | Fee tier inversion: 500001 kobo totals 543001, less than 500000 (550000) | **confirmed** | ORD-P8.1 |
 | F210 | app_profit counts VAT as profit; Paystack fee estimate ignores caps and waivers | **fixed** in P2a1 for VAT (evidence ord-matrix-20261115-102437); the Paystack fee cap and waiver is still open (needs real Paystack data, tunnel run) | ORD-P2.3, P3.3, P5.3, P7.3 |
@@ -20,7 +20,7 @@ Evidence: P0 baseline ord-matrix-20261108-054157, P1a ord-matrix-20261108-082618
 | F212 | Identical duplicate indexes on the order tables | **cleared** by migration 000012 (verified) | ORD-S10 |
 | F213 | ticket_status has both `canceled` and `cancelled` (no code writes either) | confirmed (INFO) | ORD-S3b |
 | F214 | order_items event dates are `timestamp without time zone` | **cleared** by migration 000013 (verified) | ORD-S9 |
-| F215 | A free ticket (total 0) fails at the gateway as a 503 | **confirmed**, fix in P2a2 (refused with 400 FREE_TICKETS_UNSUPPORTED) | ORD-I11.1 |
+| F215 | A free ticket (total 0) fails at the gateway as a 503 | **fixed** in P2a2 (400 FREE_TICKETS_UNSUPPORTED; evidence ord-matrix-20261115-124928). A real free-ticket flow is a product decision | ORD-I11.1 |
 | F216 | An ended or deleted event can still be bought | **cleared** (404 TICKET_UNAVAILABLE) | ORD-I10.1, I10.2 |
 | F217 | Reaper interval (1 min) and expiry (15 min) are hardcoded in main.go | confirmed (code) | - |
 | F218 | Order money columns are `integer` (about 21.4M naira ceiling) while the Go model uses int64 | **cleared** by migration 000011 (verified) | ORD-S8 |

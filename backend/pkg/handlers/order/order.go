@@ -8,6 +8,7 @@ import (
 	//"fmt"
 	//"os"
 	"errors"
+	"strings"
 	
 	"github.com/eventify/backend/pkg/models"
 	repoevent "github.com/eventify/backend/pkg/repository/event"
@@ -65,6 +66,15 @@ func (h *OrderHandler) InitializeOrder(c *gin.Context) {
 		return
 	}
 
+	// Optional Idempotency-Key header: a retry with the same key returns the original order instead of reserving stock again (F207).
+	if key := strings.TrimSpace(c.GetHeader("Idempotency-Key")); key != "" {
+		if !models.ValidIdempotencyKey(key) {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "code": "INVALID_IDEMPOTENCY_KEY", "message": "Idempotency-Key must be 8 to 128 characters: letters, digits, - _ . or :"})
+			return
+		}
+		req.IdempotencyKey = key
+	}
+
 	// 1. Extract Identity consistently
 	var userID *uuid.UUID
 	if val, exists := c.Get("user_id"); exists {
@@ -99,6 +109,11 @@ func (h *OrderHandler) InitializeOrder(c *gin.Context) {
 		switch {
 		case errors.Is(err, serviceorder.ErrInvalidOrder):
 			status, code, msg = http.StatusBadRequest, "INVALID_ORDER", err.Error()
+		case errors.Is(err, serviceorder.ErrIdempotencyInProgress):
+			c.Header("Retry-After", "1")
+			status, code, msg = http.StatusConflict, "REQUEST_IN_PROGRESS", "This request is still being processed. Please retry in a moment."
+		case errors.Is(err, serviceorder.ErrIdempotencyKeyReused):
+			status, code, msg = http.StatusUnprocessableEntity, "IDEMPOTENCY_KEY_REUSED", "This Idempotency-Key was already used for a different request."
 		case errors.Is(err, serviceorder.ErrFreeOrderUnsupported):
 			status, code, msg = http.StatusBadRequest, "FREE_TICKETS_UNSUPPORTED", "Free tickets are not available for online checkout yet."
 		case errors.Is(err, repoevent.ErrNotEnoughStock):
@@ -122,7 +137,12 @@ func (h *OrderHandler) InitializeOrder(c *gin.Context) {
 	}
 
 	// 3. Return the payload for the frontend to redirect
-	c.JSON(http.StatusCreated, gin.H{
+	replyStatus := http.StatusCreated
+	if order.Replayed {
+		c.Header("Idempotent-Replay", "true")
+		replyStatus = http.StatusOK
+	}
+	c.JSON(replyStatus, gin.H{
 		"status": "success",
 		"data": gin.H{
 			"reference":         order.Reference,
