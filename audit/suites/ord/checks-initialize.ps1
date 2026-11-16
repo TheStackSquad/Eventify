@@ -140,7 +140,7 @@ function Test-OrdInitialize($Ctx) {
     }
     else { Add-Result 'ORD-I6' 'gateway faults at initialize' '' '' 'SKIP' 'rig mode only: the stub injects the faults' }
 
-    # ---------------------------------------------------------------- I7: the same submit twice (F207)
+    # ---------------------------------------------------------------- I7: idempotent initialize (F207)
     $key = 'ord-p1a-' + [guid]::NewGuid().ToString('N')
     $dupBody = New-OrdBody @(New-OrdLine $Ctx 'ord-std' 1) (New-OrdEmail 'idem')
     $d0 = Get-OrdTier 'ord-std'
@@ -151,6 +151,37 @@ function Test-OrdInitialize($Ctx) {
     $refB = [string](Get-Prop $rb.Json 'data.reference')
     $same = ([bool]$refA -and ($refA -eq $refB))
     Check-OrdFinding 'ORD-I7.1' 'the same submit twice with one Idempotency-Key opens one order' 'one reference, stock reserved once' ("same reference=$same, reserved $($d1.Sold - $d0.Sold) ticket(s)") ($same -and (($d1.Sold - $d0.Sold) -eq 1)) 'F207'
+    $urlA = [string](Get-Prop $ra.Json 'data.authorization_url')
+    $urlB = [string](Get-Prop $rb.Json 'data.authorization_url')
+    $amtA = Get-Prop $ra.Json 'data.amount_kobo'
+    $amtB = Get-Prop $rb.Json 'data.amount_kobo'
+    Check-OrdFinding 'ORD-I7.2' 'the replay answers 200 with the same payment link and amount' '201 then 200, same authorization_url and amount_kobo' ("$($ra.Status) then $($rb.Status), same url=$([bool]$urlA -and ($urlA -eq $urlB)), same amount=$($amtA -eq $amtB)") (($ra.Status -eq 201) -and ($rb.Status -eq 200) -and [bool]$urlA -and ($urlA -eq $urlB) -and ($null -ne $amtA) -and ($amtA -eq $amtB)) 'F207'
+    Test-OrdRejected 'ORD-I7.3' 'the same key with a different request is refused, nothing written' $g (New-OrdBody @(New-OrdLine $Ctx 'ord-std' 2) (New-OrdEmail 'idem')) -Status 422 -Code 'IDEMPOTENCY_KEY_REUSED' -Finding 'F207' -Headers @{ 'Idempotency-Key' = $key }
+    Test-OrdRejected 'ORD-I7.4' 'a malformed Idempotency-Key is refused, nothing written' $g (New-OrdBody @(New-OrdLine $Ctx 'ord-std' 1) (New-OrdEmail 'idem')) -Status 400 -Code 'INVALID_IDEMPOTENCY_KEY' -Finding 'F207' -Headers @{ 'Idempotency-Key' = 'short' }
+
+    # six identical requests at the same moment: exactly one order may be created
+    $ckey = 'ord-p2a3-' + [guid]::NewGuid().ToString('N')
+    $cBody = New-OrdBody @(New-OrdLine $Ctx 'ord-std' 1) (New-OrdEmail 'idemrace')
+    $c0 = Get-OrdTier 'ord-std'
+    $rr = @(Invoke-OrdParallelInit $g $cBody @{ 'Idempotency-Key' = $ckey } 6)
+    $c1 = Get-OrdTier 'ord-std'
+    $created = @($rr | Where-Object { $_.Status -eq 201 }).Count
+    $replayed = @($rr | Where-Object { $_.Status -eq 200 }).Count
+    $waiting = @($rr | Where-Object { $_.Status -eq 409 }).Count
+    $other = @($rr | Where-Object { @(200, 201, 409) -notcontains $_.Status }).Count
+    $refs = @($rr | Where-Object { @(200, 201) -contains $_.Status } | ForEach-Object { [string](Get-Prop $_.Json 'data.reference') } | Sort-Object -Unique)
+    $reserved = $c1.Sold - $c0.Sold
+    Check-OrdFinding 'ORD-I7.5' '6 simultaneous requests with one key open exactly one order' 'one 201, the rest 200 or 409, one reference, 1 ticket reserved' ("201 x$created, 200 x$replayed, 409 x$waiting, other x$other, references=$($refs.Count), reserved $reserved") (($created -eq 1) -and ($other -eq 0) -and ($refs.Count -eq 1) -and ($reserved -eq 1)) 'F207'
+    $rf = Invoke-OrdInit $g $cBody -Headers @{ 'Idempotency-Key' = $ckey }
+    $refF = [string](Get-Prop $rf.Json 'data.reference')
+    Check-OrdFinding 'ORD-I7.6' 'after the race, a retry returns the winning order' '200 and the same reference' ("$($rf.Status), same=$([bool]$refF -and ($refs.Count -eq 1) -and ($refF -eq $refs[0]))") (($rf.Status -eq 200) -and [bool]$refF -and ($refs.Count -eq 1) -and ($refF -eq $refs[0])) 'F207'
+
+    # a browser only sends the header if the preflight allows it (CORS)
+    $pre = Invoke-NativeCapture 'curl.exe' @('-s', '-i', '-X', 'OPTIONS', "$BaseUrl/api/orders/initialize", '-H', 'Origin: http://localhost:3000', '-H', 'Access-Control-Request-Method: POST', '-H', 'Access-Control-Request-Headers: content-type,idempotency-key')
+    $allowed = ($pre.Output -match '(?im)^Access-Control-Allow-Headers:.*idempotency-key')
+    $allowedText = 'not listed'
+    if ($allowed) { $allowedText = 'listed' }
+    Check-OrdFinding 'ORD-I7.7' 'the browser preflight allows the Idempotency-Key header' 'Access-Control-Allow-Headers lists Idempotency-Key' $allowedText $allowed 'F207'
 
     # ---------------------------------------------------------------- I10, I11: events that should not sell, and a free ticket
     Test-OrdRejected 'ORD-I10.1' 'an event that already ended cannot be bought' $g (New-OrdBody @(New-OrdLine $Ctx 'ord-ended' 1) (New-OrdEmail 'ended')) -Finding 'F216'

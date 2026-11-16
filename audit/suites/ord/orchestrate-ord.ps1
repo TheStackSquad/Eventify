@@ -130,6 +130,7 @@ try {
     }
 
     Invoke-Step -Name 'Checking the backend is reachable' -Detailed -Action { Test-OrdBackendReachable $Ctx } -Solution 'Rig: docker compose -f <compose file> logs backend. Tunnel: confirm ngrok forwards to the backend port and the backend is running.'
+    Invoke-Step -Name 'Making sure the audit accounts exist' -Detailed -Action { Confirm-OrdAccounts } -Solution 'Run the shared seeder by hand: pwsh audit/runner/run-matrix.ps1 -Mode rig -Up, then re-run. Check AUDIT_VENDOR_EMAIL and AUDIT_VENDOR2_EMAIL in audit\\docker\\.env.'
     Invoke-Step -Name 'Preparing ORD fixtures (AUDIT-ORD events and tiers)' -Detailed -Action { Initialize-OrdFixtures $Ctx } -Solution 'Check audit\sql\ord_seed.sql against the schema (psql output above), and that AUDIT_VENDOR_EMAIL exists in this database.'
     Invoke-Step -Name 'Opening the organizer, buyer and guest sessions' -Detailed -Action { New-OrdSessions $Ctx } -Solution "Check -LoginPath ($LoginPath), AUDIT_VENDOR_EMAIL / AUDIT_VENDOR_PASSWORD, and the CSRF cookie and header names."
 

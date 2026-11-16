@@ -83,9 +83,9 @@ function Get-OrdSnapshot {
 }
 
 # Sends $Body and asserts: rejected (4xx, or the exact -Status / -Code) and nothing written (no order row, no stock held).
-function Test-OrdRejected([string]$Id, [string]$Name, $Session, [string]$Body, [int[]]$Status = @(), [string]$Code = '', [string]$Finding = '') {
+function Test-OrdRejected([string]$Id, [string]$Name, $Session, [string]$Body, [int[]]$Status = @(), [string]$Code = '', [string]$Finding = '', [hashtable]$Headers = @{}) {
     $s0 = Get-OrdSnapshot
-    $r = Invoke-OrdInit $Session $Body
+    $r = Invoke-OrdInit $Session $Body -Headers $Headers
     $s1 = Get-OrdSnapshot
     $got = [string](Get-Prop $r.Json 'code')
     if ($Status.Count) { $statusOk = ($Status -contains $r.Status) } else { $statusOk = (($r.Status -ge 400) -and ($r.Status -lt 500)) }
@@ -101,4 +101,43 @@ function Test-OrdRejected([string]$Id, [string]$Name, $Session, [string]$Body, [
     $note = ''
     if ((-not $ok) -and $Finding) { $note = "known finding $Finding" }
     Check $Id $Name "$want and nothing written" ("$shown, +{0} orders, +{1} sold" -f ($s1.Orders - $s0.Orders), ($s1.Sold - $s0.Sold)) $ok $note
+}
+
+# Sends $Count identical initialize requests at the same moment (PowerShell 7: ForEach-Object -Parallel + curl.exe).
+# The guest identity travels as a cookie header; the initialize route needs no CSRF token.
+function Invoke-OrdParallelInit($Guest, [string]$Body, [hashtable]$Headers, [int]$Count) {
+    $bodyFile = Join-Path $Tmp ([guid]::NewGuid().ToString('N') + '.body')
+    [IO.File]::WriteAllText($bodyFile, $Body, (New-Object Text.UTF8Encoding($false)))
+    $hdr = @()
+    foreach ($k in $Headers.Keys) { $hdr += @('-H', ('{0}: {1}' -f $k, $Headers[$k])) }
+    $cookie = 'guest_id=' + [string]$Guest.GuestId
+    $url = "$BaseUrl/api/orders/initialize"
+    $dir = $Tmp
+    1..$Count | ForEach-Object -Parallel {
+        $h = $using:hdr
+        $out = Join-Path $using:dir ([guid]::NewGuid().ToString('N') + '.out')
+        $code = & curl.exe -s -S --max-time 60 -o $out -w '%{http_code}' -X POST -H 'Content-Type: application/json' -H 'ngrok-skip-browser-warning: 1' -b $using:cookie @h --data-binary "@$using:bodyFile" $using:url
+        $json = $null
+        try { $json = Get-Content -Raw -LiteralPath $out | ConvertFrom-Json } catch { }
+        [pscustomobject]@{ Status = [int]$code; Json = $json }
+    } -ThrottleLimit $Count
+}
+
+# The ORD events need an organizer and the cross-user checks need a buyer: the two audit accounts. ORD never invents
+# accounts; the shared vendor seeder (audit\runner\seed-vendors-api.ps1, the one the SUB suite runs, idempotent) creates
+# them. A rig database that was rebuilt has none, so run the seeder when they are missing instead of failing late.
+function Confirm-OrdAccounts {
+    $missing = @()
+    foreach ($e in @($env:AUDIT_VENDOR_EMAIL, $env:AUDIT_VENDOR2_EMAIL)) {
+        if ($e -and -not (Get-OrdUserId $e)) { $missing += $e }
+    }
+    if ($missing.Count -eq 0) { return }
+    $seed = Join-Path $AuditDir 'runner\seed-vendors-api.ps1'
+    if (-not (Test-Path -LiteralPath $seed)) { Stop-Setup "these audit accounts are missing from the database ($($missing -join ', ')) and $seed was not found to create them" }
+    Write-Host "  missing from this database: $($missing -join ', '). Running the shared vendor seeder (idempotent)..." -ForegroundColor Yellow
+    & $seed -BaseUrl "http://localhost:$Port" -CsrfCookie $CsrfCookie -CsrfHeader $CsrfHeader
+    $still = @()
+    foreach ($e in $missing) { if (-not (Get-OrdUserId $e)) { $still += $e } }
+    if ($still.Count) { Stop-Setup "the vendor seeder ran but these accounts are still missing: $($still -join ', ')" }
+    Add-Result 'ORD-A0' 'audit accounts were missing and have been created' 'accounts exist' ($missing -join ', ') 'INFO' 'The rig database had been rebuilt. The shared seeder created them.'
 }

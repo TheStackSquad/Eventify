@@ -1,0 +1,27 @@
+{
+  "run": {
+    "suite": "ORD",
+    "mode": "rig",
+    "generated": "2026-11-16T15:03:03.8251117+01:00",
+    "commit": "f51d7a7",
+    "branch": "desh/ord-p2a3-v2",
+    "uncommittedPaths": 2,
+    "migrationVersion": "16",
+    "dbZone": "Etc/UTC",
+    "paystack": "local stub from the compose rig (not real Paystack)",
+    "stub": "http://localhost:9099"
+  },
+  "counts": {
+    "INFO": 1
+  },
+  "results": [
+    {
+      "Id": "S0",
+      "Name": "rig settings read from the compose file",
+      "Expected": "db, backend, signing key, stub",
+      "Actual": "db:55432 backend:8081 stub:http://localhost:9099 worker:20s",
+      "Outcome": "INFO",
+      "Note": ""
+    }
+  ]
+}

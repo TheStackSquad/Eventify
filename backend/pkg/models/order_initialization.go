@@ -27,6 +27,7 @@ type OrderInitializationRequest struct {
 	Phone     string                        `json:"phone"`
 	Items     []OrderInitializationItem     `json:"items" binding:"required,min=1,dive"`
 	UserID    *uuid.UUID                    `json:"userId,omitempty"`
+	IdempotencyKey string `json:"-"` // set from the Idempotency-Key header, never from the body
 }
 
 type OrderInitializationItem struct {

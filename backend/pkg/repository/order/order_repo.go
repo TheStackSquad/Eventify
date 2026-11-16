@@ -42,6 +42,8 @@ type OrderRepository interface {
 	QueueEmailTx(ctx context.Context, tx *sqlx.Tx, outbox *models.EmailOutbox) error
 	QueueEmailOnceTx(ctx context.Context, tx *sqlx.Tx, outbox *models.EmailOutbox, dedupeKey string) error
 	LoadOrderRelations(ctx context.Context, order *models.Order) error
+	FindLiveByIdempotencyKey(ctx context.Context, userID *uuid.UUID, guestID, key string) (*models.Order, error)
+	SetAuthorizationURL(ctx context.Context, orderID uuid.UUID, url string) error
 }
 
 type PostgresOrderRepository struct {
@@ -126,12 +128,12 @@ func (r *PostgresOrderRepository) SavePendingOrderTx(ctx context.Context, tx *sq
         INSERT INTO orders (
             id, user_id, guest_id, reference, status, subtotal, service_fee, vat_amount, 
 			final_total, amount_paid, paystack_fee, app_profit, customer_email, customer_first_name, customer_last_name,
-            customer_phone, ip_address, user_agent, processed_by, webhook_attempts,
+            customer_phone, ip_address, user_agent, processed_by, webhook_attempts, idempotency_key, idempotency_hash,
             created_at, updated_at
         ) VALUES (
             :id, :user_id, :guest_id, :reference, :status, :subtotal, :service_fee, :vat_amount,
 			:final_total, :amount_paid, :paystack_fee, :app_profit, :customer_email, :customer_first_name, :customer_last_name,
-            :customer_phone, :ip_address, :user_agent, :processed_by, :webhook_attempts,
+            :customer_phone, :ip_address, :user_agent, :processed_by, :webhook_attempts, :idempotency_key, :idempotency_hash,
             :created_at, :updated_at
         )`
 
