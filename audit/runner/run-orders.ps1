@@ -1,7 +1,9 @@
 #Requires -Version 7.0
 # audit/runner/run-orders.ps1 : launcher for the ORD suite (orders, payments, tickets).
-#   pwsh -NoProfile -File audit\runner\run-orders.ps1 -Mode rig -SetupOnly      rig already running: setup only
-#   pwsh -NoProfile -File audit\runner\run-orders.ps1 -Mode rig -Up             build and start the rig, migrate, then run
+#   pwsh -NoProfile -File audit\runner\run-orders.ps1 -Mode rig                  run; the rig backend image is ALWAYS rebuilt first
+#                                                                                 (instant when nothing changed), so a run can never test stale code
+#   pwsh -NoProfile -File audit\runner\run-orders.ps1 -Mode rig -SetupOnly      setup only
+#   pwsh -NoProfile -File audit\runner\run-orders.ps1 -Mode rig -NoBuild         skip the rebuild (only when you know the image is current)
 #   pwsh -NoProfile -File audit\runner\run-orders.ps1 -Mode rig -Reset          clean ORD data first (ORD rows only)
 #   pwsh -NoProfile -File audit\runner\run-orders.ps1 -Mode tunnel [-Manual]    local backend + ngrok + real Paystack test mode
 # One run at a time: holds audit\results\.run.lock. -Force removes a lock whose owner is gone.
@@ -12,7 +14,7 @@ param(
     [string]$ComposeFile = 'audit/docker/docker-compose.loadtest.yml',
     [string]$EnvFile = '',
     [string]$DbTimezone = '',
-    [switch]$Up, [switch]$StartRig, [switch]$ApplyMigrations, [switch]$ReuseBackend,
+    [switch]$Up, [switch]$NoBuild, [switch]$StartRig, [switch]$ApplyMigrations, [switch]$ReuseBackend,
     [switch]$SetupOnly, [switch]$Manual, [switch]$Reset, [switch]$Force,
     [int]$Burst = 0
 )
@@ -60,7 +62,9 @@ try {
 
     $argv = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $Paths.Audit 'suites\ord\orchestrate-ord.ps1'), '-Mode', $Mode)
     if ($Mode -eq 'rig') { $argv += @('-ComposeFile', $ComposeFile) }
-    if ($Up) { $StartRig = [switch]$true; $ApplyMigrations = [switch]$true }
+    # Rig mode rebuilds the backend image on every run (docker compose up -d --build). A cached build takes seconds;
+    # skipping it is how a run once tested a stale backend and reported 14 false failures.
+    if ($Up -or (($Mode -eq 'rig') -and (-not $NoBuild))) { $StartRig = [switch]$true; $ApplyMigrations = [switch]$true }
     if ($Mode -eq 'rig' -and $StartRig) { $argv += '-StartRig' }
     if ($ApplyMigrations) { $argv += '-ApplyMigrations' }
     if ($ReuseBackend) { $argv += '-ReuseBackend' }

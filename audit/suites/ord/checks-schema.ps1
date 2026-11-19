@@ -124,7 +124,8 @@ END $$;
     Check-OrdFinding 'ORD-S11b' 'order status changes: the legal lifecycle is allowed, everything else is refused' '25 of 25 as designed' $guardShown $guardOk 'F211'
 
     # S12 reaper index (measured with EXPLAIN in P1)
-    $n = [int](Invoke-Sql "SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'orders' AND indexdef LIKE '%WHERE%' AND indexdef LIKE '%pending%'")
+    # the idempotency index is partial too and mentions pending; it is not the reaper index, so it is excluded
+    $n = [int](Invoke-Sql "SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'orders' AND indexname <> 'idx_orders_idempotency_live' AND indexdef LIKE '%(created_at)%' AND indexdef LIKE '%WHERE%' AND indexdef LIKE '%pending%'")
     if ($n -eq 0) { Add-Result 'ORD-S12' 'a partial index for pending orders (the reaper query)' '>= 1' "$n" 'INFO' 'F219: the reaper scans (status, created_at). P1 measures it with EXPLAIN under load.' }
     else { Add-Result 'ORD-S12' 'a partial index for pending orders (the reaper query)' '>= 1' "$n" 'PASS' }
 

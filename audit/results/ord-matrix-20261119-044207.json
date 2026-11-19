@@ -2,10 +2,10 @@
   "run": {
     "suite": "ORD",
     "mode": "rig",
-    "generated": "2026-11-19T04:15:54.0269389Z",
-    "commit": "cb66b95",
+    "generated": "2026-11-19T04:42:08.0565676Z",
+    "commit": "8fc5760",
     "branch": "desh/ord-p2a4",
-    "uncommittedPaths": 7,
+    "uncommittedPaths": 4,
     "migrationVersion": "16",
     "dbZone": "Etc/UTC",
     "paystack": "local stub from the compose rig (not real Paystack)",
@@ -13,9 +13,8 @@
     "waived": "ORD-P8.1"
   },
   "counts": {
-    "FAIL": 14,
-    "INFO": 6,
-    "PASS": 67,
+    "INFO": 7,
+    "PASS": 80,
     "WAIVED": 1
   },
   "results": [
@@ -183,9 +182,9 @@
       "Id": "ORD-S12",
       "Name": "a partial index for pending orders (the reaper query)",
       "Expected": ">= 1",
-      "Actual": "1",
-      "Outcome": "PASS",
-      "Note": ""
+      "Actual": "0",
+      "Outcome": "INFO",
+      "Note": "F219: the reaper scans (status, created_at). P1 measures it with EXPLAIN under load."
     },
     {
       "Id": "ORD-S13",
@@ -207,7 +206,7 @@
       "Id": "ORD-I1.1",
       "Name": "a guest can start an order and gets a reference and a payment link",
       "Expected": "201 with reference, order_id, amount_kobo, authorization_url",
-      "Actual": "201 TIX_1795061733700_00a41c0a",
+      "Actual": "201 TIX_1795063301408_ac66a5a6",
       "Outcome": "PASS",
       "Note": ""
     },
@@ -383,17 +382,17 @@
       "Id": "ORD-I4.14",
       "Name": "a first name longer than the column (300 characters) is rejected, not a server error",
       "Expected": "4xx and nothing written",
-      "Actual": "500 ORDER_FAILED, +0 orders, +0 sold",
-      "Outcome": "FAIL",
-      "Note": "known finding F220"
+      "Actual": "400 INVALID_ORDER, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I4.15",
       "Name": "a phone number longer than the column (25 characters) is rejected, not a server error",
       "Expected": "4xx and nothing written",
-      "Actual": "500 ORDER_FAILED, +0 orders, +0 sold",
-      "Outcome": "FAIL",
-      "Note": "known finding F220"
+      "Actual": "400 INVALID_ORDER, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I4.16",
@@ -471,57 +470,57 @@
       "Id": "ORD-I7.1",
       "Name": "the same submit twice with one Idempotency-Key opens one order",
       "Expected": "one reference, stock reserved once",
-      "Actual": "same reference=False, reserved 2 ticket(s)",
-      "Outcome": "FAIL",
-      "Note": "known finding F207"
+      "Actual": "same reference=True, reserved 1 ticket(s)",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I7.2",
       "Name": "the replay answers 200 with the same payment link and amount",
       "Expected": "201 then 200, same authorization_url and amount_kobo",
-      "Actual": "201 then 201, same url=False, same amount=True",
-      "Outcome": "FAIL",
-      "Note": "known finding F207"
+      "Actual": "201 then 200, same url=True, same amount=True",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I7.3",
       "Name": "the same key with a different request is refused, nothing written",
       "Expected": "422 IDEMPOTENCY_KEY_REUSED and nothing written",
-      "Actual": "201, +1 orders, +2 sold",
-      "Outcome": "FAIL",
-      "Note": "known finding F207"
+      "Actual": "422 IDEMPOTENCY_KEY_REUSED, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I7.4",
       "Name": "a malformed Idempotency-Key is refused, nothing written",
       "Expected": "400 INVALID_IDEMPOTENCY_KEY and nothing written",
-      "Actual": "201, +1 orders, +1 sold",
-      "Outcome": "FAIL",
-      "Note": "known finding F207"
+      "Actual": "400 INVALID_IDEMPOTENCY_KEY, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I7.5",
       "Name": "6 simultaneous requests with one key open exactly one order",
       "Expected": "one 201, the rest 200 or 409, one reference, 1 ticket reserved",
-      "Actual": "201 x6, 200 x0, 409 x0, other x0, references=6, reserved 6",
-      "Outcome": "FAIL",
-      "Note": "known finding F207"
+      "Actual": "201 x1, 200 x1, 409 x4, other x0, references=1, reserved 1",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I7.6",
       "Name": "after the race, a retry returns the winning order",
       "Expected": "200 and the same reference",
-      "Actual": "201, same=False",
-      "Outcome": "FAIL",
-      "Note": "known finding F207"
+      "Actual": "200, same=True",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I7.7",
       "Name": "the browser preflight allows the Idempotency-Key header",
       "Expected": "Access-Control-Allow-Headers lists Idempotency-Key",
-      "Actual": "not listed",
-      "Outcome": "FAIL",
-      "Note": "known finding F207"
+      "Actual": "listed",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I10.1",
@@ -543,9 +542,9 @@
       "Id": "ORD-I11.1",
       "Name": "a free ticket is either issued without payment or refused with a clear 4xx, never a server error",
       "Expected": "201 (free flow) or 4xx",
-      "Actual": "503 PAYMENT_UNAVAILABLE, sold +0",
-      "Outcome": "FAIL",
-      "Note": "known finding F215"
+      "Actual": "400 FREE_TICKETS_UNSUPPORTED, sold +0",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I99",
@@ -591,9 +590,9 @@
       "Id": "ORD-P2.3",
       "Name": "2 x 3,000 naira (6,000 subtotal): app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
       "Expected": "service_fee - paystack_fee = 27242",
-      "Actual": "30767",
-      "Outcome": "FAIL",
-      "Note": "known finding F210"
+      "Actual": "27242",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-P3.1",
@@ -615,9 +614,9 @@
       "Id": "ORD-P3.3",
       "Name": "1 x 10,000 naira: app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
       "Expected": "service_fee - paystack_fee = 48791",
-      "Actual": "54416",
-      "Outcome": "FAIL",
-      "Note": "known finding F210"
+      "Actual": "48791",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-P4.1",
@@ -655,9 +654,9 @@
       "Id": "ORD-P5.3",
       "Name": "1 x 5,000.01 naira: app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
       "Expected": "service_fee - paystack_fee = 21855",
-      "Actual": "24855",
-      "Outcome": "FAIL",
-      "Note": "known finding F210"
+      "Actual": "21855",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-P6.1",
@@ -695,9 +694,9 @@
       "Id": "ORD-P7.3",
       "Name": "10 x 3,000 naira (the cap): app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
       "Expected": "service_fee - paystack_fee = 156533",
-      "Actual": "172658",
-      "Outcome": "FAIL",
-      "Note": "known finding F210"
+      "Actual": "156533",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-P8.1",
