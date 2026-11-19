@@ -34,7 +34,6 @@ const KeyMetricsSection = ({ vendor }) => {
     <div className="p-5 border rounded-xl bg-gradient-to-br from-gray-50 to-white">
       <h2 className="text-lg font-bold text-gray-800 mb-4">Key Metrics</h2>
       <ul className="space-y-3" role="list">
-        
         {/* Location Row */}
         <li
           className="flex items-center justify-between p-3 bg-white rounded-lg border"
@@ -71,7 +70,7 @@ const KeyMetricsSection = ({ vendor }) => {
           </div>
           <div className="flex items-center gap-2">
             <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-500"
                 style={{ width: `${pvsScore}%` }}
                 aria-hidden="true"
@@ -87,6 +86,7 @@ const KeyMetricsSection = ({ vendor }) => {
         </li>
 
         {/* Reviews Row */}
+        {/* Reviews Row */}
         <li
           className="flex items-center justify-between p-3 bg-white rounded-lg border"
           role="listitem"
@@ -101,9 +101,15 @@ const KeyMetricsSection = ({ vendor }) => {
           </div>
           <span
             className="font-semibold text-amber-700"
-            aria-label={`${reviewCount} reviews`}
+            aria-label={
+              reviewCount > 0 && Number(vendor?.avgRating) > 0
+                ? `${Number(vendor.avgRating).toFixed(1)} out of 5 from ${reviewCount} reviews`
+                : `${reviewCount} reviews`
+            }
           >
-            {reviewCount} {reviewCount === 1 ? 'review' : 'reviews'}
+            {reviewCount > 0 && Number(vendor?.avgRating) > 0
+              ? `${Number(vendor.avgRating).toFixed(1)} (${reviewCount} ${reviewCount === 1 ? "review" : "reviews"})`
+              : `${reviewCount} ${reviewCount === 1 ? "review" : "reviews"}`}
           </span>
         </li>
 

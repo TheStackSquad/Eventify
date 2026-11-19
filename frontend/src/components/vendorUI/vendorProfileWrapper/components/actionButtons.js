@@ -22,7 +22,10 @@ const ActionButtons = ({ vendor }) => {
     state: vendor?.state,
     city: vendor?.city,
     image: vendor?.imageURL,
-    rating: vendor?.pvsScore ? (vendor.pvsScore / 20).toFixed(1) : "0.0",
+    rating:
+      Number(vendor?.avgRating) > 0
+        ? Number(vendor.avgRating).toFixed(1)
+        : "0.0",
     location: `${vendor?.city || "Unknown"}, ${vendor?.state || "Location"}`,
   };
 
@@ -52,6 +55,6 @@ const ActionButtons = ({ vendor }) => {
       />
     </>
   );
-};
+};;
 
 export default ActionButtons;

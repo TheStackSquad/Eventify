@@ -3,12 +3,12 @@ import React from "react";
 import { Star, Briefcase, Award, Sparkles } from "lucide-react";
 
 const ProfileHeader = ({ vendor }) => {
-  console.log("Profile Header:", vendor);
-
   // Map data directly from the flat JSON object
-  const pvsScore = vendor.pvsScore || 0;
-  const ratingOutOf5 = (pvsScore / 20).toFixed(1);
-  const reviewCount = vendor.reviewCount || 0;
+  const pvsScore = Number(vendor.pvsScore) || 0;
+  const avg = Number(vendor.avgRating) || 0;
+  const reviewCount = Number(vendor.reviewCount) || 0;
+  const hasReviews = reviewCount > 0 && avg > 0;
+  const ratingOutOf5 = hasReviews ? avg.toFixed(1) : "0.0";
 
   // Logic for badges
   const isPremium = pvsScore >= 80;
@@ -75,9 +75,17 @@ const ProfileHeader = ({ vendor }) => {
           </span>
         </div>
         <p className="text-sm text-gray-600 mt-1">
-          Based on{" "}
-          <span className="font-bold text-gray-800">{reviewCount}</span> review
-          {reviewCount !== 1 ? "s" : ""}
+          {hasReviews ? (
+            <>
+              Based on{" "}
+              <span className="font-bold text-gray-800">{reviewCount}</span>{" "}
+              review{reviewCount !== 1 ? "s" : ""}
+            </>
+          ) : (
+            <span className="font-semibold text-emerald-700">
+              No reviews yet
+            </span>
+          )}
         </p>
         <div
           className="mt-2 text-xs text-gray-500 font-medium"

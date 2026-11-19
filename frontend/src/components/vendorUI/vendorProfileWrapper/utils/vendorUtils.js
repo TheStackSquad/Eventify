@@ -1,15 +1,21 @@
 // frontend/src/components/vendorUI/vendorProfileWrapper/utils/vendorUtils.js
 export const getVendorData = (vendor) => {
-  const startingPrice = vendor.minPrice?.Valid ? vendor.minPrice.Int32 : 0;
-  const ratingOutOf5 = vendor.pvsScore
-    ? (vendor.pvsScore / 20).toFixed(1)
-    : "0.0";
-  const isPremium = vendor.pvsScore >= 80;
+  const startingPrice = vendor.minPrice?.Valid
+    ? vendor.minPrice.Int32
+    : typeof vendor.minPrice === "number"
+      ? vendor.minPrice
+      : 0;
+  const avg = Number(vendor.avgRating) || 0;
+  const reviewCount = Number(vendor.reviewCount) || 0;
+  const hasReviews = reviewCount > 0 && avg > 0;
+  const ratingOutOf5 = hasReviews ? avg.toFixed(1) : "0.0";
+  const isPremium = (Number(vendor.pvsScore) || 0) >= 80;
   const isNewVendor = vendor.bookingsCompleted === 0;
 
   return {
     startingPrice,
     ratingOutOf5,
+    hasReviews,
     isPremium,
     isNewVendor,
   };

@@ -19,7 +19,7 @@ const CATEGORY_LABELS = Object.fromEntries(
 
 // priority: only set true where the card image can be the page's LCP element
 const VendorCard = ({ vendor, priority = false }) => {
-  const [imageError, setImageError] = useState(false);
+const [imageError, setImageError] = useState(false);
 
   const {
     slug,
@@ -37,25 +37,23 @@ const VendorCard = ({ vendor, priority = false }) => {
         ? vendor.minPrice
         : null;
 
-    // pvsScore is already 0-100, so it is used as-is (clamped), never divided by 5
-    const pvs = Number(vendor.pvsScore) || 0; // 0-100; the score bar reads vendor.pvsScore itself
-    const reviewCount = Number(vendor.reviewCount) || 0;
+  const avg = Number(vendor.avgRating) || 0; // real average of review ratings, 1-5; score bar still reads vendor.pvsScore
+  const reviewCount = Number(vendor.reviewCount) || 0;
 
-    return {
-      slug: generateVendorSlug(vendor),
-      priceLabel: formatPriceCompact(rawMin), // null when no price
-      displayRating: (pvs / 20).toFixed(1),
-      hasReviews: reviewCount > 0 && pvs > 0,
-      reviewCount,
-      categoryLabel:
-        CATEGORY_LABELS[vendor.category] ??
-        (vendor.category?.replace(/_/g, " ") || "Vendor"),
-      // city is optional and arrives as null from the API: never print "null"
-      location: [vendor.city, vendor.state].filter(Boolean).join(", "),
-      hasCac:
-        vendor.isBusinessVerified === true ||
-        vendor.isBusinessRegistered === true,
-    };
+ return {
+   slug: generateVendorSlug(vendor),
+   priceLabel: formatPriceCompact(rawMin), // null when no price
+   displayRating: avg.toFixed(1),
+   hasReviews: reviewCount > 0 && avg > 0,
+   reviewCount,
+   categoryLabel:
+     CATEGORY_LABELS[vendor.category] ??
+     (vendor.category?.replace(/_/g, " ") || "Vendor"),
+   // city is optional and arrives as null from the API: never print "null"
+   location: [vendor.city, vendor.state].filter(Boolean).join(", "),
+   hasCac:
+     vendor.isBusinessVerified === true || vendor.isBusinessRegistered === true,
+ };
   }, [vendor]);
 
   return (
@@ -131,12 +129,16 @@ const VendorCard = ({ vendor, priority = false }) => {
               {vendor.name}
             </h3>
 
-            <div className="flex items-center gap-1.5 text-gray-500">
-              <MapPin size={14} className="flex-shrink-0" aria-hidden="true" />
-              <span className="truncate text-sm">
-                {location},
-              </span>
-            </div>
+            {location && (
+              <div className="flex items-center gap-1.5 text-gray-500">
+                <MapPin
+                  size={14}
+                  className="flex-shrink-0"
+                  aria-hidden="true"
+                />
+                <span className="truncate text-sm">{location}</span>
+              </div>
+            )}
           </div>
 
           {/* Performance score (0-100, color-coded, animates in view) */}
