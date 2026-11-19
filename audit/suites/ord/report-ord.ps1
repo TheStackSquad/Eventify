@@ -8,14 +8,18 @@ function ConvertTo-OrdMdCell([string]$Text) {
 
 function Write-OrdReport {
     if (-not (Test-Path -LiteralPath $ResultsDir)) { New-Item -ItemType Directory -Path $ResultsDir | Out-Null }
-    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')   # UTC, so names sort the same on every machine
     $base = Join-Path $ResultsDir "ord-matrix-$stamp"
     $git = Get-OrdGitInfo
+
+    $waivedRows = @($Results | Where-Object { $_.Outcome -eq 'WAIVED' })
+    $waivedText = 'none'
+    if ($waivedRows.Count) { $waivedText = (($waivedRows | ForEach-Object { $_.Id }) -join ', ') }
 
     $run = [ordered]@{
         suite            = 'ORD'
         mode             = $Mode
-        generated        = (Get-Date).ToString('o')
+        generated        = (Get-Date).ToUniversalTime().ToString('o')
         commit           = $git.Commit
         branch           = $git.Branch
         uncommittedPaths = $git.Dirty
@@ -23,6 +27,7 @@ function Write-OrdReport {
         dbZone           = (Get-OrdDbZone)
         paystack         = $RunInfo.PaystackMode
         stub             = $RunInfo.StubBase
+        waived           = $waivedText
     }
     $counts = [ordered]@{}
     foreach ($g in ($Results | Group-Object Outcome | Sort-Object Name)) { $counts[$g.Name] = $g.Count }
@@ -49,6 +54,12 @@ function Write-OrdReport {
     $md.Add('')
     if ($fails.Count -eq 0) { $md.Add('No failed checks.') }
     foreach ($f in $fails) { $md.Add(('- **{0}** {1}: {2}' -f $f.Id, $f.Name, (Get-OrdHint $f.Id))) }
+    if ($waivedRows.Count) {
+        $md.Add('')
+        $md.Add('## Waived on purpose (does not fail the run)')
+        $md.Add('')
+        foreach ($w in $waivedRows) { $md.Add(('- **{0}** {1}: {2}' -f $w.Id, $w.Name, $w.Note)) }
+    }
 
     Set-Content -LiteralPath "$base.md" -Value ($md -join "`n") -Encoding utf8NoBOM
     $doc = [ordered]@{}

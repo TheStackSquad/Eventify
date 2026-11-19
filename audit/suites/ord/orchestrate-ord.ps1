@@ -78,6 +78,7 @@ $HelperFiles = @(
     'suites\ord\checks-initialize.ps1',
     'suites\ord\checks-pricing.ps1',
     'suites\ord\hints-ord.ps1',
+    'suites\ord\waivers-ord.ps1',
     'suites\ord\report-ord.ps1'
 )
 foreach ($file in $HelperFiles) {
@@ -160,6 +161,7 @@ finally {
     elseif (Test-Path $Tmp) { Write-Host "Logs kept in $Tmp" -ForegroundColor DarkGray }
 }
 
+if (-not $SetupOnly) { Invoke-OrdWaivers }
 if ((-not $SetupOnly) -and ($Results.Count -gt 0)) { Write-OrdReport }
 
 $failed = @($Results | Where-Object { $_.Outcome -eq 'FAIL' }).Count

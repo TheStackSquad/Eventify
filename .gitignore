@@ -62,3 +62,7 @@ audit/config/audit.env
 audit/results/raw/
 
 audit/results/.run.lock
+
+# patch tooling stays out of the repo
+/ord-p*.zip
+/apply-ord-*.ps1
