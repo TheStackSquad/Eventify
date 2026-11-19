@@ -2,7 +2,7 @@
 
 import { put, del } from "@vercel/blob";
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth/requireUser";
+import { requireUser } from "@/utils/server/requireUser";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
