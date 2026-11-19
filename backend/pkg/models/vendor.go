@@ -14,6 +14,8 @@ const (
     VendorStatusActive    VendorStatus = "active"
     VendorStatusSuspended VendorStatus = "suspended"
     VendorStatusDeleted   VendorStatus = "deleted"
+    VendorStatusDraft           VendorStatus = "draft"
+	VendorStatusPendingApproval VendorStatus = "pending_approval"
 )
 
 type Vendor struct {
@@ -92,12 +94,13 @@ type PublicVendorResponse struct {
     IsBusinessVerified   interface{}  `json:"isBusinessVerified"`
     State                string       `json:"state"`
     City                 interface{}  `json:"city"`
-    PhoneNumber          interface{}  `json:"phoneNumber"`
+    //PhoneNumber          interface{}  `json:"phoneNumber"`
+    HasPhone             bool         `json:"hasPhone"`
     MinPrice             interface{}  `json:"minPrice"`
     PVSScore             int32        `json:"pvsScore"`
     ReviewCount          int32        `json:"reviewCount"`
     Description          interface{}  `json:"description"`
-    Email                interface{}  `json:"email"`
+  //  Email                interface{}  `json:"email"`
     CACNumber            interface{}  `json:"cacNumber"`
     FirstName            interface{}  `json:"firstName"`
     MiddleName           interface{}  `json:"middleName"`
@@ -108,12 +111,32 @@ type PublicVendorResponse struct {
 }
 
 // OwnerVendorResponse is returned only to the authenticated owner.
-// Includes full unredacted VNIN — channel is auth + CSRF protected.
+// It exposes only the last 4 characters of the vNIN.
 type OwnerVendorResponse struct {
-    PublicVendorResponse
-    VNIN      string `json:"vnin"`
-    CACNumber interface{} `json:"cacNumber"`
+	PublicVendorResponse
+	PhoneNumber interface{} `json:"phoneNumber"` // owner-only; visitors use the reveal endpoint
+	VNINLast4   string      `json:"vninLast4"`
+	CACNumber   interface{} `json:"cacNumber"`
 }
+
+func lastN(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[len(r)-n:])
+}
+
+// ToOwnerResponse builds an OwnerVendorResponse with the vNIN redacted to its last 4.
+func (v *Vendor) ToOwnerResponse() OwnerVendorResponse {
+	return OwnerVendorResponse{
+		PublicVendorResponse: v.ToPublicResponse(),
+		PhoneNumber:          plainStr(v.PhoneNumber),
+		VNINLast4:            lastN(v.VNIN, 4),
+		CACNumber:            nullStr(v.CACNumber),
+	}
+}
+
 
 // nullStr returns nil for empty/invalid NullString, otherwise the string value
 func nullStr(ns sql.NullString) interface{} {
@@ -160,12 +183,13 @@ func (v *Vendor) ToPublicResponse() PublicVendorResponse {
         IsBusinessVerified:   nullBool(v.IsBusinessVerified),
         State:                v.State,
         City:                 plainStr(v.City),
-        PhoneNumber:          plainStr(v.PhoneNumber),
+       // PhoneNumber:          plainStr(v.PhoneNumber),
+        HasPhone: v.PhoneNumber != "",
         MinPrice:             nullInt32(v.MinPrice),
         PVSScore:             v.PVSScore,
         ReviewCount:          v.ReviewCount,
         Description:          plainStr(v.Description),
-        Email:                plainStr(v.Email),
+   //     Email:                plainStr(v.Email),
         CACNumber:            nullStr(v.CACNumber),
         FirstName:            plainStr(v.FirstName),
         MiddleName:           nullStr(v.MiddleName),
@@ -173,14 +197,5 @@ func (v *Vendor) ToPublicResponse() PublicVendorResponse {
         SubscriptionTier:     v.SubscriptionTier,
         CreatedAt:            v.CreatedAt,
         UpdatedAt:            v.UpdatedAt,
-    }
-}
-
-// ToOwnerResponse builds an OwnerVendorResponse — full VNIN included, owner-only
-func (v *Vendor) ToOwnerResponse() OwnerVendorResponse {
-    return OwnerVendorResponse{
-        PublicVendorResponse: v.ToPublicResponse(),
-        VNIN:                 v.VNIN,
-        CACNumber:            nullStr(v.CACNumber),
     }
 }

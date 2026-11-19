@@ -33,9 +33,16 @@ const PUBLIC_UI_ROUTES = [
   "/vendors/[id]",
   "/api/event-image",
   "/api/feedback-image",
-  "/api/vendor-image",
   "/api/v1/feedback",
   "/api/feedback",
+];
+
+// Next API routes that spend money or write storage: signed-in users only.
+// Early reject only (jwtDecode does NOT verify signatures); handlers re-check via requireUser().
+const AUTH_REQUIRED_API_ROUTES = [
+  "/api/vnin-verify",
+  "/api/verify-business",
+  "/api/vendor-image",
 ];
 
 // NOTE: "/api/v1/vendors" here causes all sub-paths (/api/v1/vendors/admin, etc.)
@@ -128,6 +135,13 @@ export function middleware(request) {
     hasToken: !!request.cookies.get("access_token"),
     tokenValid: hasValidToken,
   });
+
+  if (matchesRoute(pathname, AUTH_REQUIRED_API_ROUTES) && !hasValidToken) {
+      return NextResponse.json(
+        { message: "Authentication required." },
+        { status: 401 },
+      );
+    }
 
   // ── Auth routes — redirect authenticated users away ────────────────────────
   if (matchesRoute(pathname, AUTH_ROUTES)) {

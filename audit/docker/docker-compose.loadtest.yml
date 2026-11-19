@@ -64,6 +64,8 @@ services:
       LOG_LEVEL: info
       RSA_PRIVATE_KEY: ${RSA_PRIVATE_KEY}
       RSA_PUBLIC_KEY: ${RSA_PUBLIC_KEY}
+      VERIFICATION_PROOF_SECRET: ${VERIFICATION_PROOF_SECRET}
+      ALLOW_SANDBOX_VERIFICATION: "true"   # rig only: accepts proofs minted by audit/core/proof.ps1
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       FROM_EMAIL: "Eventify Tickets <tickets@eventify.test>"

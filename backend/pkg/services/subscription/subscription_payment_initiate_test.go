@@ -31,8 +31,9 @@ func init() {
     }
 }
 
-func (f fakeVendorRepo) GetByID(context.Context, uuid.UUID) (models.Vendor, error) {
-	return f.vendor, nil
+func (f fakeVendorRepo) GetByID(context.Context, uuid.UUID) (*models.Vendor, error) {
+	v := f.vendor
+	return &v, nil
 }
 
 type fakeAuthRepo struct {

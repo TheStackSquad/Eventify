@@ -44,25 +44,28 @@ const CACVerificationField = ({
       try {
         const res = await frontendInstance.post(
           "/api/verify-business",
-          { cacNumber: cacValue },
+          {
+            cacNumber: cacValue,
+            businessName: formData.name,
+            vninProof: formData.vninProof,
+          },
           { timeout: 20000 },
         );
+        const responseData = res.data.data || res.data;
+        // Supporting both standard and nested API responses
+        const verifiedFlag = responseData.verified ?? res.data.verified;
 
-         const responseData = res.data.data || res.data;
-         // Supporting both standard and nested API responses
-         const verifiedFlag = responseData.verified ?? res.data.verified;
-
-         if (verifiedFlag) {
-           if (!responseData.companyName) {
-             throw new Error(
-               "CAC record found, but no registered name was returned. Please try again.",
-             );
-           }
-           onCacVerified(responseData.companyName, cacValue);
-           toastAlert.success("Business Verified via CAC");
-         } else {
-           throw new Error("Invalid CAC Number. Please check and try again.");
-         }
+        if (verifiedFlag) {
+          if (!responseData.companyName || !responseData.proof) {
+            throw new Error(
+              "CAC record found, but no registered name was returned. Please try again.",
+            );
+          }
+          onCacVerified(responseData.companyName, cacValue, responseData.proof);
+          toastAlert.success("Business Verified via CAC");
+        } else {
+          throw new Error("Invalid CAC Number. Please check and try again.");
+        }
       } catch (err) {
         const msg =
           err.response?.data?.message ||
@@ -73,7 +76,13 @@ const CACVerificationField = ({
         setIsVerifying(false);
       }
     },
-    [onCacVerified, isVerified, identityVerified],
+    [
+      onCacVerified,
+      isVerified,
+      identityVerified,
+      formData.vninProof,
+      formData.name,
+    ],
   );
 
   const handleCacChange = (e) => {

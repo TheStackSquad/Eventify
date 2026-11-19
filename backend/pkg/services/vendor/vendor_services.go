@@ -12,7 +12,7 @@ import (
 
 type VendorService interface {
     GetVendors(ctx context.Context, filters map[string]interface{}) ([]models.Vendor, error)
-    GetVendorByID(ctx context.Context, id string) (models.Vendor, error)
+    GetVendorByID(ctx context.Context, id string) (*models.Vendor, error)
     GetVendorByOwnerID(ctx context.Context, ownerID uuid.UUID) (*models.Vendor, error)
     CreateVendor(ctx context.Context, vendor *models.Vendor) (string, error)
     UpdateVendor(ctx context.Context, id string, requestorID uuid.UUID, updatedVendor *models.Vendor) error 

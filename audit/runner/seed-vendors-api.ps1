@@ -41,6 +41,14 @@ if (-not $BaseUrl -or $BaseUrl -eq 'http://localhost:8080') {
 
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot '..\core\proof.ps1')
+
+function Get-UserId([string]$Email) {
+    $id = (& psql $env:AUDIT_DB_URL -v ON_ERROR_STOP=1 -t -A -q -c ("SELECT id FROM users WHERE lower(email) = lower('{0}')" -f $Email.Replace("'", "''"))) -join ''
+    if ($id.Trim() -notmatch '^[0-9a-fA-F-]{36}$') { throw "Could not find the user id for $Email" }
+    return $id.Trim()
+}
+
 function Short([string]$Text) {
     $t = ($Text -replace '\s+', ' ').Trim()
     if ($t.Length -gt 300) { $t.Substring(0, 300) + '...' } else { $t }
@@ -99,24 +107,24 @@ function New-VendorProfile($v, [string]$Jar) {
     $csrf = Get-Csrf $Jar
     if (-not $csrf) { throw "No $CsrfCookie cookie after login for $($v.Email); check -CsrfCookie against the CSRF middleware" }
    
+        # The API takes verification only from signed proofs, never from flags or a raw vNIN.
+    $userId = Get-UserId $v.Email
+    $proof  = New-VerificationProof -Kind 'vnin' -UserId $userId -Claims @{
+        fn = $v.First; mn = ''; ln = $v.Last; l4 = $v.Vnin.Substring($v.Vnin.Length - 4)
+    }
+
     $payload = @{
-        name          = $v.Store
-        category      = $v.Category
-        state         = 'Lagos'
-        city          = $v.City
-        email         = $v.Email
-        description   = 'Automated audit test vendor profile'
-        phone_number  = $v.Phone
-        phoneNumber   = $v.Phone
-        vnin          = $v.Vnin
-        verified_vnin = $v.Vnin
-        verifiedVNIN  = $v.Vnin
-        first_name    = $v.First
-        firstName     = $v.First
-        last_name     = $v.Last
-        lastName      = $v.Last
-        image_url     = $v.Image
-        imageUrl      = $v.Image
+        name         = $v.Store
+        category     = $v.Category
+        state        = 'Lagos'
+        city         = $v.City
+        description  = 'Automated audit test vendor profile'
+        phone_number = $v.Phone
+        image_url    = $v.Image
+        min_price    = 50000
+        first_name   = $v.First
+        last_name    = $v.Last
+        vnin_proof   = $proof
     }
    
     $r = Send 'POST' '/api/v1/vendors/register' $payload $Jar $csrf

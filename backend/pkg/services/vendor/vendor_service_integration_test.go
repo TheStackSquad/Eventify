@@ -5,6 +5,7 @@ package vendor_test
 import (
 	"context"
 	"testing"
+	"database/sql"
 
 	"github.com/eventify/backend/pkg/models"
 	repovendor "github.com/eventify/backend/pkg/repository/vendor"
@@ -38,30 +39,34 @@ func TestCreateVendor_Integration(t *testing.T) {
 		wantErrMsg  string // "" = expect success
 	}{
 		{
-			name: "success: valid vendor with vNIN creates profile and sets isIdentityVerified",
+			name: "success: verified vendor with vNIN persists isIdentityVerified",
 			buildVendor: func(ownerID uuid.UUID) *models.Vendor {
 				return &models.Vendor{
-					OwnerID:  ownerID,
-					Name:     "Blessed Decor",
-					Category: "Decoration",
-					State:    "Lagos",
-					VNIN:     "NIN00000000001",
+					OwnerID:            ownerID,
+					Name:               "Blessed Decor",
+					Category:           "Decoration",
+					State:              "Lagos",
+					VNIN:               "NIN00000000001",
+					IsIdentityVerified: true,
 				}
 			},
 		},
 		{
-			name: "success: vendor with CAC number auto-sets isBusinessVerified",
+			name: "success: vendor with CAC number persists business verification as supplied",
 			buildVendor: func(ownerID uuid.UUID) *models.Vendor {
 				return &models.Vendor{
-					OwnerID:   ownerID,
-					Name:      "RC Business Events",
-					Category:  "Catering",
-					State:     "Rivers",
-					VNIN:      "NIN00000000002",
-					CACNumber: models.ToNullString("RC-123456"),
+					OwnerID:            ownerID,
+					Name:               "RC Business Events",
+					Category:           "Catering",
+					State:              "Rivers",
+					VNIN:               "NIN00000000002",
+					CACNumber:          models.ToNullString("RC-123456"),
+					IsIdentityVerified: true,
+					IsBusinessVerified: sql.NullBool{Bool: true, Valid: true},
 				}
 			},
 		},
+
 		{
 			name: "fail: missing vNIN is rejected",
 			buildVendor: func(ownerID uuid.UUID) *models.Vendor {
@@ -105,6 +110,19 @@ func TestCreateVendor_Integration(t *testing.T) {
 			},
 			wantErrMsg: "already has an active vendor account",
 		},
+				{
+			name: "fail: unverified identity is rejected even with a vNIN",
+			buildVendor: func(ownerID uuid.UUID) *models.Vendor {
+				return &models.Vendor{
+					OwnerID:  ownerID,
+					Name:     "Unverified Vendor",
+					Category: "Catering",
+					State:    "Lagos",
+					VNIN:     "NIN00000000004",
+				}
+			},
+			wantErrMsg: "identity verification is required",
+		},
 	}
 
 	for _, tc := range cases {
@@ -128,11 +146,11 @@ func TestCreateVendor_Integration(t *testing.T) {
 			require.NoError(t, fetchErr)
 
 			assert.True(t, fetched.IsIdentityVerified,
-				"service must set IsIdentityVerified=true when vNIN is provided")
+			"service must persist IsIdentityVerified as supplied")
 
 			if vendor.CACNumber.Valid && vendor.CACNumber.String != "" {
 				assert.True(t, fetched.IsBusinessVerified.Bool,
-					"service must auto-set IsBusinessVerified when CACNumber is provided")
+				"service must persist IsBusinessVerified as supplied")
 			}
 		})
 	}

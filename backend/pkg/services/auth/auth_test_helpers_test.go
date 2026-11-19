@@ -278,8 +278,8 @@ func (m *mockVendorRepo) Delete(_ context.Context, _ uuid.UUID) (int64, error) {
 func (m *mockVendorRepo) GetByOwnerID(_ context.Context, _ uuid.UUID) (*models.Vendor, error) {
 	return nil, nil
 }
-func (m *mockVendorRepo) GetByID(_ context.Context, _ uuid.UUID) (models.Vendor, error) {
-	return models.Vendor{}, nil
+func (m *mockVendorRepo) GetByID(_ context.Context, _ uuid.UUID) (*models.Vendor, error) {
+	return &models.Vendor{}, nil
 }
 func (m *mockVendorRepo) FindPublicVendors(_ context.Context, _ map[string]string) ([]models.Vendor, error) {
 	return nil, nil

@@ -1,9 +1,8 @@
 // frontend/src/app/vendors/utils/vendorTransformers.js
 
-
 // Transform backend data to frontend format
- // ackend sends minPrice in kobo, convert to naira for display
- 
+// ackend sends minPrice in kobo, convert to naira for display
+
 export const transformBackendToFrontend = (data) => {
   if (!data) return null;
 
@@ -26,7 +25,11 @@ export const transformBackendToFrontend = (data) => {
     firstName: nullToEmpty(data.firstName),
     middleName: nullToEmpty(data.middleName),
     lastName: nullToEmpty(data.lastName),
-    vnin: nullToEmpty(data.vnin),
+    // The full vNIN never reaches the browser (NIMC: not to be stored). Only its last 4 do.
+    vnin: "",
+    vninLast4: nullToEmpty(data.vninLast4),
+    vninProof: "",
+    cacProof: "",
 
     // Location
     state: nullToEmpty(data.state),
@@ -36,7 +39,7 @@ export const transformBackendToFrontend = (data) => {
 
     // Price conversion: kobo to naira
     minPrice: koboToNaira(data.minPrice),
-   // minPrice: (data.minPrice),
+    // minPrice: (data.minPrice),
 
     cacNumber: nullToEmpty(data.cacNumber),
 
@@ -45,7 +48,7 @@ export const transformBackendToFrontend = (data) => {
     isBusinessVerified: data.isBusinessVerified || false,
 
     // Tamper-proof snapshots
-    verifiedVnin: data.isIdentityVerified ? String(data.vnin || "") : "",
+    verifiedVnin: "",
     verifiedCacNumber: data.isBusinessVerified
       ? String(data.cacNumber || "")
       : "",
@@ -54,10 +57,9 @@ export const transformBackendToFrontend = (data) => {
   };
 };
 
+// Prepare vendor payload for submission
+// Frontend sends minPrice in naira, backend converts to kobo
 
- // Prepare vendor payload for submission
- // Frontend sends minPrice in naira, backend converts to kobo
- 
 export const prepareVendorPayload = (
   formData,
   imageUrl,
@@ -88,48 +90,39 @@ export const prepareVendorPayload = (
     minPrice: parseNaira(formData.minPrice), // Send as naira integer
     status: formData.status || "active",
   };
+  payload.vninProof = formData.vninProof || "";
+  payload.cacProof = formData.cacProof || "";
 
-  // Identity & Business fields
-  if (isEditMode) {
-    // Edit: Use verified snapshots (full unredacted values)
-    payload.vnin = formData.verifiedVnin || formData.vnin || "";
-    payload.verifiedVnin = formData.verifiedVnin || formData.vnin || "";
-    payload.firstName = formData.firstName || "";
-    payload.middleName = formData.middleName || "";
-    payload.lastName = formData.lastName || "";
-    payload.isIdentityVerified = !!formData.isIdentityVerified;
-    payload.cacNumber = formData.verifiedCacNumber || formData.cacNumber || "";
-    payload.isBusinessVerified = !!formData.isBusinessVerified;
-  } else {
-    // Create: Use current values
-    payload.vnin = formData.vnin || "";
-    payload.verifiedVnin = formData.verifiedVnin || formData.vnin || "";
-    payload.firstName = formData.firstName || "";
-    payload.middleName = formData.middleName || "";
-    payload.lastName = formData.lastName || "";
-    payload.isIdentityVerified = !!formData.isIdentityVerified;
-    payload.cacNumber = formData.cacNumber || "";
-    payload.isBusinessVerified = !!formData.isBusinessVerified;
-  }
+  // Verification travels only as signed proofs. The server derives flags, names and the CAC
+  // number from them; the raw vNIN and client-declared flags are never sent.
+  payload.firstName = formData.firstName || "";
+  payload.middleName = formData.middleName || "";
+  payload.lastName = formData.lastName || "";
+  payload.vninProof = formData.vninProof || "";
+  payload.cacProof = formData.cacProof || "";
+  payload.isIdentityVerified = !!formData.isIdentityVerified; // UI hint, ignored server-side
+  payload.isBusinessVerified = !!formData.isBusinessVerified;
+  const cac = isEditMode
+    ? formData.verifiedCacNumber || formData.cacNumber
+    : formData.cacNumber;
+  payload.cacNumber = formData.isBusinessVerified ? cac || "" : ""; // unverified CAC is dropped
 
   return payload;
 };
 
 // Redact sensitive fields for display
- // Only used for frontend display, never sent to backend
- 
+// Only used for frontend display, never sent to backend
+
 export const redactSensitiveField = (value, type = "vnin") => {
   if (!value) return "";
   const str = String(value);
 
   if (type === "vnin") {
-    // VNIN: show ONLY the last 4 characters, never any leading ones.
     const clean = str.replace(/[^A-Z0-9]/gi, "");
-    if (clean.length <= 4) return "••••";
-    return `${"•".repeat(12)}${clean.slice(-4)}`;
+    if (clean.length < 4) return "••••";
+    return `${"•".repeat(12)}${clean.slice(-4)}`; // ONLY the last 4 characters
   }
 
-  // CAC numbers come from a public register, so the lighter mask stays.
-  if (str.length >= 6) return `${str.slice(0, 3)}***${str.slice(-4)}`;
+  if (str.length >= 6) return `${str.slice(0, 3)}***${str.slice(-4)}`; // CAC: public register data
   return "***";
 };

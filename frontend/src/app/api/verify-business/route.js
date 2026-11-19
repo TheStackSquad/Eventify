@@ -1,72 +1,173 @@
 // frontend/src/app/api/verify-business/route.js
 
 import { NextResponse } from "next/server";
+import { requireUser } from "@/utils/server/requireUser";
+import { signProof, verifyProof } from "@/utils/server/verificationProof";
+import { allow } from "@/utils/server/ratelimit";
+import { ProviderError } from "@/utils/server/dojah";
+import { verifyBusiness, isTestKey } from "@/utils/server/fastcac";
 
-/**
- * CAC business verification.
- *
- * Response contract (what CACVerificationField reads):
- *   success: { success: true,  verified: true,  companyName, registrationNumber, status }
- *   failure: { success: false, verified: false, message }
- *
- * lookupCac() is a MOCK that approves any well-formed RC/BN/IT number. It is refused
- * in production unless VERIFICATION_MOCK=true (E2E / load-test environments only).
- * Wire the real registry provider into lookupCac() before launch.
- */
+export const runtime = "nodejs";
 
-const CAC_FORMAT = /^(RC|BN|IT)\d{5,8}$/; // keep in sync with vendorValidate.js
-const MOCK_ALLOWED =
-  process.env.NODE_ENV !== "production" ||
-  process.env.VERIFICATION_MOCK === "true";
+const CAC_FORMAT = /^(RC|BN|IT)(\d{5,8})$/; // keep in sync with vendorValidate.js
+// Roles that prove control of the business. A bare "secretary" does not.
+const CONTROLLING_ROLES = new Set([
+  "proprietor",
+  "partner",
+  "trustee",
+  "director",
+  "shareholder",
+  "psc",
+]);
 
-async function lookupCac(registrationNumber) {
-  if (!MOCK_ALLOWED) {
-    // TODO(provider): call the registry provider with `registrationNumber` and map the
-    // result to { companyName, status } ("ACTIVE" when the entity is in good standing).
-    throw new Error("CAC_PROVIDER_NOT_CONFIGURED");
+const fail = (message, status, code) =>
+  NextResponse.json(
+    { success: false, verified: false, message, code },
+    { status },
+  );
+
+function handleError(error) {
+  if (error instanceof ProviderError) {
+    if (error.code === "PROVIDER_REJECTED") {
+      return fail(
+        "We couldn't verify this CAC number. Check it and try again.",
+        422,
+        error.code,
+      );
+    }
+    console.error("CAC_PROVIDER_ERROR:", error.code, error.message); // status + code only
+  } else {
+    console.error("CAC_VERIFY_ERROR:", error?.message);
   }
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  return { companyName: "OFFICIAL REGISTERED BUSINESS LTD", status: "ACTIVE" };
+  return fail(
+    "Business verification is temporarily unavailable. Please try again shortly.",
+    503,
+    "UNAVAILABLE",
+  );
 }
 
-const fail = (message, status) =>
-  NextResponse.json({ success: false, verified: false, message }, { status });
-
 export async function POST(request) {
+  const user = await requireUser(request);
+  if (!user)
+    return fail(
+      "Please sign in to verify your business.",
+      401,
+      "AUTH_REQUIRED",
+    );
+
+  if (!allow(`cac:${user.id}`, 5, 60 * 60 * 1000)) {
+    return fail(
+      "Too many attempts. Please try again later.",
+      429,
+      "RATE_LIMITED",
+    );
+  }
+
   let body;
   try {
     body = await request.json();
   } catch {
-    return fail("Invalid request format.", 400);
+    return fail("Invalid request format.", 400, "BAD_REQUEST");
   }
 
-  const registrationNumber = String(body?.cacNumber ?? "")
+  const normalized = String(body?.cacNumber ?? "")
     .replace(/[^a-zA-Z0-9]/g, "")
     .toUpperCase();
+  const match = CAC_FORMAT.exec(normalized);
+  if (!match)
+    return fail(
+      "Invalid CAC number. Format: RC123456 or BN123456.",
+      400,
+      "BAD_FORMAT",
+    );
+  const [, prefix, digits] = match;
 
-  if (!CAC_FORMAT.test(registrationNumber)) {
-    return fail("Invalid CAC number. Format: RC123456 or BN123456.", 400);
+  const businessName = String(body?.businessName ?? "").trim();
+  if (businessName.length < 2) {
+    return fail(
+      "Enter your business name first, then verify your CAC number.",
+      400,
+      "NAME_REQUIRED",
+    );
+  }
+
+  // Identity first: the business must belong to the person who passed vNIN verification.
+  const identity = verifyProof(body?.vninProof, { kind: "vnin", uid: user.id });
+  if (!identity) {
+    return fail(
+      "Verify your vNIN first, then verify your CAC number.",
+      403,
+      "IDENTITY_REQUIRED",
+    );
   }
 
   try {
-    const record = await lookupCac(registrationNumber);
+    const testMode = isTestKey();
+    const registration = `${prefix}${digits}`;
+    const bucket = Math.floor(Date.now() / 60000);
+    const idem = (step) => `cac:${user.id}:${registration}:${step}:${bucket}`;
 
-    if (record.status !== "ACTIVE") {
-      return fail("This registration is not active.", 422);
+    // 1) Free: is the number real and active?
+    const pre = await verifyBusiness({
+      number: digits,
+      type: prefix,
+      name: businessName,
+      idempotencyKey: idem("free"),
+    });
+    if (!pre.found)
+      return fail(
+        "No registered business was found for that number.",
+        404,
+        "NOT_FOUND",
+      );
+    if (!pre.active) {
+      return fail(
+        `CAC lists this business as ${pre.status || "not active"}. Bring its filings up to date and try again.`,
+        422,
+        "NOT_ACTIVE",
+      );
     }
+
+    // 2) Charged: is the verified person on the record?
+    // Test keys search one fictional business, so we ask for its officer instead.
+    const officerName = testMode ? "Ada Obi" : `${identity.fn} ${identity.ln}`;
+    const full = await verifyBusiness({
+      number: digits,
+      type: prefix,
+      name: pre.registeredName,
+      officers: [officerName],
+      idempotencyKey: idem("officers"),
+    });
+    const officer = full.officers[0];
+    const controls =
+      !!officer?.matched && officer.roles.some((r) => CONTROLLING_ROLES.has(r));
+    if (!controls) {
+      return fail(
+        "We couldn't confirm you are a director, owner or shareholder of this business. If your name on CAC differs from your NIN, contact support.",
+        403,
+        "OWNER_MISMATCH",
+      );
+    }
+
+    const proof = signProof({
+      kind: "cac",
+      uid: user.id,
+      rc: registration,
+      cn: pre.registeredName,
+      om: true,
+      rl: officer.roles,
+      env: testMode ? "sandbox" : "live",
+    });
 
     return NextResponse.json({
       success: true,
       verified: true,
-      companyName: record.companyName,
-      registrationNumber,
-      status: record.status,
+      companyName: pre.registeredName,
+      registrationNumber: registration,
+      status: pre.status,
+      proof,
     });
   } catch (error) {
-    if (error.message === "CAC_PROVIDER_NOT_CONFIGURED") {
-      return fail("Business verification is temporarily unavailable.", 503);
-    }
-    console.error("CAC_VERIFICATION_ERROR:", error.message);
-    return fail("An internal error occurred during verification.", 500);
+    return handleError(error);
   }
 }

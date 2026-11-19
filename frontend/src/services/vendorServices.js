@@ -139,5 +139,14 @@ export const deleteVendorImage = async (imageUrl) => {
 
 export const isVercelBlobUrl = (url) => {
   if (!url || typeof url !== "string") return false;
-  return url.includes("blob.vercel-storage.com");
+  try {
+    const { protocol, hostname } = new URL(url);
+    return (
+      protocol === "https:" &&
+      (hostname === "blob.vercel-storage.com" ||
+        hostname.endsWith(".blob.vercel-storage.com"))
+    );
+  } catch {
+    return false;
+  }
 };

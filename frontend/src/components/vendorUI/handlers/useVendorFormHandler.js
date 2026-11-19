@@ -35,6 +35,9 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
     vnin: "",
     isIdentityVerified: false,
     verifiedVnin: "",
+    vninProof: "",
+    vninLast4: "",
+    cacProof: "",
   });
 
   // Fetch vendor data in edit mode
@@ -64,6 +67,9 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
       vnin: "",
       isIdentityVerified: false,
       verifiedVnin: "",
+      vninProof: "",
+      vninLast4: "",
+      cacProof: "",
     });
     setImageFile(null);
     setFormErrors({});
@@ -76,11 +82,19 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
 
   // Identity verification handler
   const handleVninVerified = useCallback((data) => {
-    if (!data?.isIdentityVerified || !data.firstName || !data.lastName) {
+    // A failed or incomplete verification must NEVER mark identity as verified or lock the form.
+    if (
+      !data?.isIdentityVerified ||
+      !data.firstName ||
+      !data.lastName ||
+      !data.proof
+    ) {
       setFormData((prev) => ({
         ...prev,
         isIdentityVerified: false,
         verifiedVnin: "",
+        vninProof: "",
+        vninLast4: "",
       }));
       return;
     }
@@ -91,13 +105,13 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
       firstName: data.firstName,
       middleName: data.middleName || "",
       lastName: data.lastName,
-      // NIMC phone is deliberately NOT copied: it is personal, and this form's
-      // phone number is shown publicly as the business line.
       isIdentityVerified: true,
       verifiedVnin: String(data.vnin || prev.vnin || "").replace(
         /[^A-Z0-9]/gi,
         "",
       ),
+      vninProof: data.proof,
+      vninLast4: data.last4 || "",
     }));
     setFormErrors((prev) => {
       const newErrors = { ...prev };
@@ -107,11 +121,12 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
   }, []);
 
   // Business verification handler
-  const handleCacVerified = useCallback((officialName, cacNum) => {
+  const handleCacVerified = useCallback((officialName, cacNum, proof) => {
     setFormData((prev) => ({
       ...prev,
       name: officialName,
       isBusinessVerified: true,
+      cacProof: proof || "",
       verifiedCacNumber: cacNum.replace(/[^A-Z0-9]/gi, ""),
     }));
     setFormErrors((prev) => {
@@ -218,7 +233,7 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
       const verifiedCleanVnin =
         formData.verifiedVnin?.replace(/[^A-Z0-9]/gi, "") || "";
 
-      if (formData.isIdentityVerified) {
+      if (formData.isIdentityVerified && formData.vninProof) {
         if (currentCleanVnin !== verifiedCleanVnin) {
           errors.vnin = "vNIN mismatch. Please re-verify your identity.";
         }

@@ -29,14 +29,14 @@ func (r *PostgresVendorRepository) Create(ctx context.Context, v *models.Vendor)
         INSERT INTO vendors (
             id, owner_id, name, category, description, image_url, status,
             vnin, first_name, middle_name, last_name,
-            is_identity_verified, cac_number, is_business_verified, 
+            is_identity_verified, cac_number, is_business_verified, is_business_registered,
             state, city, phone_number, email,
             min_price, pvs_score, review_count, profile_completion,
             inquiry_count, responded_count, created_at, updated_at
         ) VALUES (
             :id, :owner_id, :name, :category, :description, :image_url, :status,
             :vnin, :first_name, :middle_name, :last_name,
-            :is_identity_verified, :cac_number, :is_business_verified,
+            :is_identity_verified, :cac_number, :is_business_verified, :is_business_registered,
             :state, :city, :phone_number, :email,
             :min_price, :pvs_score, :review_count, :profile_completion,
             :inquiry_count, :responded_count, :created_at, :updated_at
@@ -67,7 +67,8 @@ func (r *PostgresVendorRepository) Update(ctx context.Context, v *models.Vendor)
             status = :status, vnin = :vnin, first_name = :first_name, middle_name = :middle_name,
             last_name = :last_name,
             is_identity_verified = :is_identity_verified, cac_number = :cac_number,
-            is_business_verified = :is_business_verified, state = :state, city = :city,
+			is_business_verified = :is_business_verified, is_business_registered = :is_business_registered,
+            state = :state, city = :city,
             phone_number = :phone_number, email = :email, min_price = :min_price,
             pvs_score = :pvs_score, updated_at = :updated_at
         WHERE id = :id AND owner_id = :owner_id`

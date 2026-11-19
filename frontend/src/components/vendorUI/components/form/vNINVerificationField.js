@@ -16,7 +16,7 @@ import { frontendInstance } from "@/axiosConfig/axios";
 import toastAlert from "@/components/common/toast/toastAlert";
 import { redactSensitiveField } from "@/app/vendor/utils/vendorTransformers";
 
-const MERCHANT_CODE = "715461";
+const MERCHANT_CODE = process.env.NEXT_PUBLIC_VNIN_ENTERPRISE_CODE || "1138183";
 
 const VNINVerificationField = ({
   formData,
@@ -59,19 +59,21 @@ const VNINVerificationField = ({
         const responseData = res.data.data || res.data;
         const verifiedFlag = responseData.verified ?? res.data.verified;
 
-        if (verifiedFlag) {
-          setLastVerifiedVnin(vninValue);
-          onVninVerified({
-            vnin: vninValue,
-            firstName: responseData.firstName,
-            middleName: responseData.middleName || "",
-            lastName: responseData.lastName,
-            isIdentityVerified: true,
-          });
-          toastAlert.success("Identity Verified via NIMC");
-        } else {
-          throw new Error("Invalid vNIN. Please check the code and try again.");
-        }
+       if (verifiedFlag && responseData.proof) {
+         setLastVerifiedVnin(vninValue);
+         onVninVerified({
+           vnin: vninValue,
+           firstName: responseData.firstName,
+           middleName: responseData.middleName || "",
+           lastName: responseData.lastName,
+           last4: responseData.last4,
+           proof: responseData.proof,
+           isIdentityVerified: true,
+         });
+         toastAlert.success("Identity Verified via NIMC");
+       } else {
+         throw new Error("Invalid vNIN. Please check the code and try again.");
+       }
       } catch (err) {
         const msg =
           err.response?.data?.message || err.message || "Verification failed.";
@@ -139,6 +141,14 @@ const VNINVerificationField = ({
               onClick={() => setShowInfoModal(true)}
               className="text-gray-400 hover:text-indigo-600 transition-colors"
             >
+              <button
+                type="button"
+                aria-label="Virtual NIN Help"
+                onClick={() => setShowInfoModal(true)}
+                className="text-gray-400 hover:text-indigo-600 transition-colors"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+              </button>
               <HelpCircle className="w-3.5 h-3.5" />
             </button>
           </label>
@@ -161,7 +171,9 @@ const VNINVerificationField = ({
             value={
               isVerified
                 ? redactSensitiveField(
-                    formData.verifiedVnin || formData.vnin,
+                    formData.vninLast4 ||
+                      formData.verifiedVnin ||
+                      formData.vnin,
                     "vnin",
                   )
                 : formData.vnin || ""

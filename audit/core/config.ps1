@@ -12,6 +12,7 @@ $script:Validators = @{
     domain   = { param($v) $v -match '^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$' }
     email    = { param($v) $v -match '^[^@\s]+@[^@\s]+\.[^@\s]+$' }
     duration = { param($v) $v -match '^\d+(ms|s|m|h)$' }
+    secret32 = { param($v) $v.Length -ge 32 }
 }
 
 function New-Result($Name, $Status, $Detail, $Fix) { [pscustomobject]@{ Name = $Name; Status = $Status; Detail = $Detail; Fix = $Fix } }

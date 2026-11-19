@@ -9,7 +9,7 @@ import Link from "next/link";
 import { Star, MapPin, ShieldCheck, Building2 } from "lucide-react";
 import { generateVendorSlug } from "@/utils/helper/vendorSlugHelper";
 import { formatPriceCompact } from "@/utils/currency";
-import PerformanceScore from "../stats/performanceScore";
+import PerformanceScore from "@/components/vendorUI/components/stats/performanceScore";
 import { VENDOR_CATEGORIES } from "@/data/vendorData";
 
 // value -> human label ("planner" -> "Event Planning & Coordination")
@@ -134,7 +134,7 @@ const VendorCard = ({ vendor, priority = false }) => {
             <div className="flex items-center gap-1.5 text-gray-500">
               <MapPin size={14} className="flex-shrink-0" aria-hidden="true" />
               <span className="truncate text-sm">
-                {location}, {location}
+                {location},
               </span>
             </div>
           </div>
