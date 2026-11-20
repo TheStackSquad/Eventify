@@ -1,6 +1,7 @@
 // frontend/src/app/api/vendor-image/route.js
 import { put, del } from "@vercel/blob";
 import { NextResponse } from "next/server";
+import { requireUser } from "@/utils/server/requireUser";
 
 // Configuration
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -18,14 +19,21 @@ const ALLOWED_TYPES = [
  */
 export async function POST(request) {
   try {
+    const user = await requireUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Authentication required." },
+        { status: 401 },
+      );
+    }
+    // TODO(ownership): any signed-in user can still delete any vendor image URL.
     const formData = await request.formData();
     const file = formData.get("file");
     const vendorId = formData.get("vendorId"); // Optional: for organizing uploads
 
-    // Validation: File exists
-    if (!file || typeof file === "string") {
+    if (vendorId && !/^[0-9a-f-]{36}$/i.test(String(vendorId))) {
       return NextResponse.json(
-        { error: "No image file provided." },
+        { error: "Invalid vendor id." },
         { status: 400 },
       );
     }
@@ -49,15 +57,17 @@ export async function POST(request) {
 
     // Sanitize filename
     const originalFilename = file.name;
-    const sanitizedFilename = originalFilename
-      .replace(/[^a-zA-Z0-9.-]/g, "_")
-      .toLowerCase();
+    const sanitizedFilename =
+      originalFilename
+        .toLowerCase()
+        .replace(/[^a-z0-9.-]/g, "_")
+        .replace(/\.{2,}/g, ".") // collapse ".." sequences
+        .replace(/^[.-]+/, "") // no leading dots or dashes
+        .slice(-100) || "upload";
 
     // Organize by vendorId if provided
-    const pathname = vendorId
-      ? `vendor-images/${vendorId}/${sanitizedFilename}`
-      : `vendor-images/${sanitizedFilename}`;
-
+    // Uploads live under the uploader's own id, so a URL proves its owner (see DELETE).
+    const pathname = `vendor-images/${user.id}/${sanitizedFilename}`;
     console.log("📤 Uploading vendor image to Vercel Blob:", {
       pathname,
       size: `${(file.size / 1024).toFixed(2)} KB`,
@@ -118,6 +128,14 @@ export async function POST(request) {
  */
 export async function DELETE(request) {
   try {
+    const user = await requireUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Authentication required." },
+        { status: 401 },
+      );
+    }
+    // TODO(ownership): any signed-in user can still delete any vendor image URL.
     const body = await request.json();
     const { url } = body;
 
@@ -129,20 +147,36 @@ export async function DELETE(request) {
       );
     }
 
-    // Validation: URL is from Vercel Blob
-    if (!url.includes("blob.vercel-storage.com")) {
+    // Must be an https Vercel Blob URL under /vendor-images/.
+    // (.includes() is bypassable: https://evil.com/blob.vercel-storage.com/x.jpg)
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid Vercel Blob URL" },
+        { status: 400 },
+      );
+    }
+    const host = parsed.hostname;
+    const isBlobHost =
+      host === "blob.vercel-storage.com" ||
+      host.endsWith(".blob.vercel-storage.com");
+    if (
+      parsed.protocol !== "https:" ||
+      !isBlobHost ||
+      !parsed.pathname.startsWith(`/vendor-images/${user.id}/`)
+    ) {
       return NextResponse.json(
         { error: "Invalid Vercel Blob URL" },
         { status: 400 },
       );
     }
 
-    console.log("🗑️ Deleting vendor image from Vercel Blob:", url);
-
     // Delete from Vercel Blob
     await del(url);
 
-    console.log("✅ Vendor image deletion successful");
+    // console.log("✅ Vendor image deletion successful");
 
     return NextResponse.json(
       { message: "Vendor image deleted successfully", url },

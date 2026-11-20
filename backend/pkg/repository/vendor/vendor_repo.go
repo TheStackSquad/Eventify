@@ -21,7 +21,7 @@ type VendorRepository interface {
 
 	// Read Operations
 	GetByOwnerID(ctx context.Context, ownerID uuid.UUID) (*models.Vendor, error)
-	GetByID(ctx context.Context, id uuid.UUID) (models.Vendor, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*models.Vendor, error)
 	FindPublicVendors(ctx context.Context, filters map[string]string) ([]models.Vendor, error)
 	GetVendorSubscription(ctx context.Context, id uuid.UUID) (*models.VendorWithSubscription, error)
 	IsRegisteredVendor(ctx context.Context, ownerID uuid.UUID) (bool, error)

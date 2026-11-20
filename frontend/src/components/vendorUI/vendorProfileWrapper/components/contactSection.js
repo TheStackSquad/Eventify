@@ -1,26 +1,34 @@
 // frontend/src/components/vendorUI/vendorProfileWrapper/components/contactSection.js
 
 import React from "react";
-import { Phone, Mail } from "lucide-react";
+import { Phone, Loader2 } from "lucide-react";
+
+const REVEAL_MESSAGES = {
+  RATE_LIMITED: "You've viewed a lot of numbers. Please try again later.",
+  UNAVAILABLE: "We couldn't load the number. Please try again.",
+};
 
 const ContactSection = ({
   vendor,
-  showPhoneNumber,
-  isMobile,
-  handleCallNow,
+  phoneNumber = null, // present only after a successful, signed-in reveal
+  isMobile = false,
+  isRevealing = false,
+  revealError = null,
+  loginHref = "/account/auth/login",
+  onReveal,
 }) => {
-  // Destructure for cleaner code and to prevent long chains
-  //const data = vendor;
-
   if (!vendor) return null;
+
+  // hasPhone comes from the public API; phoneNumber fallback covers older payloads.
+  const hasPhone = Boolean(vendor.hasPhone ?? vendor.phoneNumber);
 
   return (
     <>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2
-            className="text-xl sm:text-2xl font-bold text-green-900 mb-2"
             id="contact-heading"
+            className="mb-2 text-xl font-bold text-green-900 sm:text-2xl"
           >
             Get in Touch
           </h2>
@@ -28,49 +36,74 @@ const ContactSection = ({
             Ready to book? Contact {vendor.name} directly.
           </p>
         </div>
-        <div className="mt-4 sm:mt-0">
+
+        {hasPhone && (
           <button
-            onClick={handleCallNow}
-            className="inline-flex items-center px-5 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors duration-300 shadow-md hover:shadow-lg"
+            type="button"
+            onClick={onReveal}
+            disabled={isRevealing}
+            aria-busy={isRevealing}
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-green-600 px-5 py-3 font-semibold text-white shadow-md transition-colors duration-300 hover:bg-green-700 hover:shadow-lg active:bg-green-800 disabled:cursor-wait disabled:opacity-70 sm:w-auto"
           >
-            <Phone size={18} className="mr-2" aria-hidden="true" />
-            {isMobile ? "Call Now" : "Show Number"}
+            {isRevealing ? (
+              <Loader2
+                size={18}
+                className="mr-2 animate-spin"
+                aria-hidden="true"
+              />
+            ) : (
+              <Phone size={18} className="mr-2" aria-hidden="true" />
+            )}
+            {isRevealing
+              ? "Loading…"
+              : isMobile
+                ? "Call Now"
+                : phoneNumber
+                  ? "Number shown"
+                  : "Show Number"}
           </button>
-        </div>
+        )}
       </div>
 
       <div className="space-y-4" aria-labelledby="contact-heading">
-        {vendor.email && (
-          <a
-            href={`mailto:${vendor.email}`} // FIXED TYPO HERE
-            className="flex items-center p-3 sm:p-4 bg-white rounded-xl border-2 border-green-100 hover:border-green-300 hover:shadow-md transition-all duration-300 group"
-            aria-label={`Send email to ${vendor.email}`}
-          >
-            <div className="flex items-center justify-center w-10 h-10 bg-green-100 rounded-lg mr-4 group-hover:bg-green-200 transition-colors">
-              <Mail size={20} className="text-green-600" aria-hidden="true" />
-            </div>
-            <div>
-              <div className="text-sm text-gray-500 font-medium">Email</div>
-              <div className="text-green-800 font-semibold break-all">
-                {vendor.email}
-              </div>
-            </div>
-          </a>
-        )}
-
-        {/* FIXED PATH HERE: vendor.phoneNumber -> data.phoneNumber */}
-        {vendor.phoneNumber && (
-          <div className="flex items-center p-3 sm:p-4 bg-white rounded-xl border-2 border-green-100 transition-all duration-300">
-            <div className="flex items-center justify-center w-10 h-10 bg-green-100 rounded-lg mr-4">
+        {hasPhone && (
+          <div className="flex items-center rounded-xl border-2 border-green-100 bg-white p-3 transition-all duration-300 sm:p-4">
+            <div className="mr-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-100">
               <Phone size={20} className="text-green-600" aria-hidden="true" />
             </div>
-            <div>
-              <div className="text-sm text-gray-500 font-medium">Phone</div>
-              <div className="text-green-800 font-semibold">
-                {showPhoneNumber ? vendor.phoneNumber : "••• •••• ••••"}
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-gray-500">Phone</div>
+              <div className="font-semibold text-green-800" aria-live="polite">
+                {phoneNumber ? (
+                  <a
+                    href={`tel:${phoneNumber}`}
+                    className="underline-offset-2 hover:underline"
+                  >
+                    {phoneNumber}
+                  </a>
+                ) : (
+                  "••• •••• ••••"
+                )}
               </div>
             </div>
           </div>
+        )}
+
+        {revealError === "AUTH_REQUIRED" && (
+          <p role="alert" className="text-sm text-green-900">
+            Sign in to view contact details.{" "}
+            <a
+              href={loginHref}
+              className="font-semibold underline underline-offset-2"
+            >
+              Sign in
+            </a>
+          </p>
+        )}
+        {revealError && revealError !== "AUTH_REQUIRED" && (
+          <p role="alert" className="text-sm text-red-700">
+            {REVEAL_MESSAGES[revealError] ?? REVEAL_MESSAGES.UNAVAILABLE}
+          </p>
         )}
       </div>
     </>

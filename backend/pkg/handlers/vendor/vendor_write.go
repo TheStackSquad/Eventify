@@ -3,7 +3,7 @@
 package vendor
 
 import (
-	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -13,61 +13,60 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// VendorBinding captures the incoming JSON from Next.js
+// VendorBinding captures the incoming JSON from Next.js (see vendorApi.toBackendVendorPayload).
+// Limits mirror the vendors table. There are deliberately NO verification flags, vNIN, CAC
+// number, email or status here: those come from signed proofs or the server, never the client.
 type VendorBinding struct {
-	Name                string `json:"name" binding:"required"`
-	Category            string `json:"category" binding:"required"`
-	Description         string `json:"description"`
-	ImageURL            string `json:"image_url"`
-	City                string `json:"city"`
-	State               string `json:"state"`
-	PhoneNumber         string `json:"phone_number"`
-	Email               string `json:"email"`
-	VNIN                string `json:"vnin" binding:"required"`
-	VerifiedVNIN        string `json:"verified_vnin"`
-	FirstName           string `json:"first_name"`
-	LastName            string `json:"last_name"`
-	MiddleName          string `json:"middle_name"`
-	CACNumber           string `json:"cac_number"`
-	MinPrice            int32  `json:"min_price"` // In Naira
-	Status              string `json:"status"`
-	IsIdentityVerified  bool   `json:"is_identity_verified"`
-	IsBusinessVerified  bool   `json:"is_business_verified"`
+	Name        string `json:"name" binding:"required,max=255"`
+	Category    string `json:"category" binding:"required,max=100"`
+	Description string `json:"description" binding:"max=500"`
+	ImageURL    string `json:"image_url" binding:"max=255"`
+	City        string `json:"city" binding:"max=100"`
+	State       string `json:"state" binding:"required,max=100"`
+	PhoneNumber string `json:"phone_number" binding:"max=20"`
+	FirstName   string `json:"first_name" binding:"max=100"`
+	MiddleName  string `json:"middle_name" binding:"max=100"`
+	LastName    string `json:"last_name" binding:"max=100"`
+	MinPrice    int64  `json:"min_price" binding:"gte=0,lte=21474836"` // Naira
+	VNINProof   string `json:"vnin_proof" binding:"max=2048"`
+	CACProof    string `json:"cac_proof" binding:"max=2048"`
 }
 
-// convertNairaToKobo converts Naira to Kobo (multiply by 100)
-func convertNairaToKobo(naira int32) int32 {
-	return naira * 100
+// convertNairaToKobo: the binding bounds naira to <= 21,474,836, so kobo fits in int32.
+func convertNairaToKobo(naira int64) int32 {
+	return int32(naira * 100)
+}
+
+func respondVerificationError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, ErrProofSecretMissing):
+		log.Error().Msg("VERIFICATION_PROOF_SECRET is missing or shorter than 32 characters")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Verification is temporarily unavailable"})
+	case errors.Is(err, ErrIdentityRequired):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Please verify your vNIN to continue"})
+	case errors.Is(err, ErrBusinessNeedsIdentity):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Verify your vNIN before verifying your business"})
+	default:
+		c.JSON(http.StatusForbidden, gin.H{"error": "Verification expired or invalid. Please verify again."})
+	}
 }
 
 // RegisterVendor handles new vendor registration
 func (h *VendorHandler) RegisterVendor(c *gin.Context) {
-	var input VendorBinding
-	if err := c.ShouldBindJSON(&input); err != nil {
-    log.Warn().Err(err).Msg("Invalid vendor registration payload")
-    c.JSON(http.StatusBadRequest, gin.H{
-        "error":  "Invalid input data",
-        "detail": err.Error(),
-    })
-    return
-}
-
-	// Security: Tamper-proof check for vNIN
-	if input.VNIN != input.VerifiedVNIN {
-		log.Warn().Msg("vNIN verification mismatch attempt")
-		c.JSON(http.StatusForbidden, gin.H{"error": "Identity verification mismatch"})
-		return
-	}
-
-	// Auth: Get User ID from Middleware
 	userIDVal, exists := c.Get("user_id")
-	if !exists {
+	ownerID, ok := userIDVal.(uuid.UUID)
+	if !exists || !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
-	ownerID := userIDVal.(uuid.UUID)
 
-	// Check if user already has a vendor profile
+	var input VendorBinding
+	if err := c.ShouldBindJSON(&input); err != nil {
+		log.Warn().Err(err).Msg("Invalid vendor registration payload")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input data", "detail": err.Error()})
+		return
+	}
+
 	existingVendor, _ := h.VendorService.GetVendorByOwnerID(c.Request.Context(), ownerID)
 	if existingVendor != nil {
 		log.Warn().Str("owner_id", ownerID.String()).Msg("Duplicate vendor registration attempt")
@@ -75,45 +74,37 @@ func (h *VendorHandler) RegisterVendor(c *gin.Context) {
 		return
 	}
 
-	// Price Conversion: Convert Naira to Kobo
-	minPriceKobo := convertNairaToKobo(input.MinPrice)
-
-	// Mapping: Binding -> Model
 	vendor := models.Vendor{
-		OwnerID:            ownerID,
-		Name:               input.Name,
-		Category:           input.Category,
-		Status:             models.VendorStatusActive,
-		IsIdentityVerified: input.IsIdentityVerified,
-		State:              input.State,
-		Description:        input.Description,
-		ImageURL:           input.ImageURL,
-		City:               input.City,
-		PhoneNumber:        input.PhoneNumber,
-		Email:              input.Email,
-		VNIN:               input.VNIN,
-		FirstName:          input.FirstName,
-		LastName:           input.LastName,
-		MiddleName:         models.ToNullString(input.MiddleName),
-		CACNumber:          models.ToNullString(input.CACNumber),
-		MinPrice:           models.ToNullInt32(minPriceKobo),
-		IsBusinessVerified: sql.NullBool{Bool: input.IsBusinessVerified, Valid: true},
+		OwnerID:     ownerID,
+		Name:        input.Name,
+		Category:    input.Category,
+		Status:      models.VendorStatusActive,
+		State:       input.State,
+		Description: input.Description,
+		ImageURL:    input.ImageURL,
+		City:        input.City,
+		PhoneNumber: input.PhoneNumber,
+		MinPrice:    models.ToNullInt32(convertNairaToKobo(input.MinPrice)),
 	}
 
-	// Execution
+	if err := applyVerification(&vendor, nil, &input, ownerID); err != nil {
+		log.Warn().Err(err).Str("owner_id", ownerID.String()).Msg("Vendor verification rejected")
+		respondVerificationError(c, err)
+		return
+	}
+
 	vendorID, err := h.VendorService.CreateVendor(c.Request.Context(), &vendor)
 	if err != nil {
 		log.Error().Err(err).Str("owner_id", ownerID.String()).Msg("Vendor creation failed")
-		if strings.Contains(err.Error(), "unique constraint") {
-			c.JSON(http.StatusConflict, gin.H{"error": "vNIN or Business Name already registered"})
+		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "already exists") {
+			c.JSON(http.StatusConflict, gin.H{"error": "A vendor with this information already exists"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Registration failed"})
 		return
 	}
-	
 
-	log.Info().Str("vendor_id", vendorID).Str("vendor_name", input.Name).Msg("Vendor registered successfully")
+	log.Info().Str("vendor_id", vendorID).Msg("Vendor registered successfully")
 	c.JSON(http.StatusCreated, gin.H{
 		"vendor_id": vendorID,
 		"message":   "Vendor profile created successfully!",
@@ -123,8 +114,13 @@ func (h *VendorHandler) RegisterVendor(c *gin.Context) {
 // UpdateVendor handles vendor profile updates
 func (h *VendorHandler) UpdateVendor(c *gin.Context) {
 	vendorIDStr := c.Param("id")
-	userIDVal, _ := c.Get("user_id")
-	requestorID := userIDVal.(uuid.UUID)
+
+	userIDVal, exists := c.Get("user_id")
+	requestorID, ok := userIDVal.(uuid.UUID)
+	if !exists || !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
 
 	var input VendorBinding
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -133,48 +129,36 @@ func (h *VendorHandler) UpdateVendor(c *gin.Context) {
 		return
 	}
 
-	// Validate and default status
-	status := models.VendorStatus(input.Status)
-	if status == "" {
-		status = models.VendorStatusActive
+	existing, err := h.VendorService.GetVendorByID(c.Request.Context(), vendorIDStr)
+	if err != nil || existing == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Vendor not found"})
+		return
 	}
-
-	validStatuses := map[models.VendorStatus]bool{
-		models.VendorStatusActive:    true,
-		models.VendorStatusSuspended: true,
-		models.VendorStatusDeleted:   true,
-	}
-	if !validStatuses[status] {
-		log.Warn().Str("status", string(status)).Msg("Invalid vendor status")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid vendor status"})
+	if existing.OwnerID != requestorID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You do not own this profile"})
 		return
 	}
 
-	// Price Conversion: Convert Naira to Kobo
-	minPriceKobo := convertNairaToKobo(input.MinPrice)
-
-	updatedVendor := models.Vendor{
-		Name:               input.Name,
-		Category:           input.Category,
-		State:              input.State,
-		Description:        input.Description,
-		ImageURL:           input.ImageURL,
-		City:               input.City,
-		PhoneNumber:        input.PhoneNumber,
-		Email:              input.Email,
-		VNIN:               input.VNIN,
-		FirstName:          input.FirstName,
-		LastName:           input.LastName,
-		Status:             status,
-		IsIdentityVerified: input.IsIdentityVerified,
-		MiddleName:         models.ToNullString(input.MiddleName),
-		CACNumber:          models.ToNullString(input.CACNumber),
-		MinPrice:           models.ToNullInt32(minPriceKobo),
-		IsBusinessVerified: sql.NullBool{Bool: input.IsBusinessVerified, Valid: true},
+	updated := models.Vendor{
+		Name:        input.Name,
+		Category:    input.Category,
+		State:       input.State,
+		Description: input.Description,
+		ImageURL:    input.ImageURL,
+		City:        input.City,
+		PhoneNumber: input.PhoneNumber,
+		MinPrice:    models.ToNullInt32(convertNairaToKobo(input.MinPrice)),
+		Status:      existing.Status, // moderation status is never owner-controlled
+		Email:       existing.Email,  // not collected by the form: preserve whatever exists
 	}
 
-	err := h.VendorService.UpdateVendor(c.Request.Context(), vendorIDStr, requestorID, &updatedVendor)
-	if err != nil {
+	if err := applyVerification(&updated, existing, &input, requestorID); err != nil {
+		log.Warn().Err(err).Str("vendor_id", vendorIDStr).Msg("Vendor verification rejected")
+		respondVerificationError(c, err)
+		return
+	}
+
+	if err = h.VendorService.UpdateVendor(c.Request.Context(), vendorIDStr, requestorID, &updated); err != nil {
 		if err.Error() == "unauthorized" {
 			c.JSON(http.StatusForbidden, gin.H{"error": "You do not own this profile"})
 			return
@@ -184,23 +168,21 @@ func (h *VendorHandler) UpdateVendor(c *gin.Context) {
 		return
 	}
 
-	// Return updated vendor data
 	refreshed, err := h.VendorService.GetVendorByID(c.Request.Context(), vendorIDStr)
 	if err != nil {
-		log.Warn().Err(err).Str("vendor_id", vendorIDStr).Msg("Failed to fetch updated vendor")
 		c.JSON(http.StatusOK, gin.H{"message": "Profile updated successfully"})
 		return
 	}
 
 	log.Info().Str("vendor_id", vendorIDStr).Msg("Vendor updated successfully")
-	// Replace the c.JSON in the refreshed block
-c.JSON(http.StatusOK, gin.H{
-    "message": "Vendor profile updated successfully!",
-    "vendor":  refreshed.ToOwnerResponse(),
-})
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Vendor profile updated successfully!",
+		"vendor":  refreshed.ToOwnerResponse(),
+	})
 }
 
-// ToggleIdentityVerification updates vendor identity verification status
+// ToggleIdentityVerification updates vendor identity verification status.
+// NOTE: this flips a flag without any proof. Its route must be admin-only.
 func (h *VendorHandler) ToggleIdentityVerification(c *gin.Context) {
 	vendorID := c.Param("id")
 	var req struct {

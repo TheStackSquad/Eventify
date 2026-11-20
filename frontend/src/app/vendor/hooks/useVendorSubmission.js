@@ -95,7 +95,8 @@ export default function useVendorSubmission(vendorId, userId, onSuccess) {
 
         let errorMessage = error.message || "Failed to save vendor profile";
         if (error.response?.data?.message) {
-          errorMessage = error.response.data.message;
+          errorMessage =
+            error.response?.data?.message || error.response?.data?.error;
         } else if (error.request) {
           errorMessage = "No response from server. Check your connection.";
         }

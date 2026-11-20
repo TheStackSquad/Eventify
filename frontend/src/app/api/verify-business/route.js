@@ -1,99 +1,173 @@
 // frontend/src/app/api/verify-business/route.js
 
 import { NextResponse } from "next/server";
+import { requireUser } from "@/utils/server/requireUser";
+import { signProof, verifyProof } from "@/utils/server/verificationProof";
+import { allow } from "@/utils/server/ratelimit";
+import { ProviderError } from "@/utils/server/dojah";
+import { verifyBusiness, isTestKey } from "@/utils/server/fastcac";
 
-/**
- * PRODUCTION VERSION: CAC Business Verification
- * Integration: [Integration Name, e.g., Mono or SmileID]
- * Note: Commented out until API credentials are provided.
- */
+export const runtime = "nodejs";
 
-/*
+const CAC_FORMAT = /^(RC|BN|IT)(\d{5,8})$/; // keep in sync with vendorValidate.js
+// Roles that prove control of the business. A bare "secretary" does not.
+const CONTROLLING_ROLES = new Set([
+  "proprietor",
+  "partner",
+  "trustee",
+  "director",
+  "shareholder",
+  "psc",
+]);
+
+const fail = (message, status, code) =>
+  NextResponse.json(
+    { success: false, verified: false, message, code },
+    { status },
+  );
+
+function handleError(error) {
+  if (error instanceof ProviderError) {
+    if (error.code === "PROVIDER_REJECTED") {
+      return fail(
+        "We couldn't verify this CAC number. Check it and try again.",
+        422,
+        error.code,
+      );
+    }
+    console.error("CAC_PROVIDER_ERROR:", error.code, error.message); // status + code only
+  } else {
+    console.error("CAC_VERIFY_ERROR:", error?.message);
+  }
+  return fail(
+    "Business verification is temporarily unavailable. Please try again shortly.",
+    503,
+    "UNAVAILABLE",
+  );
+}
+
 export async function POST(request) {
-  try {
-    const { cacNumber, companyType } = await request.json();
+  const user = await requireUser(request);
+  if (!user)
+    return fail(
+      "Please sign in to verify your business.",
+      401,
+      "AUTH_REQUIRED",
+    );
 
-    if (!cacNumber) {
-      return NextResponse.json(
-        { success: false, message: "Registration number is required" },
-        { status: 400 }
-      );
-    }
-
-    // 1. External API Call (Example using a 3rd party KYC provider)
-    const response = await fetch("https://api.withmono.com/lookup/cac", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "mono-sec-key": process.env.MONO_SECRET_KEY, // Stored in .env
-      },
-      body: JSON.stringify({ 
-        reg_no: cacNumber,
-        type: companyType // BN, RC, or IT
-      }),
-    });
-
-    const result = await response.json();
-
-    // 2. Handle Provider-specific Errors
-    if (!response.ok) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          message: result.message || "Government registry is currently unreachable." 
-        },
-        { status: response.status }
-      );
-    }
-
-    // 3. Data Normalization
-    // We map the external provider's keys to our internal app's naming convention
-    return NextResponse.json({
-      success: true,
-      data: {
-        entityName: result.data.name,
-        registrationNumber: result.data.registrationNumber,
-        status: result.data.status, // e.g., ACTIVE, DISSOLVED
-        address: result.data.address,
-        registrationDate: result.data.registrationDate,
-      },
-    });
-
-  } catch (error) {
-    console.error("CAC_VERIFICATION_ERROR:", error);
-    return NextResponse.json(
-      { success: false, message: "An internal error occurred during verification." },
-      { status: 500 }
+  if (!allow(`cac:${user.id}`, 5, 60 * 60 * 1000)) {
+    return fail(
+      "Too many attempts. Please try again later.",
+      429,
+      "RATE_LIMITED",
     );
   }
-}
-*/
 
-// --- MOCK VERSION (Active for Development) ---
-export async function POST(request) {
-  const { cacNumber } = await request.json();
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-
-  if (
-    cacNumber?.toUpperCase().startsWith("BN") ||
-    cacNumber?.toUpperCase().startsWith("RC")
-  ) {
-    return NextResponse.json({
-      success: true,
-      data: {
-        entityName: "OFFICIAL REGISTERED BUSINESS LTD",
-        registrationNumber: cacNumber.toUpperCase(),
-        status: "ACTIVE",
-        address: "123 Government Way, Abuja",
-      },
-    });
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return fail("Invalid request format.", 400, "BAD_REQUEST");
   }
 
-  return NextResponse.json(
-    {
-      success: false,
-      message: "Invalid CAC Number. Check format (e.g., RC12345).",
-    },
-    { status: 400 },
-  );
+  const normalized = String(body?.cacNumber ?? "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+  const match = CAC_FORMAT.exec(normalized);
+  if (!match)
+    return fail(
+      "Invalid CAC number. Format: RC123456 or BN123456.",
+      400,
+      "BAD_FORMAT",
+    );
+  const [, prefix, digits] = match;
+
+  const businessName = String(body?.businessName ?? "").trim();
+  if (businessName.length < 2) {
+    return fail(
+      "Enter your business name first, then verify your CAC number.",
+      400,
+      "NAME_REQUIRED",
+    );
+  }
+
+  // Identity first: the business must belong to the person who passed vNIN verification.
+  const identity = verifyProof(body?.vninProof, { kind: "vnin", uid: user.id });
+  if (!identity) {
+    return fail(
+      "Verify your vNIN first, then verify your CAC number.",
+      403,
+      "IDENTITY_REQUIRED",
+    );
+  }
+
+  try {
+    const testMode = isTestKey();
+    const registration = `${prefix}${digits}`;
+    const bucket = Math.floor(Date.now() / 60000);
+    const idem = (step) => `cac:${user.id}:${registration}:${step}:${bucket}`;
+
+    // 1) Free: is the number real and active?
+    const pre = await verifyBusiness({
+      number: digits,
+      type: prefix,
+      name: businessName,
+      idempotencyKey: idem("free"),
+    });
+    if (!pre.found)
+      return fail(
+        "No registered business was found for that number.",
+        404,
+        "NOT_FOUND",
+      );
+    if (!pre.active) {
+      return fail(
+        `CAC lists this business as ${pre.status || "not active"}. Bring its filings up to date and try again.`,
+        422,
+        "NOT_ACTIVE",
+      );
+    }
+
+    // 2) Charged: is the verified person on the record?
+    // Test keys search one fictional business, so we ask for its officer instead.
+    const officerName = testMode ? "Ada Obi" : `${identity.fn} ${identity.ln}`;
+    const full = await verifyBusiness({
+      number: digits,
+      type: prefix,
+      name: pre.registeredName,
+      officers: [officerName],
+      idempotencyKey: idem("officers"),
+    });
+    const officer = full.officers[0];
+    const controls =
+      !!officer?.matched && officer.roles.some((r) => CONTROLLING_ROLES.has(r));
+    if (!controls) {
+      return fail(
+        "We couldn't confirm you are a director, owner or shareholder of this business. If your name on CAC differs from your NIN, contact support.",
+        403,
+        "OWNER_MISMATCH",
+      );
+    }
+
+    const proof = signProof({
+      kind: "cac",
+      uid: user.id,
+      rc: registration,
+      cn: pre.registeredName,
+      om: true,
+      rl: officer.roles,
+      env: testMode ? "sandbox" : "live",
+    });
+
+    return NextResponse.json({
+      success: true,
+      verified: true,
+      companyName: pre.registeredName,
+      registrationNumber: registration,
+      status: pre.status,
+      proof,
+    });
+  } catch (error) {
+    return handleError(error);
+  }
 }

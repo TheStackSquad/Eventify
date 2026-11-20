@@ -1,8 +1,7 @@
 // frontend/src/components/vendorUI/vendorProfileWrapper/components/actionButtons.js
 import React, { useState } from "react";
-import { MessageSquare, Mail } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import ContactVendorModal from "@/components/modal/contactVendorModal";
-import Link from "next/link";
 
 const ActionButtons = ({ vendor }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -23,17 +22,20 @@ const ActionButtons = ({ vendor }) => {
     state: vendor?.state,
     city: vendor?.city,
     image: vendor?.imageURL,
-    rating: vendor?.pvsScore ? (vendor.pvsScore / 20).toFixed(1) : "0.0",
+    rating:
+      Number(vendor?.avgRating) > 0
+        ? Number(vendor.avgRating).toFixed(1)
+        : "0.0",
     location: `${vendor?.city || "Unknown"}, ${vendor?.state || "Location"}`,
   };
 
   return (
     <>
-      <div className="mt-8 pt-6 border-t-2 border-green-200 grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="mt-8 pt-6 border-t-2 border-green-200">
         {/* Request Quote Button - triggers modal */}
         <button
           onClick={handleRequestQuote}
-          className="w-full py-3.5 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors duration-300 shadow-md hover:shadow-lg flex items-center justify-center"
+          className="w-full min-h-11 py-3.5 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors duration-300 shadow-md hover:shadow-lg flex items-center justify-center"
           aria-label="Request a quote from this vendor"
           aria-haspopup="dialog"
           aria-expanded={isModalOpen}
@@ -41,15 +43,6 @@ const ActionButtons = ({ vendor }) => {
           <MessageSquare size={18} className="mr-2" aria-hidden="true" />
           <span>Request Quote</span>
         </button>
-
-        <Link
-          href={`mailto:${vendor?.email}?subject=Inquiry about ${vendor?.name}`}
-          className="w-full py-3.5 bg-white text-green-700 font-semibold rounded-lg border-2 border-green-300 hover:bg-green-50 hover:border-green-400 transition-colors duration-300 flex items-center justify-center"
-          aria-label="Send inquiry email"
-        >
-          <Mail size={18} className="mr-2" aria-hidden="true" />
-          <span>Send Inquiry</span>
-        </Link>
       </div>
 
       {/* Modal - only renders when isModalOpen is true */}
@@ -62,6 +55,6 @@ const ActionButtons = ({ vendor }) => {
       />
     </>
   );
-};
+};;
 
 export default ActionButtons;

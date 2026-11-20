@@ -306,7 +306,7 @@ func (s *VendorRepoSuite) TestUpdate_Success() {
 	s.NoError(err)
 	existing.Name = "New Name"
 
-	err = s.repo.Update(s.ctx, &existing)
+	err = s.repo.Update(s.ctx, existing)
 	s.NoError(err)
 
 	updated, _ := s.repo.GetByID(s.ctx, vendorID)
@@ -326,7 +326,7 @@ func (s *VendorRepoSuite) TestUpdate_FailsForWrongOwner() {
 	existing.OwnerID = wrongOwner // tamper with ownership
 	existing.Name = "Hacked Name"
 
-	err := s.repo.Update(s.ctx, &existing)
+	err := s.repo.Update(s.ctx, existing)
 	s.Error(err, "update with wrong owner should be rejected")
 	s.Contains(err.Error(), "not found or unauthorized")
 }

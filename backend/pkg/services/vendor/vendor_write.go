@@ -4,7 +4,6 @@ package vendor
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"reflect"
@@ -45,15 +44,9 @@ func (s *VendorServiceImpl) CreateVendor(ctx context.Context, vendor *models.Ven
 		vendor.Status = models.VendorStatusActive
 	}
 
-	// Auto-verify identity since vNIN is guaranteed present
-	vendor.IsIdentityVerified = true
-
-	// Auto-verify business if CAC number is provided
-	if vendor.CACNumber.Valid && vendor.CACNumber.String != "" {
-		vendor.IsBusinessVerified = sql.NullBool{
-			Bool:  true,
-			Valid: true,
-		}
+	// Verification flags are decided ONLY by the handler, from signed proofs. Never infer them here.
+	if !vendor.IsIdentityVerified {
+		return "", errors.New("identity verification is required for vendor registration")
 	}
 
 	// Step 4: Calculate initial PVS score
@@ -183,6 +176,6 @@ func (s *VendorServiceImpl) CalculateAndUpdatePVS(ctx context.Context, vendorID 
 		return err
 	}
 
-	newScore := models.CalculatePVS(&vendor)
+	newScore := models.CalculatePVS(vendor)
 	return s.vendorRepo.UpdatePVSScore(ctx, parsedID, int(newScore))
 }

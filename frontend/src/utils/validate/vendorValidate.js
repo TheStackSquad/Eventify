@@ -1,5 +1,7 @@
 // frontend/src/utils/validate/vendorValidate.js
 
+import { PRICE_RANGES } from "@/data/vendorData";
+
 export const vendorRegistrationValidate = (formData, isEditMode = false) => {
   const errors = {};
 
@@ -75,7 +77,9 @@ export const vendorRegistrationValidate = (formData, isEditMode = false) => {
   if (!formData.minPrice || isNaN(price)) {
     errors.minPrice = "Starting price must be a valid number";
   } else if (price < 1000) {
-    errors.minPrice = "Minimum price is ₦1,000";
+    errors.minPrice = "Starting price must be at least ₦1,000";
+  } else if (price > PRICE_RANGES.MAX) {
+    errors.minPrice = "Maximum price is ₦21,474,836";
   }
 
   // ========== IMAGE ==========
@@ -88,8 +92,25 @@ export const vendorRegistrationValidate = (formData, isEditMode = false) => {
     errors.description = "Description must not exceed 500 characters";
   }
 
+  // ========== DB COLUMN LIMITS (vendors table) ==========
+  const LIMITS = {
+    name: 255,
+    city: 100,
+    firstName: 100,
+    middleName: 100,
+    lastName: 100,
+  };
+  for (const [field, max] of Object.entries(LIMITS)) {
+    if (
+      !errors[field] &&
+      Array.from(String(formData[field] ?? "").trim()).length > max
+    ) {
+      errors[field] = `Must be ${max} characters or fewer`;
+    }
+  }
+
   return errors;
-};
+};;;
 
 // Validate individual field
 
@@ -132,6 +153,9 @@ export const validateVendorField = (fieldName, value, isEditMode = false) => {
       const price = parseInt(cleaned, 10);
       if (isNaN(price)) return "Must be a number";
       if (price < 1000) return "Minimum is ₦1,000";
+      if (price > PRICE_RANGES.MAX) {
+        errors.minPrice = "Maximum price is ₦21,474,836";
+      }
       return null;
 
     case "description":

@@ -345,7 +345,7 @@ func (m *mockVendorRepository) IncrementField(_ context.Context, _ uuid.UUID, _ 
 func (m *mockVendorRepository) Delete(_ context.Context, _ uuid.UUID) (int64, error) {
 	panic("mockVendorRepository: Delete should never be called by ExtractVendorID")
 }
-func (m *mockVendorRepository) GetByID(_ context.Context, _ uuid.UUID) (models.Vendor, error) {
+func (m *mockVendorRepository) GetByID(_ context.Context, _ uuid.UUID) (*models.Vendor, error) {
 	panic("mockVendorRepository: GetByID should never be called by ExtractVendorID")
 }
 func (m *mockVendorRepository) FindPublicVendors(_ context.Context, _ map[string]string) ([]models.Vendor, error) {

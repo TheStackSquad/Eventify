@@ -1,170 +1,220 @@
 // frontend/src/components/vendorUI/components/form/vendorFileInputField.jsx
 
-import React, { useState, useRef, useEffect } from "react";
+"use client";
+
+import React, { useEffect, useId, useRef, useState } from "react";
 import { Upload, X, AlertCircle, Image as ImageIcon } from "lucide-react";
-import Image from "next/image";
+
+import toastAlert from "@/components/common/toast/toastAlert";
+
+// Keep in sync with the server (src/app/api/vendor-image/route.js):
+// 5MB max; jpeg/png/webp/gif only (svg is rejected server-side).
+const MAX_BYTES = 5 * 1024 * 1024;
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+const actionBase =
+  "inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 sm:text-sm";
 
 const VendorFileInputField = ({
   icon: Icon,
   label,
+  name,
+  onChange,
   error,
   imageFile,
   currentImage,
-  accept = "image/*",
-  ...props
+  accept = ALLOWED_TYPES.join(","),
+  required = true,
+  className = "",
 }) => {
   const [preview, setPreview] = useState(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
+  const inputId = useId();
+  const messageId = `${inputId}-message`;
+  const Glyph = Icon || ImageIcon;
 
-  // 🔑 Sync preview with imageFile or currentImage
+  // Keep the preview in sync with a newly chosen file or the saved image.
+  // Object URLs are cheaper than data URLs for 5MB images and are revoked on cleanup.
   useEffect(() => {
-    if (imageFile) {
-      // New file selected - create preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result);
-      };
-      reader.readAsDataURL(imageFile);
-    } else if (currentImage) {
-      // No new file, but we have a current image
-      setPreview(currentImage);
-    } else {
-      // No file at all
-      setPreview(null);
+    setLoadFailed(false);
+
+    if (imageFile instanceof Blob) {
+      const objectUrl = URL.createObjectURL(imageFile);
+      setPreview(objectUrl);
+      return () => URL.revokeObjectURL(objectUrl);
     }
+
+    setPreview(currentImage || null);
+    return undefined;
   }, [imageFile, currentImage]);
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toastAlert.error("File size must be less than 5MB");
-        return;
-      }
+  const openPicker = () => fileInputRef.current?.click();
 
-      // Pass to parent (parent will set imageFile state)
-      props.onChange(e);
+  const isValidFile = (file) => {
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      toastAlert.error("Please use a JPG, PNG, WEBP or GIF image");
+      return false;
     }
+    if (file.size > MAX_BYTES) {
+      toastAlert.error("Image must be 5MB or smaller");
+      return false;
+    }
+    return true;
   };
 
-  const handleClearImage = () => {
-    // Clear everything
-    setPreview(null);
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    // Clear file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    if (!isValidFile(file)) {
+      e.target.value = ""; // allow re-selecting the same file after a rejection
+      return;
     }
+    onChange?.(e);
+  };
 
-    // Notify parent to clear the file
-    props.onChange({ target: { name: props.name, files: [] } });
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (!file || !isValidFile(file)) return;
+    onChange?.({ target: { name, files: [file] } });
+  };
+
+  const handleClear = () => {
+    setPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    onChange?.({ target: { name, files: [] } });
   };
 
   return (
-    <div className="w-full">
-      <label className="block text-sm font-semibold text-gray-700 mb-2">
-        {label} <span className="text-red-500">*</span>
+    <div className={`w-full ${className}`}>
+      <label
+        htmlFor={inputId}
+        className="mb-2 block text-sm font-semibold text-gray-700"
+      >
+        {label}{" "}
+        {required && (
+          <span className="text-red-500" aria-hidden="true">
+            *
+          </span>
+        )}
       </label>
 
-      <div className="relative">
-        {/* Preview Area */}
-        {preview ? (
-          <div className="relative group">
-            <div className="w-full h-48 rounded-xl overflow-hidden border-2 border-gray-200 bg-gray-50">
-              <Image
-                src={preview}
-                alt="Vendor preview"
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                priority={true}
-              />
-            </div>
-
-            {/* Overlay with actions */}
-            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2 bg-white text-gray-900 rounded-lg font-medium text-sm hover:bg-gray-100 transition-colors flex items-center gap-2"
-              >
-                <Upload size={16} />
-                Replace
-              </button>
-              <button
-                type="button"
-                onClick={handleClearImage}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium text-sm hover:bg-red-700 transition-colors flex items-center gap-2"
-              >
-                <X size={16} />
-                Remove
-              </button>
-            </div>
-
-            {/* File name badge */}
-            {imageFile && (
-              <div className="absolute top-3 left-3 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg border border-gray-200 shadow-sm">
-                <p className="text-xs font-medium text-gray-700 truncate max-w-[200px]">
-                  {imageFile.name}
-                </p>
-                <p className="text-[10px] text-gray-500">
-                  {(imageFile.size / 1024).toFixed(0)} KB
-                </p>
-              </div>
-            )}
-          </div>
-        ) : (
-          /* Upload Area */
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className={`
-              w-full h-48 rounded-xl border-2 border-dashed transition-all duration-200
-              flex flex-col items-center justify-center gap-3 cursor-pointer
-              ${error ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50 hover:border-indigo-400 hover:bg-indigo-50"}
-            `}
-          >
-            <div
-              className={`p-4 rounded-full ${error ? "bg-red-100" : "bg-gray-100"}`}
-            >
-              {Icon ? (
-                <Icon
-                  className={`w-8 h-8 ${error ? "text-red-500" : "text-gray-400"}`}
-                />
-              ) : (
-                <ImageIcon
-                  className={`w-8 h-8 ${error ? "text-red-500" : "text-gray-400"}`}
-                />
-              )}
-            </div>
-            <div className="text-center px-4">
-              <p className="text-sm font-semibold text-gray-700 mb-1">
-                Click to upload image
+      {preview ? (
+        <div className="relative aspect-[16/10] w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-100">
+          {loadFailed ? (
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center text-gray-500">
+              <ImageIcon className="h-8 w-8" aria-hidden="true" />
+              <p className="text-xs">
+                We couldn’t load this image. Replace it to continue.
               </p>
-              <p className="text-xs text-gray-500">PNG, JPG, WEBP up to 5MB</p>
             </div>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={preview}
+              alt="Business banner preview"
+              className="h-full w-full object-cover"
+              onError={() => setLoadFailed(true)}
+            />
+          )}
+
+          {imageFile instanceof Blob && (
+            <div className="absolute left-2 top-2 max-w-[70%] rounded-lg bg-white/90 px-2.5 py-1 shadow-sm backdrop-blur-sm">
+              <p className="truncate text-xs font-medium text-gray-700">
+                {imageFile.name}
+              </p>
+              <p className="text-[10px] text-gray-500">
+                {(imageFile.size / 1024).toFixed(0)} KB
+              </p>
+            </div>
+          )}
+
+          {/* Always visible: works on touch, keyboard and mouse (no hover dependency) */}
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-2 bg-gradient-to-t from-black/60 to-transparent p-2.5 sm:p-3">
+            <button
+              type="button"
+              onClick={openPicker}
+              aria-label="Replace image"
+              className={`${actionBase} bg-white/95 text-gray-900 hover:bg-white`}
+            >
+              <Upload size={15} aria-hidden="true" />
+              Replace
+            </button>
+            <button
+              type="button"
+              onClick={handleClear}
+              aria-label="Remove image"
+              className={`${actionBase} bg-red-600/95 text-white hover:bg-red-600`}
+            >
+              <X size={15} aria-hidden="true" />
+              Remove
+            </button>
           </div>
-        )}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={openPicker}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          aria-describedby={messageId}
+          aria-invalid={Boolean(error)}
+          className={`flex aspect-[16/10] w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
+            error
+              ? "border-red-400 bg-red-50"
+              : isDragging
+                ? "border-indigo-500 bg-indigo-50"
+                : "border-gray-300 bg-gray-50 hover:border-indigo-400 hover:bg-indigo-50"
+          }`}
+        >
+          <span
+            className={`rounded-full p-3 ${error ? "bg-red-100" : "bg-gray-100"}`}
+          >
+            <Glyph
+              className={`h-6 w-6 sm:h-7 sm:w-7 ${error ? "text-red-500" : "text-gray-400"}`}
+              aria-hidden="true"
+            />
+          </span>
+          <span className="text-sm font-semibold text-gray-700">
+            Tap to upload
+            <span className="hidden sm:inline"> or drag an image here</span>
+          </span>
+          <span className="text-xs text-gray-500">
+            JPG, PNG, WEBP or GIF · up to 5MB
+          </span>
+        </button>
+      )}
 
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={accept}
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-      </div>
+      <input
+        id={inputId}
+        ref={fileInputRef}
+        type="file"
+        accept={accept}
+        onChange={handleFileSelect}
+        className="hidden"
+      />
 
-      {/* Helper text or error */}
       {error ? (
-        <p className="mt-2 text-sm text-red-600 flex items-center gap-1 px-1">
-          <AlertCircle size={14} />
+        <p
+          id={messageId}
+          role="alert"
+          className="mt-2 flex items-center gap-1 px-1 text-sm text-red-600"
+        >
+          <AlertCircle size={14} aria-hidden="true" />
           {error}
         </p>
       ) : (
-        <p className="mt-2 text-xs text-gray-500 px-1">
-          High quality images get 30% more engagement
+        <p id={messageId} className="mt-2 px-1 text-xs text-gray-500">
+          Shown on your vendor card. Landscape (16:10), at least 800×500px,
+          works best.
         </p>
       )}
     </div>

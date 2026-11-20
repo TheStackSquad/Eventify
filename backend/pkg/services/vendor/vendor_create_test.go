@@ -5,6 +5,7 @@ package vendor_test
 import (
 	"context"
 	"testing"
+	"database/sql"
 
 	"github.com/eventify/backend/pkg/models"
 	repovendor "github.com/eventify/backend/pkg/repository/vendor"
@@ -29,14 +30,16 @@ func TestCreateVendor_PVSAndValidation(t *testing.T) {
 	t.Run("create with vNIN and 100% profile completion sets PVS to 45", func(t *testing.T) {
 		ownerID := testhelper.CreateTestUser(t, db)
 
-		vendor := &models.Vendor{
-			OwnerID:           ownerID,
-			Name:              "Test Photography",
-			Category:          "Photography",
-			VNIN:              "12345678901",
-			State:             "Lagos",
-			PhoneNumber:       "08011112222",
-			ProfileCompletion: 100.0,
+	
+			vendor := &models.Vendor{
+			OwnerID:            ownerID,
+			Name:               "Test Photography",
+			Category:           "Photography",
+			VNIN:               "12345678901",
+			State:              "Lagos",
+			PhoneNumber:        "08011112222",
+			ProfileCompletion:  100.0,
+			IsIdentityVerified: true, // set by the handler from a signed proof
 		}
 
 		id, err := svc.CreateVendor(ctx, vendor)
@@ -58,13 +61,16 @@ func TestCreateVendor_PVSAndValidation(t *testing.T) {
 	t.Run("create with vNIN and CAC number auto-sets IsBusinessVerified", func(t *testing.T) {
 		ownerID := testhelper.CreateTestUser(t, db)
 
-		vendor := &models.Vendor{
-			OwnerID:   ownerID,
-			Name:      "RC Business Events",
-			Category:  "Catering",
-			State:     "Rivers",
-			VNIN:      "NIN00000000002",
-			CACNumber: models.ToNullString("RC-123456"),
+		
+			vendor := &models.Vendor{
+			OwnerID:            ownerID,
+			Name:               "RC Business Events",
+			Category:           "Catering",
+			State:              "Rivers",
+			VNIN:               "NIN00000000002",
+			CACNumber:          models.ToNullString("RC-123456"),
+			IsIdentityVerified: true,
+			IsBusinessVerified: sql.NullBool{Bool: true, Valid: true},
 		}
 
 		id, err := svc.CreateVendor(ctx, vendor)
@@ -107,5 +113,26 @@ func TestCreateVendor_PVSAndValidation(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "vNIN is mandatory")
 		assert.Empty(t, id)
+	})
+
+		t.Run("fail: unverified identity is rejected even with a vNIN", func(t *testing.T) {
+		ownerID := testhelper.CreateTestUser(t, db)
+
+		vendor := &models.Vendor{
+			OwnerID:   ownerID,
+			Name:      "Unverified Vendor",
+			Category:  "Catering",
+			State:     "Lagos",
+			VNIN:      "NIN00000000003",
+			CACNumber: models.ToNullString("RC-999999"),
+		}
+
+		id, err := svc.CreateVendor(ctx, vendor)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "identity verification is required")
+		assert.Empty(t, id)
+
+		// A CAC number must not auto-verify the business either.
+		assert.False(t, vendor.IsBusinessVerified.Valid && vendor.IsBusinessVerified.Bool)
 	})
 }

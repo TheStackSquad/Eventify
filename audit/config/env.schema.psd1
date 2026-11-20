@@ -23,6 +23,7 @@
         @{ Name = 'RSA_PUBLIC_KEY'; Load = $false }
         @{ Name = 'BACKEND_PORT'; Check = 'port'; Default = '8081'; Fix = 'the port the local backend listens on' }
         @{ Name = 'NGROK_DOMAIN'; Need = @('tunnel'); Check = 'domain'; Fix = 'your ngrok static domain, for example name.ngrok-free.dev' }
+        @{ Name = 'VERIFICATION_PROOF_SECRET'; Need = @('rig', 'tunnel'); Secret = $true; Check = 'secret32'; Fix = 'run: openssl rand -hex 32  and put it in audit\docker\.env (use a rig-only value)' }
         @{ Name = 'ADMIN_ALERT_EMAIL'; Check = 'email'; Default = 'alerts@eventify.test'; Fix = 'who receives money-attention alerts' }
     )
 }

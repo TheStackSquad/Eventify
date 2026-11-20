@@ -33,6 +33,26 @@ export async function fetchVendorProfileApi(vendorId, signal) {
   return response.data;
 }
 
+// Go binds snake_case (VendorBinding). Convert here so the app stays camelCase, and so
+// identity/business flags can never be sent: the server derives them from the proofs.
+export function toBackendVendorPayload(p = {}) {
+  return {
+    name: p.name,
+    category: p.category,
+    description: p.description ?? "",
+    image_url: p.imageURL ?? p.image_url ?? "",
+    state: p.state,
+    city: p.city ?? "",
+    phone_number: p.phoneNumber ?? p.phone_number ?? "",
+    min_price: p.minPrice ?? p.min_price ?? 0,
+    first_name: p.firstName ?? p.first_name ?? "",
+    middle_name: p.middleName ?? p.middle_name ?? "",
+    last_name: p.lastName ?? p.last_name ?? "",
+    vnin_proof: p.vninProof ?? p.vnin_proof ?? "",
+    cac_proof: p.cacProof ?? p.cac_proof ?? "",
+  };
+}
+
 // Register new vendor
 export async function registerVendorApi(vendorData) {
   const response = await backendInstance.post(
@@ -92,10 +112,26 @@ export async function fetchVendorAnalyticsApi(vendorId) {
 // Check analytics service health status
 export async function checkAnalyticsHealthApi() {
   try {
-    const response = await axios.get(API_ENDPOINTS.VENDORS.ANALYTICS.HEALTH);
+    const response = await backendInstance.get(
+      API_ENDPOINTS.VENDORS.ANALYTICS.HEALTH,
+    );
     return response.data;
   } catch (error) {
     console.error("❌ Analytics Health Check Failed:", error.message);
     throw error;
   }
+}
+
+
+// Authenticated + rate limited on the server; the public API no longer needs to carry the number.
+export async function revealVendorPhoneApi(vendorId) {
+  const base = replaceUrlParams(API_ENDPOINTS.VENDORS.GET_PROFILE, { id: vendorId });
+  const response = await backendInstance.get(`${base}/contact`);
+  return response.data.phoneNumber;
+}
+
+// The signed-in owner's own profile, with owner-only fields (phone, vninLast4).
+export async function fetchMyVendorApi(signal) {
+  const response = await backendInstance.get(`${API_ENDPOINTS.VENDORS.LIST}/me`, { signal });
+  return response.data;
 }

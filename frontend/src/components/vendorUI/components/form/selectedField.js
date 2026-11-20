@@ -37,12 +37,14 @@ const SelectField = ({
             ${props.disabled ? "opacity-70 cursor-not-allowed bg-gray-100" : ""}
           `}
         >
-          <option value="">Select {label}</option>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
+          <option value="">{`Select ${String(label).toLowerCase()}`}</option>
+          {options
+            .filter((option) => option.value !== "")
+            .map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
         </select>
 
         {/* Dropdown icon */}

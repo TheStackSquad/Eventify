@@ -35,19 +35,19 @@ func (s *VendorServiceImpl) GetVendors(ctx context.Context, filters map[string]i
 }
 
 // GetVendorByID retrieves a vendor by ID
-func (s *VendorServiceImpl) GetVendorByID(ctx context.Context, id string) (models.Vendor, error) {
+func (s *VendorServiceImpl) GetVendorByID(ctx context.Context, id string) (*models.Vendor, error) {
 	if id == "" {
-		return models.Vendor{}, errors.New("vendor ID is required")
+		return nil, errors.New("vendor ID is required")
 	}
 
 	parsedID, err := uuid.Parse(id)
 	if err != nil {
-		return models.Vendor{}, errors.New("invalid vendor ID format")
+		return nil, errors.New("invalid vendor ID format")
 	}
 
 	vendor, err := s.vendorRepo.GetByID(ctx, parsedID)
 	if err != nil {
-		return models.Vendor{}, err
+		return nil, err
 	}
 
 	return vendor, nil

@@ -223,6 +223,18 @@ publicEvents.Use(middleware.RateLimit(utils.PublicLimiter))
 	{
 		vendorAnalytics.GET("/overview", vendorAnalyticsHandler.GetVendorAnalytics)
 	}
+		// ============================================
+	// AUTHENTICATED VENDOR READ ROUTES
+	// ============================================
+	vendorAuthRead := router.Group("/api/v1/vendors")
+	vendorAuthRead.Use(
+		middleware.AuthMiddleware(authService),
+		middleware.RateLimit(utils.PublicLimiter),
+	)
+	{
+		vendorAuthRead.GET("/me", vendorHandler.GetMyVendor)
+		vendorAuthRead.GET("/:id/contact", vendorHandler.RevealPhone)
+	}
 
 	// Event management (protected)
 	protectedEvents := router.Group("/api/events")

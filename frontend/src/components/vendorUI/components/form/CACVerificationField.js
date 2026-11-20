@@ -31,27 +31,37 @@ const CACVerificationField = ({
   // Status flags
   const isVerified = formData.isBusinessVerified;
   const isComplete = formData.cacNumber?.replace(/-/g, "").length >= 7;
+  const identityVerified = !!formData.isIdentityVerified;
 
   // --- Optimization: Prevent verification if already verified ---
   const performVerification = useCallback(
     async (cacValue) => {
-      if (!cacValue?.trim() || isVerified) return;
+      if (!cacValue?.trim() || isVerified || !identityVerified) return;
 
       setIsVerifying(true);
       setCacError("");
 
       try {
-        const res = await frontendInstance.post("/api/cac-verify", {
-          cacNumber: cacValue,
-        });
-
+        const res = await frontendInstance.post(
+          "/api/verify-business",
+          {
+            cacNumber: cacValue,
+            businessName: formData.name,
+            vninProof: formData.vninProof,
+          },
+          { timeout: 20000 },
+        );
         const responseData = res.data.data || res.data;
         // Supporting both standard and nested API responses
         const verifiedFlag = responseData.verified ?? res.data.verified;
 
         if (verifiedFlag) {
-          // Pass back the official company name if the API provides it
-          onCacVerified(responseData.companyName || formData.name, cacValue);
+          if (!responseData.companyName || !responseData.proof) {
+            throw new Error(
+              "CAC record found, but no registered name was returned. Please try again.",
+            );
+          }
+          onCacVerified(responseData.companyName, cacValue, responseData.proof);
           toastAlert.success("Business Verified via CAC");
         } else {
           throw new Error("Invalid CAC Number. Please check and try again.");
@@ -66,7 +76,13 @@ const CACVerificationField = ({
         setIsVerifying(false);
       }
     },
-    [onCacVerified, formData.name, isVerified],
+    [
+      onCacVerified,
+      isVerified,
+      identityVerified,
+      formData.vninProof,
+      formData.name,
+    ],
   );
 
   const handleCacChange = (e) => {
@@ -90,7 +106,10 @@ const CACVerificationField = ({
     <>
       <div className="relative w-full animate-in fade-in duration-500">
         <div className="flex items-center justify-between mb-2 px-1">
-          <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+          <label
+            htmlFor="cacNumber"
+            className="text-sm font-bold text-gray-700 flex items-center gap-2"
+          >
             CAC Registration Number
             <span className="text-gray-400 text-[10px] font-medium tracking-tight bg-gray-50 px-1.5 py-0.5 rounded italic">
               (Optional)
@@ -132,7 +151,13 @@ const CACVerificationField = ({
             placeholder={
               isVerified ? "Verified and Protected" : "RC-12345678 or BN-12345"
             }
-            className={`w-full pl-12 pr-24 py-4 rounded-xl font-mono text-sm transition-all duration-300 border-2 ${
+            id="cacNumber"
+            autoCapitalize="characters"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={Boolean(cacError || formErrors.cacNumber)}
+            className={`w-full pl-12 pr-24 py-3.5 sm:py-4 rounded-xl font-mono sm:text-sm text-base transition-all duration-300 border-2 ${
               isVerified
                 ? "bg-green-50/50 border-green-200 text-green-700 font-semibold cursor-not-allowed"
                 : cacError || formErrors.cacNumber
@@ -163,7 +188,7 @@ const CACVerificationField = ({
                   Verified
                 </span>
               </div>
-            ) : isComplete && !isVerifying ? (
+            ) : isComplete && identityVerified && !isVerifying ? (
               <button
                 type="button"
                 onClick={handleVerifyClick}
@@ -190,8 +215,10 @@ const CACVerificationField = ({
               <AlertCircle size={12} /> {cacError || formErrors.cacNumber}
             </p>
           ) : (
-            <p className="text-[10px] text-gray-400 leading-tight">
-              Optional: Verifying your CAC increases your trust score by 40%.
+            <p className="text-[11px] text-gray-500 leading-snug">
+              {identityVerified
+                ? "Optional: verifying your CAC adds up to 40 points to your trust score."
+                : "Verify your vNIN first. CAC verification only counts once your identity is verified."}
             </p>
           )}
         </div>

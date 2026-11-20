@@ -2,41 +2,20 @@
 
 import { put, del } from "@vercel/blob";
 import { NextResponse } from "next/server";
-import { jwtVerify, importSPKI } from "jose";
+import { requireUser } from "@/utils/server/requireUser";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-async function getAuthenticatedUser(request) {
-  // 1. Check if middleware already verified and passed the user ID
-  const userIdFromHeader = request.headers.get("x-user-id");
-  
-  if (userIdFromHeader) {
-    console.log("✅ Auth Success via Middleware header:", userIdFromHeader);
-    return { user_id: userIdFromHeader };
-  }
-
-  // 2. Fallback: If for some reason header is missing, try standard verification
-  try {
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader) return null;
-    
-    const token = authHeader.split(" ")[1];
-    const publicKeyPem = process.env.JWT_PUBLIC_KEY;
-    const ecPublicKey = await importSPKI(publicKeyPem, "RS256");
-    const { payload } = await jwtVerify(token, ecPublicKey);
-    
-    return payload;
-  } catch (error) {
-    console.error("❌ Route verification fallback failed:", error.message);
-    return null;
-  }
-}
 export async function POST(request) {
   try {
-    // 1. Authenticate User
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
+    // 1. Authenticate User via session/cookie verification
+    const auth = await requireUser(request);
+    if (auth?.errorResponse) {
+      return auth.errorResponse;
+    }
+    const userId = auth?.user?.id || auth?.user?.user_id;
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -67,8 +46,7 @@ export async function POST(request) {
     }
 
     // 3. Structured Pathing
-    // event-images/user_uuid/event_id/filename
-    const pathname = `users/${user.user_id}/events/${eventId}/${file.name}`;
+    const pathname = `users/${userId}/events/${eventId}/${file.name}`;
 
     // 4. Upload to Vercel
     const blob = await put(pathname, file, {
@@ -76,7 +54,7 @@ export async function POST(request) {
       addRandomSuffix: true,
       contentType: file.type,
       metadata: {
-        uploadedBy: user.user_id,
+        uploadedBy: userId,
         eventId: eventId,
       },
     });
@@ -96,9 +74,13 @@ export async function POST(request) {
 
 export async function DELETE(request) {
   try {
-    // 1. Authenticate User
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
+    // 1. Authenticate User via session/cookie verification
+    const auth = await requireUser(request);
+    if (auth?.errorResponse) {
+      return auth.errorResponse;
+    }
+    const userId = auth?.user?.id || auth?.user?.user_id;
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

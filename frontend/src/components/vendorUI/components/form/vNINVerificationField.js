@@ -16,7 +16,7 @@ import { frontendInstance } from "@/axiosConfig/axios";
 import toastAlert from "@/components/common/toast/toastAlert";
 import { redactSensitiveField } from "@/app/vendor/utils/vendorTransformers";
 
-const MERCHANT_CODE = "715461";
+const MERCHANT_CODE = process.env.NEXT_PUBLIC_VNIN_ENTERPRISE_CODE || "1138183";
 
 const VNINVerificationField = ({
   formData,
@@ -51,25 +51,29 @@ const VNINVerificationField = ({
       setVninError("");
 
       try {
-        const res = await frontendInstance.post("/api/vnin-verify", {
-          vnin: vninValue,
-        });
+        const res = await frontendInstance.post(
+          "/api/vnin-verify",
+          { vnin: vninValue },
+          { timeout: 20000 },
+        );
         const responseData = res.data.data || res.data;
         const verifiedFlag = responseData.verified ?? res.data.verified;
 
-        if (verifiedFlag) {
-          setLastVerifiedVnin(vninValue);
-          onVninVerified({
-            firstName: responseData.firstName,
-            middleName: responseData.middleName || "",
-            lastName: responseData.lastName,
-            phoneNumber: responseData.phoneNumber || "",
-            isIdentityVerified: true,
-          });
-          toastAlert.success("Identity Verified via NIMC");
-        } else {
-          throw new Error("Invalid vNIN. Please check the code and try again.");
-        }
+       if (verifiedFlag && responseData.proof) {
+         setLastVerifiedVnin(vninValue);
+         onVninVerified({
+           vnin: vninValue,
+           firstName: responseData.firstName,
+           middleName: responseData.middleName || "",
+           lastName: responseData.lastName,
+           last4: responseData.last4,
+           proof: responseData.proof,
+           isIdentityVerified: true,
+         });
+         toastAlert.success("Identity Verified via NIMC");
+       } else {
+         throw new Error("Invalid vNIN. Please check the code and try again.");
+       }
       } catch (err) {
         const msg =
           err.response?.data?.message || err.message || "Verification failed.";
@@ -127,13 +131,24 @@ const VNINVerificationField = ({
     <>
       <div className="relative w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
         <div className="flex items-center justify-between mb-2 px-1">
-          <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+          <label
+            htmlFor="vnin"
+            className="text-sm font-bold text-gray-700 flex items-center gap-2"
+          >
             Virtual NIN (vNIN) <span className="text-red-500">*</span>
             <button
               type="button"
               onClick={() => setShowInfoModal(true)}
               className="text-gray-400 hover:text-indigo-600 transition-colors"
             >
+              <button
+                type="button"
+                aria-label="Virtual NIN Help"
+                onClick={() => setShowInfoModal(true)}
+                className="text-gray-400 hover:text-indigo-600 transition-colors"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+              </button>
               <HelpCircle className="w-3.5 h-3.5" />
             </button>
           </label>
@@ -150,12 +165,15 @@ const VNINVerificationField = ({
 
         <div className="relative group">
           <input
+            id="vnin"
             type="text"
             name="vnin"
             value={
-              isVerified && isEditMode
+              isVerified
                 ? redactSensitiveField(
-                    formData.verifiedVnin || formData.vnin,
+                    formData.vninLast4 ||
+                      formData.verifiedVnin ||
+                      formData.vnin,
                     "vnin",
                   )
                 : formData.vnin || ""
@@ -166,7 +184,13 @@ const VNINVerificationField = ({
               isVerified ? "Verified and Protected" : "XX-000000000000-XX"
             }
             maxLength={18}
-            className={`w-full pl-12 pr-16 py-4 rounded-xl font-mono text-sm transition-all duration-300 border-2 ${
+            inputMode="text"
+            autoCapitalize="characters"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-invalid={Boolean(vninError || formErrors.vnin)}
+            className={`w-full pl-12 pr-24 py-3.5 sm:py-4 rounded-xl font-mono text-base sm:text-sm transition-all duration-300 border-2 ${
               isVerified
                 ? "bg-green-50/50 border-green-200 text-green-700 font-semibold cursor-not-allowed"
                 : vninError || formErrors.vnin
@@ -176,7 +200,11 @@ const VNINVerificationField = ({
           />
 
           <div
-            className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-300 ${isVerified ? "text-green-500" : "text-gray-400 group-focus-within:text-indigo-500"}`}
+            className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-300 ${
+              isVerified
+                ? "text-green-500"
+                : "text-gray-400 group-focus-within:text-indigo-500"
+            }`}
           >
             {isVerified ? <Lock size={20} /> : <ShieldCheck size={20} />}
           </div>
@@ -189,9 +217,19 @@ const VNINVerificationField = ({
                   Verified
                 </span>
               </div>
+            ) : isEditMode && isComplete && !isVerifying ? (
+              <button
+                type="button"
+                onClick={() => performVerification(rawVnin)}
+                className="px-3 py-1.5 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-sm active:scale-95"
+              >
+                Verify Now
+              </button>
             ) : (
               <span
-                className={`text-[10px] font-bold tabular-nums ${isComplete ? "text-indigo-600" : "text-gray-400"}`}
+                className={`text-[10px] font-bold tabular-nums ${
+                  isComplete ? "text-indigo-600" : "text-gray-400"
+                }`}
               >
                 {rawVnin.length}/16
               </span>
@@ -205,9 +243,23 @@ const VNINVerificationField = ({
               <ShieldCheck size={12} /> Identity Authenticated & Locked
             </p>
           ) : vninError || formErrors.vnin ? (
-            <p className="text-xs text-red-600 font-semibold flex items-center gap-1 animate-in slide-in-from-top-1">
-              <AlertCircle size={12} /> {vninError || formErrors.vnin}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p
+                role="alert"
+                className="text-xs text-red-600 font-semibold flex items-center gap-1 animate-in slide-in-from-top-1"
+              >
+                <AlertCircle size={12} /> {vninError || formErrors.vnin}
+              </p>
+              {vninError && isComplete && !isVerifying && (
+                <button
+                  type="button"
+                  onClick={() => performVerification(rawVnin)}
+                  className="text-xs font-bold text-indigo-600 underline underline-offset-2"
+                >
+                  Try again
+                </button>
+              )}
+            </div>
           ) : (
             <p className="text-[11px] text-gray-500">
               Dial{" "}
@@ -220,11 +272,10 @@ const VNINVerificationField = ({
         </div>
       </div>
 
-      {/* Help Modal stays the same but with added backdrop-blur and responsive tweaks */}
+      {/* Help Modal */}
       {showInfoModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-            {/* Modal Content... */}
             <div className="p-6 bg-gradient-to-br from-indigo-600 to-indigo-800 text-white flex justify-between items-start">
               <div>
                 <h3 className="text-xl font-bold">NIMC vNIN Guide</h3>
@@ -243,7 +294,6 @@ const VNINVerificationField = ({
               </button>
             </div>
             <div className="p-6 space-y-5">
-              {/* Instructions... */}
               <div className="bg-amber-50 p-4 rounded-2xl flex gap-3">
                 <Info className="text-amber-600 shrink-0" size={18} />
                 <p className="text-[11px] text-amber-800 leading-relaxed">

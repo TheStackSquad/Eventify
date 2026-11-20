@@ -6,6 +6,7 @@ import {
   fetchVendorProfileApi,
   registerVendorApi,
   updateVendorApi,
+  fetchMyVendorApi,
 } from "@/services/vendorApi";
 import toastAlert from "@/components/common/toast/toastAlert";
 import {
@@ -71,6 +72,7 @@ export const vendorKeys = {
     return ["vendors", "list", normalizedFilters];
   },
   detail: (id) => ["vendors", "detail", id],
+  owner: (id) => ["vendors", "owner", id],
 };
 
 export function useVendors(filters = {}, options = {}) {
@@ -133,15 +135,18 @@ export function useVendors(filters = {}, options = {}) {
 }
 
 export function useVendorProfile(vendorId, options = {}) {
+  const { owner = false, ...queryOptions } = options;
   return useQuery({
-    queryKey: vendorKeys.detail(vendorId),
-    queryFn: () => fetchVendorProfileApi(vendorId),
+    queryKey: owner ? vendorKeys.owner(vendorId) : vendorKeys.detail(vendorId),
+    queryFn: ({ signal }) =>
+      owner
+        ? fetchMyVendorApi(signal)
+        : fetchVendorProfileApi(vendorId, signal),
     staleTime: 1000 * 60 * 5,
     enabled: !!vendorId,
-    ...options,
+    ...queryOptions,
   });
 }
-
 // Register new vendor
 export function useRegisterVendor() {
   const queryClient = useQueryClient();

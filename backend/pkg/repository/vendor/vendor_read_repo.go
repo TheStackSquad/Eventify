@@ -12,23 +12,28 @@ import (
 	"github.com/google/uuid"
 )
 
-func (r *PostgresVendorRepository) GetByID(ctx context.Context, id uuid.UUID) (models.Vendor, error) {
+func (r *PostgresVendorRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Vendor, error) {
 	var v models.Vendor
 	err := r.DB.GetContext(ctx, &v, `SELECT * FROM vendors WHERE id = $1`, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return models.Vendor{}, fmt.Errorf("vendor not found")
+			return nil, fmt.Errorf("vendor not found")
 		}
-		return models.Vendor{}, err
+		return nil, err
 	}
-	return v, nil
+	return &v, nil
 }
 
 func (r *PostgresVendorRepository) GetByOwnerID(ctx context.Context, ownerID uuid.UUID) (*models.Vendor, error) {
-    var v models.Vendor
-    err := r.DB.GetContext(ctx, &v, `SELECT * FROM vendors WHERE owner_id = $1 AND deleted_at IS NULL LIMIT 1`, ownerID)
-    if err == sql.ErrNoRows { return nil, nil }
-    return &v, err
+	var v models.Vendor
+	err := r.DB.GetContext(ctx, &v, `SELECT * FROM vendors WHERE owner_id = $1 AND deleted_at IS NULL LIMIT 1`, ownerID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &v, nil
 }
 
 func (r *PostgresVendorRepository) IsRegisteredVendor(ctx context.Context, ownerID uuid.UUID) (bool, error) {

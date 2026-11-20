@@ -11,6 +11,7 @@ import {
   hasValidationErrors,
 } from "@/utils/validate/vendorValidate";
 import toastAlert from "@/components/common/toast/toastAlert";
+import { compressImage } from "@/utils/helper/compressImage";
 
 export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
   const isEditMode = !!vendorId;
@@ -34,6 +35,9 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
     vnin: "",
     isIdentityVerified: false,
     verifiedVnin: "",
+    vninProof: "",
+    vninLast4: "",
+    cacProof: "",
   });
 
   // Fetch vendor data in edit mode
@@ -63,6 +67,9 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
       vnin: "",
       isIdentityVerified: false,
       verifiedVnin: "",
+      vninProof: "",
+      vninLast4: "",
+      cacProof: "",
     });
     setImageFile(null);
     setFormErrors({});
@@ -75,14 +82,36 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
 
   // Identity verification handler
   const handleVninVerified = useCallback((data) => {
+    // A failed or incomplete verification must NEVER mark identity as verified or lock the form.
+    if (
+      !data?.isIdentityVerified ||
+      !data.firstName ||
+      !data.lastName ||
+      !data.proof
+    ) {
+      setFormData((prev) => ({
+        ...prev,
+        isIdentityVerified: false,
+        verifiedVnin: "",
+        vninProof: "",
+        vninLast4: "",
+      }));
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
+      // Verified NIMC identity always overrides whatever the user typed
       firstName: data.firstName,
       middleName: data.middleName || "",
       lastName: data.lastName,
-      phoneNumber: data.phoneNumber || prev.phoneNumber,
       isIdentityVerified: true,
-      verifiedVnin: prev.vnin.replace(/[^A-Z0-9]/gi, ""),
+      verifiedVnin: String(data.vnin || prev.vnin || "").replace(
+        /[^A-Z0-9]/gi,
+        "",
+      ),
+      vninProof: data.proof,
+      vninLast4: data.last4 || "",
     }));
     setFormErrors((prev) => {
       const newErrors = { ...prev };
@@ -92,11 +121,12 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
   }, []);
 
   // Business verification handler
-  const handleCacVerified = useCallback((officialName, cacNum) => {
+  const handleCacVerified = useCallback((officialName, cacNum, proof) => {
     setFormData((prev) => ({
       ...prev,
       name: officialName,
       isBusinessVerified: true,
+      cacProof: proof || "",
       verifiedCacNumber: cacNum.replace(/[^A-Z0-9]/gi, ""),
     }));
     setFormErrors((prev) => {
@@ -161,12 +191,27 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
     [formData.isBusinessVerified, formData.isIdentityVerified, isEditMode],
   );
 
-  const handleImageChange = useCallback((e) => {
-    const file = e.target.files[0];
-    setImageFile(file || null);
-    if (file) {
+  const handleImageChange = useCallback(async (e) => {
+    const file = e.target.files?.[0] ?? null;
+
+    // "Remove": drop the pending file AND the saved URL, otherwise the form
+    // still counts the old image as present and lets you save.
+    if (!file) {
+      setImageFile(null);
       setFormData((prev) => ({ ...prev, imageURL: "" }));
+      return;
     }
+
+    // Shrink before upload: faster on slow networks and under the server's 5MB cap.
+    const optimized = await compressImage(file);
+    if (optimized.size > 5 * 1024 * 1024) {
+      toastAlert.error(
+        "Image is still over 5MB after optimizing. Try a smaller one.",
+      );
+      return;
+    }
+    setImageFile(optimized);
+    setFormData((prev) => ({ ...prev, imageURL: "" }));
   }, []);
 
   const handleSubmit = async (e) => {
@@ -188,7 +233,7 @@ export const useVendorFormHandler = ({ vendorId, userId, onSuccess }) => {
       const verifiedCleanVnin =
         formData.verifiedVnin?.replace(/[^A-Z0-9]/gi, "") || "";
 
-      if (formData.isIdentityVerified) {
+      if (formData.isIdentityVerified && formData.vninProof) {
         if (currentCleanVnin !== verifiedCleanVnin) {
           errors.vnin = "vNIN mismatch. Please re-verify your identity.";
         }

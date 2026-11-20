@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { Suspense } from "react";
+import React from "react";
 import dynamic from "next/dynamic";
 import { DollarSign, FileText } from "lucide-react";
 import VendorInputField from "./vendorInputFields";
@@ -47,16 +47,14 @@ const VendorFormPricingVerification = ({
           </h3>
         </div>
 
-        {/* vNIN Verification with independent Suspense */}
-        <Suspense fallback={<VerificationFieldSkeleton />}>
-          <VNINVerificationField
-            formData={formData}
-            formErrors={formErrors}
-            handleChange={handleChange}
-            onVninVerified={onVninVerified}
-            isEditMode={isEditMode}
-          />
-        </Suspense>
+        {/* vNIN Verification */}
+        <VNINVerificationField
+          formData={formData}
+          formErrors={formErrors}
+          handleChange={handleChange}
+          onVninVerified={onVninVerified}
+          isEditMode={isEditMode}
+        />
 
         {/* Identity Fields (Static/Fast - these render immediately) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -92,16 +90,14 @@ const VendorFormPricingVerification = ({
           />
         </div>
 
-        {/* CAC Verification with independent Suspense */}
-        <Suspense fallback={<VerificationFieldSkeleton />}>
-          <CACVerificationField
-            formData={formData}
-            formErrors={formErrors}
-            handleChange={handleChange}
-            onCacVerified={onCacVerified}
-            isEditMode={isEditMode}
-          />
-        </Suspense>
+        {/* CAC Verification */}
+        <CACVerificationField
+          formData={formData}
+          formErrors={formErrors}
+          handleChange={handleChange}
+          onCacVerified={onCacVerified}
+          isEditMode={isEditMode}
+        />
       </section>
 
       <hr className="border-gray-100" />
