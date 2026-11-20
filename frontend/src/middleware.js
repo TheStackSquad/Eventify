@@ -31,8 +31,6 @@ const PUBLIC_UI_ROUTES = [
   "/confirmation",
   "/events/[slug]",
   "/vendors/[id]",
-  "/api/event-image",
-  "/api/feedback-image",
   "/api/v1/feedback",
   "/api/feedback",
 ];
@@ -43,6 +41,8 @@ const AUTH_REQUIRED_API_ROUTES = [
   "/api/vnin-verify",
   "/api/verify-business",
   "/api/vendor-image",
+  "/api/event-image",
+  "/api/feedback-image",
 ];
 
 // NOTE: "/api/v1/vendors" here causes all sub-paths (/api/v1/vendors/admin, etc.)
@@ -202,11 +202,6 @@ export function middleware(request) {
 
   // 1. Never trust a client-supplied identity header; strip it first.
   requestHeaders.delete("x-user-id");
-
-  // 2. Set it ONLY if the token was successfully verified and contains a user ID.
-  if (decodedToken && decodedToken.user_id) {
-    requestHeaders.set("x-user-id", String(decodedToken.user_id));
-  }
 
   const response = NextResponse.next({
     request: { headers: requestHeaders },
