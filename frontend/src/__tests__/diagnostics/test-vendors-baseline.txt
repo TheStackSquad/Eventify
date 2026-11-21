@@ -1,0 +1,721 @@
+
+> frontend@0.1.0 test:vendors
+> jest src/__tests__/vendors --verbose --silent
+
+PASS jsdom src/__tests__/vendors/vendorContract.test.js
+  vendor API contract
+    √ sends only keys the Go binding accepts (57 ms)
+    √ never sends vnin (3 ms)
+    √ never sends verified_vnin (1 ms)
+    √ never sends owner_id (1 ms)
+    √ never sends status (1 ms)
+    √ never sends email (1 ms)
+    √ never sends cac_number (2 ms)
+    √ never sends is_identity_verified (1 ms)
+    √ never sends is_business_verified (2 ms)
+    √ never sends isIdentityVerified (2 ms)
+    √ never sends isBusinessVerified (1 ms)
+    √ carries both proofs (4 ms)
+    √ sends min_price in whole naira (1 ms)
+  vendors table limits are enforced before the request is sent
+    √ name: 255 characters is accepted (2 ms)
+    √ city: 100 characters is accepted (1 ms)
+    √ firstName: 100 characters is accepted (1 ms)
+    √ middleName: 100 characters is accepted (1 ms)
+    √ lastName: 100 characters is accepted (1 ms)
+    √ name: more than 255 characters is rejected (1 ms)
+    √ city: more than 100 characters is rejected (1 ms)
+    √ firstName: more than 100 characters is rejected (1 ms)
+    √ middleName: more than 100 characters is rejected (1 ms)
+    √ lastName: more than 100 characters is rejected (4 ms)
+    √ rejects a price that would overflow int32 kobo (1 ms)
+
+PASS jsdom src/__tests__/vendors/vendorProfilePage.test.js
+  VendorProfilePage — InvalidVendorUrl
+    √ renders InvalidVendorUrl when id is undefined/missing (236 ms)
+    √ renders InvalidVendorUrl when parseSlugToId returns null (33 ms)
+    √ shows the slug in the InvalidVendorUrl component (13 ms)
+    √ renders a 'Return Home' link pointing to '/' (20 ms)
+  VendorProfilePage — successful fetch
+    √ renders VendorClientDetails with vendorData when fetch succeeds (62 ms)
+    √ passes the correct vendorId to VendorClientDetails (8 ms)
+    √ passes initialError=null on successful fetch (5 ms)
+  VendorProfilePage — 404 vendor
+    √ renders VendorClientDetails with vendorData=null on 404 (7 ms)
+    √ passes a 404 initialError to VendorClientDetails (29 ms)
+    √ passes the expected 404 error message (8 ms)
+  VendorProfilePage — server error
+    √ renders VendorClientDetails with error when response is not ok (500) (7 ms)
+    √ renders VendorClientDetails with error when fetch throws a network error (37 ms)
+    √ passes a 500 status on server error (4 ms)
+  VendorProfilePage — null vendorData fallback
+    √ passes a default error when vendorData is null and no fetchError was returned (3 ms)
+
+PASS jsdom src/__tests__/vendors/vendorTrustScoreCard.test.js
+  VendorTrustScoreCard – score tier labels
+    √ shows "Excellent" for score >= 80 (292 ms)
+    √ shows "Excellent" at score 100 (max) (46 ms)
+    √ shows "Good" for score in range 60–79 (43 ms)
+    √ shows "Good" at score exactly 79 (upper boundary) (78 ms)
+    √ shows "Fair" for score in range 40–59 (97 ms)
+    √ shows "Fair" at score exactly 59 (86 ms)
+    √ shows "Needs Improvement" for score < 40 (30 ms)
+    √ shows "Needs Improvement" at score 0 (48 ms)
+    √ always renders the numeric score (153 ms)
+    √ renders score /100 denominator (53 ms)
+    √ progress bar aria-valuenow matches score prop (267 ms)
+  VendorTrustScoreCard – verification status
+    √ shows "Fully Verified" when isFullyVerified is true (52 ms)
+    √ shows ✓ All badge alongside Fully Verified (17 ms)
+    √ shows "Verified" when identity AND business verified but not fully (38 ms)
+    √ shows "Partially Verified" when only identity is verified (18 ms)
+    √ shows "Partially Verified" when only business is verified (43 ms)
+    √ shows "Not Verified" when all verification flags are false (48 ms)
+    √ business verification section shows Verified when isBusinessVerified is true (28 ms)
+    √ business verification section shows Unverified when false (35 ms)
+  VendorTrustScoreCard – trend indicator
+    √ shows "↑ Improving" for pvsScoreTrend="improving" (21 ms)
+    √ shows "↓ Declining" for pvsScoreTrend="declining" (21 ms)
+    √ shows "→ Stable" for pvsScoreTrend="stable" (53 ms)
+    √ defaults to "→ Stable" for an unknown trend value (78 ms)
+    √ passing undefined uses React default prop — component shows improving trend (30 ms)
+  VendorTrustScoreCard – account status badge
+    √ shows correct label for accountStatus 'new' (90 ms)
+    √ shows correct label for accountStatus 'active' (36 ms)
+    √ shows correct label for accountStatus 'suspended' (38 ms)
+    √ shows correct label for accountStatus 'pending' (41 ms)
+    √ defaults to "New Vendor" for an unrecognised account status (42 ms)
+    √ does not render the status badge when accountStatus is falsy (36 ms)
+  VendorTrustScoreCard – metric grid
+    √ renders daysOnPlatform with 'day' singular when 1 (55 ms)
+    √ renders daysOnPlatform with 'days' plural when > 1 (22 ms)
+    √ shows profile completion percentage when > 0 (24 ms)
+    √ does not show profile completion section when 0 (14 ms)
+    √ displays the total reviews count (54 ms)
+    √ defaults totalReviews to 0 when not provided (38 ms)
+
+PASS jsdom src/__tests__/vendors/vendorFormHandler.test.js
+  useVendorFormHandler — initial state
+    √ initialises formData with empty strings (79 ms)
+    √ initialises formErrors as an empty object (4 ms)
+    √ isEditMode is false when no vendorId provided (34 ms)
+    √ isEditMode is true when vendorId is provided (5 ms)
+  useVendorFormHandler — handleChange
+    √ updates the target field in formData (10 ms)
+    √ sets a validation error for the changed field (7 ms)
+    √ clears error for a field once a valid value is entered (44 ms)
+    locked fields — isBusinessVerified
+      √ does NOT update 'name' when isBusinessVerified is true (11 ms)
+    locked fields — isIdentityVerified
+      √ does NOT update 'firstName' when isIdentityVerified is true (3 ms)
+      √ does NOT update 'lastName' when isIdentityVerified is true (7 ms)
+  useVendorFormHandler — handleVninVerified
+    √ sets isIdentityVerified to true (6 ms)
+    √ populates firstName, middleName, lastName from verification data (2 ms)
+    √ clears errors for vnin, firstName, and lastName after verification (3 ms)
+    √ sets verifiedVnin from the current cleaned vnin value (3 ms)
+  useVendorFormHandler — handleCacVerified
+    √ sets isBusinessVerified to true (2 ms)
+    √ updates business name with the official CAC name (48 ms)
+    √ stores the cleaned CAC number in verifiedCacNumber (16 ms)
+    √ clears cacNumber and name errors after verification (6 ms)
+  useVendorFormHandler — isFormValid
+    √ is false on initial empty form (2 ms)
+    √ is false when required fields are missing even with some values (2 ms)
+    √ is false when there are active validation errors (3 ms)
+  useVendorFormHandler — handleSubmit guards
+    √ shows a warning toast and does NOT submit when userId is missing (11 ms)
+    √ sets formErrors and shows error toast when validation fails (4 ms)
+    √ adds vnin tamper error when isIdentityVerified but vNIN has been modified (36 ms)
+  useVendorFormHandler — edit mode prepopulation
+    √ calls transformBackendToFrontend with fetched data on success (22 ms)
+    √ does NOT call transformBackendToFrontend when not in edit mode (2 ms)
+  useVendorFormHandler — verification contract
+    √ a failed verification never locks the form (3 ms)
+    √ a 'verified' payload without a proof is treated as unverified (2 ms)
+    √ verified identity overrides the names the user typed (3 ms)
+    √ keeps the proof and last 4 for submission (6 ms)
+    √ locks middleName once identity is verified (3 ms)
+    √ VNIN wins: CAC verification never changes the identity names (3 ms)
+    √ refuses to submit a new profile without an identity proof (27 ms)
+
+PASS jsdom src/__tests__/vendors/rateVendor.test.jsx
+  RateVendor — rendering
+    √ renders the vendor name in the heading (314 ms)
+    √ renders name and email fields when user is not authenticated (100 ms)
+    √ renders 5 star rating buttons (508 ms)
+    √ renders the review textarea (16 ms)
+    √ renders the submit button (212 ms)
+    √ shows 'Processing...' and disables submit when isPosting is true (54 ms)
+    √ renders the character counter at 0/500 initially (28 ms)
+    √ updates character counter as user types (46 ms)
+  RateVendor — star rating interaction
+    √ shows 'Tap to rate' text initially (31 ms)
+    √ updates rating label when a star is clicked (65 ms)
+    √ shows hover preview when mouse enters a star (48 ms)
+    √ restores clicked rating when mouse leaves stars (238 ms)
+    √ shows 'Poor' for 1 star click (117 ms)
+  RateVendor — form field state
+    √ updates name field value as user types (37 ms)
+    √ updates email field value as user types (46 ms)
+    √ updates textarea value as user types (33 ms)
+    √ applies red border to name field when errors.user_name is set (65 ms)
+    √ applies red border to email field when errors.email is set (46 ms)
+    √ applies red border to textarea when errors.comment is set (74 ms)
+  RateVendor — successful submission
+    √ calls postReview with the correct payload on valid submit (166 ms)
+    √ resets form fields after onSuccess callback fires (126 ms)
+    √ calls onClose after 2 seconds following successful submission (89 ms)
+    √ does not throw when onClose is undefined (65 ms)
+  RateVendor — validation failure
+    √ does NOT call postReview when validation fails (65 ms)
+    √ sets field errors in state when validation fails (127 ms)
+    √ [GAP 1] toastAlert.error is NOT called on submit validation failure — validateForm() is dead code (64 ms)
+  [GAP 2] handleSubmit does not pass requireUserInfo option to validateReview
+    √ calls validateReview WITHOUT the requireUserInfo option on submit (39 ms)
+  [GAP 3] postReview onError provides no user-facing feedback
+    √ does NOT call toastAlert.error when postReview onError fires (67 ms)
+  [GAP 4] resetForm does not reset hoverRating
+    √ preserves hover highlight after form reset if mouse was over a star (193 ms)
+  [GAP 5] onClose setTimeout has no cleanup on unmount
+    √ fires onClose even after component unmounts within the 2s window (56 ms)
+  RateVendor — useReview integration
+    √ calls useReview with the vendorId prop (10 ms)
+    √ disables submit and shows Processing when isPosting is true (46 ms)
+    √ enables submit when isPosting is false (103 ms)
+
+PASS jsdom src/__tests__/vendors/CACVerificationField.test.js
+  CACVerificationField — rendering
+    √ renders the CAC input field (103 ms)
+    √ renders the 'Optional' label hint (81 ms)
+    √ explains the trust-score effect in points, not percent (48 ms)
+    √ asks for the vNIN first when identity is not verified (59 ms)
+    √ renders the help icon button (93 ms)
+  CACVerificationField — input normalization
+    √ normalizes input to uppercase (273 ms)
+    √ strips disallowed characters (only A-Z, 0-9, - are allowed) (55 ms)
+    √ limits input to 15 characters (57 ms)
+  CACVerificationField — Verify Now button
+    √ does NOT show 'Verify Now' when cacNumber is less than 7 cleaned chars (22 ms)
+    √ shows 'Verify Now' when cacNumber cleaned length is >= 7 (42 ms)
+    √ does NOT show 'Verify Now' when isBusinessVerified is true (53 ms)
+    √ does NOT show 'Verify Now' until identity is verified (42 ms)
+  CACVerificationField — API success
+    √ calls the CAC verify API endpoint when Verify Now is clicked (72 ms)
+    √ calls onCacVerified with companyName and cacNumber on success (45 ms)
+    √ shows a success toast after verification (65 ms)
+    √ shows 'Business Authenticated & Locked' status after verification with isBusinessVerified=true (18 ms)
+  CACVerificationField — API failure
+    √ shows an error message when API returns verified=false (143 ms)
+    √ shows the API error message when the request throws with a response message (78 ms)
+    √ clears the error when the user types a new value after a failed verification (149 ms)
+    √ does NOT call onCacVerified when verification fails (48 ms)
+    √ does NOT lock anything when the answer carries no proof (132 ms)
+  CACVerificationField — locked / verified state
+    √ disables the input when isBusinessVerified is true (56 ms)
+    √ shows placeholder 'Verified and Protected' when verified (30 ms)
+    √ does NOT trigger API call when already verified (clicking is blocked by disabled) (13 ms)
+    √ shows redacted CAC value in edit mode when verified (61 ms)
+  CACVerificationField — info modal
+    √ opens the info modal when the help icon is clicked (31 ms)
+    √ closes the info modal when 'Got It' is clicked (119 ms)
+    √ closes the info modal when the X button is clicked (301 ms)
+  CACVerificationField — formErrors prop
+    √ displays the formErrors.cacNumber message (31 ms)
+
+PASS jsdom src/__tests__/vendors/vendorClientDetails.test.js
+  VendorClientDetails — loading state
+    √ shows a loading spinner when isClientLoading is true (20 ms)
+    √ shows a loading spinner when isFetching is true (9 ms)
+    √ shows 'Loading vendor profile...' message in the spinner (7 ms)
+  VendorClientDetails — error state
+    √ shows error state when vendor data is null and initialError is provided (17 ms)
+    √ shows 'Profile Unavailable' when error status is not NOT_FOUND (15 ms)
+    √ shows the error message text (39 ms)
+    √ client error takes priority over initialError (6 ms)
+    √ displays the vendorId in the error card (18 ms)
+    √ displays the slug in the error card (12 ms)
+  VendorClientDetails — retry
+    √ calls refetch when 'Load from Server' button is clicked (18 ms)
+    √ disables the retry button when isLoading is true (13 ms)
+  VendorClientDetails — success state
+    √ renders VendorProfileDetail with the vendor data (42 ms)
+    √ renders the ContactCard with vendor name (22 ms)
+    √ renders the RatingCard section (9 ms)
+    √ renders the ContactVendorButton (10 ms)
+    √ does NOT show the error state when vendor data is present (35 ms)
+    √ does NOT show the loading spinner when not loading (9 ms)
+  VendorClientDetails — useVendorProfile options
+    √ passes vendorId to useVendorProfile (25 ms)
+    √ passes initialData from vendorData prop (15 ms)
+    √ sets enabled=false when vendorId is empty string (50 ms)
+
+PASS jsdom src/__tests__/vendors/vNINVerificationField.test.js (5.543 s)
+  VNINVerificationField — rendering
+    √ renders the vNIN input field (167 ms)
+    √ renders the 'Virtual NIN (vNIN)' label with required marker (95 ms)
+    √ treats a 'verified' answer without a proof as a failure (920 ms)
+    √ renders the character counter showing 0/16 initially (39 ms)
+    √ shows the USSD generation instruction (50 ms)
+  VNINVerificationField — input formatting
+    √ strips non-alphanumeric characters and uppercases input (270 ms)
+    √ inserts hyphen after first 2 chars for 3-14 char input (113 ms)
+    √ inserts two hyphens for 15-16 char input (39 ms)
+    √ limits to 16 clean characters (18 with hyphens) (118 ms)
+  VNINVerificationField — auto-verify on complete vNIN
+    √ fires the verify API call after 800ms when 16 chars are entered (58 ms)
+    √ does NOT fire before 800ms debounce (47 ms)
+    √ does NOT auto-verify in edit mode (47 ms)
+    √ does NOT auto-verify when already isIdentityVerified (27 ms)
+    √ does NOT re-verify the same vNIN that was already verified (lastVerifiedVnin guard) (63 ms)
+  VNINVerificationField — success
+    √ calls onVninVerified with the correct identity data (70 ms)
+    √ shows a success toast after verification (64 ms)
+    √ shows 'Identity Authenticated & Locked' status when isIdentityVerified is true (30 ms)
+  VNINVerificationField — failure
+    √ calls onVninVerified with isIdentityVerified=false on failure (38 ms)
+    √ displays the error message in the field when verification fails (122 ms)
+    √ displays the API error message when request throws with a response (43 ms)
+    √ clears the error message when the user types a new value (167 ms)
+  VNINVerificationField — locked state
+    √ disables the input when isIdentityVerified is true (32 ms)
+    √ shows 'Verified and Protected' placeholder when verified (66 ms)
+    √ shows redacted vNIN in edit mode when verified (17 ms)
+    √ shows only the last 4 characters once verified (86 ms)
+  VNINVerificationField — formErrors
+    √ displays formErrors.vnin message below the input (16 ms)
+  VNINVerificationField — info modal
+    √ opens the NIMC help modal when the help icon is clicked (179 ms)
+    √ closes the modal when 'Got It' is clicked (135 ms)
+
+PASS jsdom src/__tests__/vendors/vendorCard.test.js
+  VendorCard — identity and navigation
+    √ renders the vendor name as a heading (530 ms)
+    √ links to /vendor/<slug> and the slug ends with the vendor id (62 ms)
+    √ describes the link with name, category and location (69 ms)
+  VendorCard — category label
+    √ shows the human label for a known category value (18 ms)
+    √ falls back to the raw value with underscores replaced (55 ms)
+    √ falls back to 'Vendor' when the category is missing (37 ms)
+  VendorCard — location
+    √ shows city and state (32 ms)
+    √ shows only the state when city is null (the API returns null for an empty city) (117 ms)
+  VendorCard — trust badges
+    √ shows Verified when the identity is verified (51 ms)
+    √ hides Verified when the identity is not verified (46 ms)
+    √ CAC badge for a verified business (49 ms)
+    √ CAC badge for a registered business (35 ms)
+    √ CAC badge for neither flag (12 ms)
+    √ CAC badge for null/undefined flags (API null) (95 ms)
+  VendorCard — price (minPrice is stored in kobo)
+    √ passes the right kobo value to the formatter when minPrice is a plain number (current API shape) (53 ms)
+    √ passes the right kobo value to the formatter when minPrice is a legacy NullInt32 {Valid:true} (58 ms)
+    √ passes the right kobo value to the formatter when minPrice is a legacy NullInt32 {Valid:false} (30 ms)
+    √ passes the right kobo value to the formatter when minPrice is null (42 ms)
+    √ passes the right kobo value to the formatter when minPrice is undefined (11 ms)
+    √ shows 'From' and the formatted price when a price exists (17 ms)
+    √ shows 'Request a quote' when there is no price (61 ms)
+  VendorCard — rating and trust score
+    √ shows the average review rating out of 5 and the review count (51 ms)
+    √ shows the New pill and no stars with no average yet (108 ms)
+    √ shows the New pill and no stars with no reviews (14 ms)
+    √ shows the New pill and no stars with a high trust score but no reviews (58 ms)
+    √ shows the New pill and no stars with missing metrics (89 ms)
+    √ passes the 0-100 trust score to the score bar unchanged (36 ms)
+  VendorCard — image and fallback
+    √ renders the image with descriptive alt text (58 ms)
+    √ falls back to the initial when the image fails to load (82 ms)
+    √ shows the initial when imageURL is empty (27 ms)
+    √ shows the initial when imageURL is null (50 ms)
+    √ uppercases the fallback initial (70 ms)
+  VendorCard — resilience
+    √ renders a minimal vendor without throwing (51 ms)
+
+PASS jsdom src/__tests__/vendors/vendorTransformers.test.js
+  transformBackendToFrontend
+    null / falsy input
+      √ returns null when called with null (2 ms)
+      √ returns null when called with undefined (1 ms)
+    kobo → naira conversion (minPrice)
+      √ converts kobo integer to naira string: 7500000 → '75000' (2 ms)
+      √ converts 100 kobo → '1' naira (1 ms)
+      √ rounds fractional kobo correctly: 150 kobo → '2' naira (Math.round) (24 ms)
+      √ returns empty string when minPrice is null (1 ms)
+      √ returns empty string when minPrice is undefined (4 ms)
+      √ converts 0 kobo → '0' naira (1 ms)
+    null → empty string coercion (nullToEmpty)
+      √ converts all null string fields to empty string (3 ms)
+      √ preserves non-null string values (2 ms)
+    boolean fields
+      √ defaults isIdentityVerified to false when missing (4 ms)
+      √ defaults isBusinessVerified to false when missing (2 ms)
+      √ preserves true values for verification flags (5 ms)
+    tamper-proof snapshots
+      √ never copies the vNIN into the form: only its last 4 characters (5 ms)
+      √ sets verifiedVnin to empty string when isIdentityVerified is false (1 ms)
+      √ sets verifiedCacNumber to string(cacNumber) when isBusinessVerified is true (1 ms)
+      √ sets verifiedCacNumber to empty string when isBusinessVerified is false (1 ms)
+    status field
+      √ defaults status to 'active' when missing (1 ms)
+      √ preserves provided status value (1 ms)
+    id passthrough
+      √ passes the id field through unchanged (1 ms)
+  prepareVendorPayload
+    userId guard
+      √ throws an error if userId is missing (69 ms)
+      √ throws an error if userId is empty string (2 ms)
+    naira parsing (parseNaira)
+      √ converts string naira '75000' to integer 75000 (1 ms)
+      √ strips non-numeric chars from price string '₦75,000.50' (1 ms)
+      √ returns 0 for null/empty minPrice (14 ms)
+      √ returns 0 for non-numeric minPrice string (1 ms)
+    imageURL resolution
+      √ uses provided imageUrl argument over formData.imageURL (4 ms)
+      √ falls back to formData.imageURL when imageUrl arg is null (1 ms)
+      √ uses empty string when both imageUrl and formData.imageURL are missing (12 ms)
+    CREATE mode (isEditMode = false)
+      √ never sends the raw vNIN, only the signed proofs (8 ms)
+      √ drops an unverified CAC number (2 ms)
+      √ passes isIdentityVerified correctly (1 ms)
+      √ passes isBusinessVerified correctly
+    EDIT mode (isEditMode = true)
+      √ uses verifiedCacNumber over cacNumber for the cacNumber field (1 ms)
+      √ falls back to cacNumber when verifiedCacNumber is empty in edit mode (1 ms)
+    common fields
+      √ trims the business name
+      √ sets ownerId to the provided userId
+      √ defaults status to 'active' if not provided (2 ms)
+  redactSensitiveField
+    empty / falsy values
+      √ returns empty string for null (1 ms)
+      √ returns empty string for undefined (2 ms)
+      √ returns empty string for empty string
+    vNIN type (default)
+      √ redacts a 16-char vNIN keeping first 3 and last 4 chars (1 ms)
+      √ uses *** fallback for strings shorter than 8 chars (2 ms)
+      √ handles exactly 8-char string (2 ms)
+    CAC type
+      √ redacts a CAC number keeping first 3 and last 4 chars (5 ms)
+      √ uses *** fallback for CAC strings shorter than 6 chars (1 ms)
+    fallback for unknown types
+      √ uses the generic first-3/last-4 redaction for strings >= 8 chars (1 ms)
+      √ returns *** for short strings with unknown type (1 ms)
+    non-string values are coerced to string
+      √ handles numeric value (1 ms)
+
+PASS jsdom src/__tests__/vendors/vendorUtils.test.js
+  getVendorData
+    startingPrice derivation
+      √ uses minPrice.Int32 when minPrice.Valid is true (2 ms)
+      √ returns 0 when minPrice.Valid is false
+      √ uses numeric minPrice directly when provided as a number (20 ms)
+      √ returns 0 when minPrice is undefined (2 ms)
+    ratingOutOf5 derivation
+      √ formats avgRating to one decimal when reviews exist (2 ms)
+      √ returns '0.0' for a new vendor with no reviews (6 ms)
+      √ formats avgRating of 4.25 with reviews to '4.3' regardless of pvsScore (5 ms)
+      √ returns '0.0' when avgRating is undefined (2 ms)
+      √ returns '0.0' when avgRating is null or reviewCount is 0 (1 ms)
+    isPremium flag
+      √ is true when pvsScore is exactly 80 (8 ms)
+      √ is true when pvsScore is above 80 (1 ms)
+      √ is false when pvsScore is 79 (2 ms)
+      √ is false when pvsScore is 0 (2 ms)
+    isNewVendor flag
+      √ is true when bookingsCompleted is 0 (1 ms)
+      √ is false when bookingsCompleted is 1 or more (7 ms)
+      √ is true when bookingsCompleted is undefined (defaults to === 0 check) (3 ms)
+  isMobileDevice
+    √ returns true for an iPhone user agent (2 ms)
+    √ returns true for an Android user agent (1 ms)
+    √ returns true for an iPad user agent (21 ms)
+    √ returns false for a desktop Chrome user agent (2 ms)
+    √ returns false when window is undefined (SSR environment) (4 ms)
+  formatMemberSince
+    √ formats a valid ISO date string to 'Month Year' (175 ms)
+    √ formats a date-only string correctly (1 ms)
+    √ returns 'Unknown' for null (1 ms)
+    √ returns 'Unknown' for undefined
+    √ returns 'Unknown' for an empty string
+    √ returns 'Unknown' for an invalid date string (1 ms)
+    √ includes both month and year in the output (1 ms)
+
+PASS jsdom src/__tests__/vendors/vendorSubmission.test.js
+  useVendorSubmission — initial state
+    √ initialises with isSubmitting = false (41 ms)
+    √ initialises with uploadProgress = 0 (7 ms)
+    √ initialises with submitError = null (5 ms)
+    √ exposes handleSubmit as a function (3 ms)
+  useVendorSubmission — CREATE mode
+    √ calls handleVendorImageUpload when an imageFile is provided (9 ms)
+    √ calls registerMutation.mutateAsync (not update) in create mode (16 ms)
+    √ calls onSuccess callback after successful registration (10 ms)
+    √ resets isSubmitting to false after successful submission (4 ms)
+    √ resets uploadProgress to 0 after submission completes (3 ms)
+    √ uses formData.imageURL when no imageFile is provided (3 ms)
+  useVendorSubmission — UPDATE mode
+    √ calls updateMutation.mutateAsync (not register) in update mode (4 ms)
+    √ attempts to delete old image after successful update with new image (3 ms)
+    √ does NOT delete old image when old and new URLs are the same (3 ms)
+    √ does NOT delete old image when no new imageFile is provided (2 ms)
+    √ logs warning but does not throw when old image deletion fails (5 ms)
+  useVendorSubmission — error handling
+    √ rolls back new image when mutation fails after upload (4 ms)
+    √ does NOT rollback when image upload itself fails (no URL to rollback) (33 ms)
+    √ sets submitError when mutation throws (7 ms)
+    √ shows toast error with response message when API returns error detail (5 ms)
+    √ shows network error message when request is made but no response (3 ms)
+    √ does not call onSuccess when mutation fails (6 ms)
+    √ resets isSubmitting to false even when an error occurs (3 ms)
+
+PASS jsdom src/__tests__/vendors/vendorProfileDetail.test.js (6.614 s)
+  VendorProfileDetail — null vendor guard
+    √ renders 'No vendor data available.' when vendor is null (247 ms)
+    √ renders an alert role element for the null state (188 ms)
+    √ does NOT render the profile sections when vendor is null (19 ms)
+  VendorProfileDetail — full render
+    √ renders without crashing with valid vendor data (303 ms)
+    √ renders all major sections (196 ms)
+    √ renders the NDPR compliance footer note (138 ms)
+  ProfileHeader
+    √ renders the vendor business name (9 ms)
+    √ renders the category with underscores replaced by spaces (32 ms)
+    √ renders the rating out of 5 (30 ms)
+    √ renders the review count (88 ms)
+    √ renders the pvsScore as performance score (13 ms)
+    √ shows Premium badge when pvsScore >= 80 (14 ms)
+    √ does NOT show Premium badge when pvsScore < 80 (12 ms)
+    √ shows New badge when bookingsCompleted === 0 (9 ms)
+    √ does NOT show New badge when bookingsCompleted > 0 (18 ms)
+    √ falls back to firstName + lastName when name is missing (9 ms)
+  VerificationSection
+    √ shows 'Verified' when isIdentityVerified is true (15 ms)
+    √ shows 'Pending' when isIdentityVerified is false (10 ms)
+    √ shows 'Registered' when isBusinessRegistered is true (9 ms)
+    √ shows 'Independent' when isBusinessRegistered is false (28 ms)
+    √ returns null when vendor is null (54 ms)
+  KeyMetricsSection
+    √ renders the location row with city and state (30 ms)
+    √ renders the trust score (93 ms)
+    √ renders the review count with correct singular/plural (61 ms)
+    √ renders 'Unknown City' and 'Unknown State' as fallbacks (16 ms)
+    √ renders 'Unknown' for member since when createdAt is missing (63 ms)
+    √ formats the starting price using formatPrice (22 ms)
+  AboutSection
+    √ renders the vendor description when provided (42 ms)
+    √ renders fallback text when description is missing (15 ms)
+    √ renders all 4 service highlights (27 ms)
+    √ renders 'About Vendor' heading using vendor name (26 ms)
+    √ uses 'the Vendor' as fallback when vendor name is missing (28 ms)
+    √ replaces underscores in category for the fallback description (43 ms)
+  ContactSection
+    √ returns null when vendor is null (5 ms)
+    √ renders the 'Get in Touch' heading (24 ms)
+    √ renders 'Show Number' button when NOT on mobile (16 ms)
+    √ renders 'Call Now' button when on mobile (9 ms)
+    √ calls onReveal when the show button is clicked (38 ms)
+    √ never renders an email link, even if the vendor object carries an email (14 ms)
+    √ does NOT render email section when vendor.email is missing (9 ms)
+    √ shows masked phone number when showPhoneNumber is false (10 ms)
+    √ shows the revealed number as a tel link (90 ms)
+    √ never shows a number that arrived in the page data, only a revealed one (53 ms)
+    √ hides the phone row when the vendor has no phone (15 ms)
+    √ shows Call Now on mobile and a busy state while loading (118 ms)
+    √ explains a AUTH_REQUIRED reveal error (25 ms)
+    √ explains a RATE_LIMITED reveal error (39 ms)
+    √ explains a UNAVAILABLE reveal error (12 ms)
+    √ does NOT render phone section when vendor.phoneNumber is missing (4 ms)
+  ActionButtons
+    √ renders the 'Request Quote' button (7 ms)
+    √ has no mailto link: inquiries go through the quote modal (40 ms)
+    √ opens the contact modal when 'Request Quote' is clicked (34 ms)
+    √ closes the contact modal when close button is clicked (17 ms)
+    √ aria-expanded is false when modal is closed (50 ms)
+    √ aria-expanded is true when modal is open (64 ms)
+  VendorProfileDetail — phone reveal toggle
+    √ shows masked phone by default (166 ms)
+    √ reveals the number only after 'Show Number' is clicked (desktop) (510 ms)
+    √ asks a signed-out visitor to sign in when the reveal is refused (312 ms)
+    √ shows the rate-limit message on 429 (308 ms)
+
+PASS jsdom src/__tests__/vendors/vendorManagementView.test.js
+  VendorManagementView – loading state
+    √ renders LoadingSpinner when user is null (14 ms)
+    √ renders LoadingSpinner when user exists but has no id (5 ms)
+    √ does NOT render vendor content while loading (3 ms)
+  VendorManagementView – activeView "vendor"
+    √ renders VendorAnalyticsDashboard when user has a vendorId (2 ms)
+    √ passes vendorId to VendorAnalyticsDashboard (4 ms)
+    √ passes userId to VendorAnalyticsDashboard (10 ms)
+    √ falls back to VendorRegistrationView when isVendor but vendorId is null (7 ms)
+    √ pre-fills userId on registration view for vendor-without-id fallback (7 ms)
+  VendorManagementView – activeView "vendor-register"
+    √ renders VendorRegistrationView (4 ms)
+    √ passes vendorId to VendorRegistrationView (edit mode) (10 ms)
+    √ passes vendorId=none for a new vendor (create mode) (3 ms)
+    √ passes userId to VendorRegistrationView (3 ms)
+  VendorManagementView – unknown/default activeView
+    √ shows VendorAnalyticsDashboard as fallback when user has vendorId (3 ms)
+    √ shows VendorRegistrationView as fallback when user has no vendorId (10 ms)
+    √ passes correct vendorId in fallback analytics case (4 ms)
+  VendorManagementView – onViewChange passthrough
+    √ passes onViewChange to VendorAnalyticsDashboard (for Edit Profile button) (4 ms)
+
+PASS jsdom src/__tests__/vendors/vendorValidate.test.js
+  hasValidationErrors
+    √ returns false for an empty errors object (1 ms)
+    √ returns true when at least one error key exists (2 ms)
+    √ returns true for multiple errors (1 ms)
+  vendorRegistrationValidate (CREATE mode)
+    √ returns no errors for a fully valid form (2 ms)
+    business name
+      √ errors when name is missing (1 ms)
+      √ errors when name is only whitespace (1 ms)
+      √ errors when name is less than 3 characters (1 ms)
+      √ accepts a name of exactly 3 characters (1 ms)
+    identity names
+      √ errors when firstName is missing (1 ms)
+      √ errors when lastName is missing (1 ms)
+    vNIN (create mode only)
+      √ errors when vnin is empty (1 ms)
+      √ errors when vNIN cleaned length is not 16 (1 ms)
+      √ errors when vNIN does not match format (XX + 12 digits + XX) (1 ms)
+      √ accepts a correctly formatted vNIN (1 ms)
+    CAC number (optional, format checked)
+      √ does not error when cacNumber is empty (optional) (1 ms)
+      √ errors when cacNumber is provided but invalid format
+      √ accepts a valid RC format CAC number
+      √ accepts a valid BN format CAC number (1 ms)
+      √ accepts a CAC with dashes (cleaned to RC format)
+    category and state
+      √ errors when category is missing
+      √ errors when state is missing (2 ms)
+    phone number formats
+      √ errors when phoneNumber is empty (1 ms)
+      √ accepts 11-digit number starting with 0 (1 ms)
+      √ accepts 10-digit number starting with 7, 8, or 9
+      √ accepts 13-digit number starting with 234
+      √ errors for a clearly invalid phone number (1 ms)
+    minimum price
+      √ errors when minPrice is empty (2 ms)
+      √ errors when minPrice is non-numeric (1 ms)
+      √ errors when minPrice is below 1000 (1 ms)
+      √ accepts minPrice of exactly 1000 (1 ms)
+      √ accepts minPrice above 1000 (2 ms)
+    image (required in create mode)
+      √ errors when imageURL is missing in create mode (1 ms)
+      √ does not error when imageURL is provided
+    description (optional, max 500 chars)
+      √ does not error for empty description (1 ms)
+      √ errors when description exceeds 500 characters (2 ms)
+      √ accepts description of exactly 500 characters
+  vendorRegistrationValidate (EDIT mode)
+    √ skips vNIN validation in edit mode
+    √ skips firstName/lastName validation when isIdentityVerified is true in edit mode (1 ms)
+    √ still requires firstName/lastName in edit mode when NOT identity verified (1 ms)
+    √ skips CAC validation when isBusinessVerified is true in edit mode (1 ms)
+    √ does not require imageURL in edit mode
+    √ still validates category and state in edit mode (2 ms)
+  validateVendorField
+    vnin
+      √ returns error when vnin is empty in create mode (1 ms)
+      √ returns error when vnin is less than 16 cleaned chars
+      √ returns null for a valid 16-char vNIN
+      √ returns null (skipped) in edit mode regardless of value (1 ms)
+    cacNumber
+      √ returns null when CAC is empty (it is optional) (1 ms)
+      √ returns error for an invalid CAC format
+      √ returns null for a valid RC format (1 ms)
+      √ returns null in edit mode (always skipped) (3 ms)
+    phoneNumber
+      √ returns error for empty phone
+      √ returns error for a 5-digit number (1 ms)
+      √ returns null for a valid 11-digit number (1 ms)
+    name / firstName / lastName
+      √ returns error when name is empty
+      √ returns error when name is 1 character (1 ms)
+      √ returns null when name has 2+ characters (1 ms)
+      √ returns error for empty firstName
+      √ returns error for empty lastName (1 ms)
+    minPrice
+      √ returns error for non-numeric value
+      √ returns error when price is below 1000
+      √ returns null for exactly 1000 (1 ms)
+      √ returns null for a valid price
+    description
+      √ returns error when description exceeds 500 characters (1 ms)
+      √ returns null for an empty description
+      √ returns null for exactly 500 characters (1 ms)
+    unknown field
+      √ returns null for an unrecognised field name
+
+PASS jsdom src/__tests__/vendors/vendorListingPage.test.js
+  VendorListingPage — loading states
+    √ shows the full-screen loading spinner on first-page load (isLoading + no data) (22 ms)
+    √ does NOT show the full-screen spinner when data is already present even if fetching (11 ms)
+    √ passes generalLoading=true to VendorListingView when isFetching (7 ms)
+  VendorListingPage — error state
+    √ shows the error UI when isError is true and there is no data (15 ms)
+    √ shows a fallback error message when error.message is missing (16 ms)
+    √ does NOT show the error UI when there is data (partial error) (14 ms)
+    √ 'Try Again' button resets page to 1 and filters to initial (6 ms)
+    √ 'Clear Filters' button resets only the filters (not the retry logic) (17 ms)
+  VendorListingPage — main render
+    √ renders HeroUI and VendorListingView in the main content area (5 ms)
+    √ passes the correct vendor count to VendorListingView (7 ms)
+    √ passes correct totalCount from pagination (7 ms)
+  VendorListingPage — handleRegisterClick
+    √ calls router.push('/dashboard') when register button is clicked (8 ms)
+  VendorListingPage — handleLoadMore
+    √ increments page when hasMoreVendors is true and not fetching (15 ms)
+    √ does NOT increment page when isFetching is true (5 ms)
+    √ does NOT show Load More button when hasMore is false (5 ms)
+  VendorListingPage — filter/search resets page
+    √ resets page to 1 when a filter change is triggered by child component (7 ms)
+
+PASS jsdom src/__tests__/vendors/vendorSlugHelper.test.js
+  generateVendorSlug
+    happy path
+      √ generates a slug in the format 'name-uuid' (2 ms)
+      √ lowercases the vendor name (2 ms)
+      √ replaces spaces with hyphens (1 ms)
+      √ removes special characters (1 ms)
+      √ collapses multiple hyphens into one
+      √ truncates the name portion to 50 characters
+      √ appends the full vendor UUID at the end (1 ms)
+    invalid / missing data
+      √ returns 'unknown-vendor' when vendor is null (1 ms)
+      √ returns 'unknown-vendor' when vendor is undefined (1 ms)
+      √ returns 'unknown-vendor' when vendor has no id
+      √ returns 'unknown-vendor' when vendor has no name (1 ms)
+      √ returns 'unknown-vendor' for an empty object
+    edge cases
+      √ handles a vendor name that is only special characters (1 ms)
+      √ handles numeric-only vendor name (3 ms)
+  parseSlugToId
+    UUID extraction
+      √ extracts a valid UUID from a full vendor slug (2 ms)
+      √ extracts UUID when it appears at the start of the string (1 ms)
+      √ extracts UUID from a slug with extra text before it (1 ms)
+      √ is case-insensitive for UUID hex characters
+    MongoDB 24-char ID fallback
+      √ extracts a 24-char hex MongoDB ID when no UUID is found (1 ms)
+    returns null cases
+      √ returns null when slug has no valid ID (1 ms)
+      √ returns null for an empty string (1 ms)
+      √ returns null for null input (1 ms)
+      √ returns null for undefined input (1 ms)
+      √ returns null for a plain word with no ID
+      √ returns null for a number-like string that is not a UUID (1 ms)
+  isValidVendorSlug
+    √ returns true for a slug containing a valid UUID (2 ms)
+    √ returns true for a slug containing a MongoDB 24-char ID (1 ms)
+    √ returns false for a slug with no valid ID
+    √ returns false for an empty string (1 ms)
+    √ returns false for null
+    √ returns false for undefined (1 ms)
+
+Test Suites: 17 passed, 17 total
+Tests:       537 passed, 537 total
+Snapshots:   0 total
+Time:        10.635 s
