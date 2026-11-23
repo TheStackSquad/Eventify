@@ -14,7 +14,8 @@ const React = require("react");
 const { render, screen, fireEvent } = require("@testing-library/react");
 
 const SubscriptionCard =
-  require("@/components/dashboard/vendorComponents/vendorAnalytics/subscriptionCard").default;
+   require("../../components/dashboard/vendorComponents/vendorAnalytics/subscriptionCard")
+     .default;
 
 const {
   MOCK_NOW,
@@ -26,9 +27,20 @@ const {
   makeExpiringTodaySubscription,
 } = require("@/__fixtures__/dashboardFixtures");
 
-jest.mock("@/utils/navigation", () => ({ redirectTo: jest.fn() }));
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+    prefetch: jest.fn(),
+  }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/subscription",
+}));
 
-const { redirectTo } = require("@/utils/navigation");
+jest.mock("../../utils/navigation", () => ({ redirectTo: jest.fn() }));
+
+const { redirectTo } = require("../../utils/navigation");
 
 // ─────────────────────────────────────────────────────────────────
 // window.location setup (component does href assignment on button click)
@@ -92,7 +104,9 @@ describe("SubscriptionCard – active state", () => {
 
   it("does NOT show the amber warning banner", () => {
     render(<SubscriptionCard subscription={makeSubscription()} />);
-    expect(screen.queryByText(/expires in/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Renew now to keep your premium features/i),
+    ).not.toBeInTheDocument();
   });
 
   // ── 8-day boundary (just outside warning window) ────────────────
@@ -118,7 +132,9 @@ describe("SubscriptionCard – expiring soon state", () => {
   it("shows amber warning banner with day count", () => {
     render(<SubscriptionCard subscription={makeExpiringSoonSubscription()} />);
     // 5 days remain: "expires in 5 days"
-    expect(screen.getByText(/expires in 5 days/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Renew now to keep your premium features/i),
+    ).toHaveTextContent(/expires in 5 days/i);
   });
 
   it("uses singular 'day' when exactly 1 day remains", () => {

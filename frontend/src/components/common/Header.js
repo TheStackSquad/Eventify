@@ -364,19 +364,27 @@ export default function Header() {
     }
   }, [menuOpen, closeMobileFeatures, closeMobileBenefit]);
 
-  const handleMenuToggle = () => {
-    setMenuOpen((prev) => {
-      const next = !prev;
+  // const handleMenuToggle = () => {
+  //   setMenuOpen((prev) => {
+  //     const next = !prev;
 
-      if (!next) {
-        closeMobileFeatures();
-        closeMobileBenefit();
+  //     if (!next) {
+  //       closeMobileFeatures();
+  //       closeMobileBenefit();
+  //       closeFeatures();
+  //       closeBenefit();
+  //     }
+
+  //     return next;
+  //   });
+  // };
+
+  const handleMenuToggle = () => {
+      if (menuOpen) {
         closeFeatures();
         closeBenefit();
       }
-
-      return next;
-    });
+      setMenuOpen((prev) => !prev);
   };
 
   const handleProfileClick = () => {

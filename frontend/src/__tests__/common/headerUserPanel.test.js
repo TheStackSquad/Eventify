@@ -19,7 +19,12 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
+
+// Header renders UserPanel twice (desktop and mobile); only CSS hides one, and jsdom ignores CSS.
+const byText = (...args) => screen.getAllByText(...args)[0];
+const byRole = (...args) => screen.getAllByRole(...args)[0];
 // ─── Standard mocks (mirrors header.test.js setup) ───────────────────────────
+
 
 jest.mock(
   "next/link",
