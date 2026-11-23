@@ -663,22 +663,24 @@ it("disables SHARE button and shows SHARED after click", async () => {
   });
 });
 
-it("disables ADD TO CALENDAR and shows ADDED after click", async () => {
-  URL.createObjectURL = jest.fn().mockReturnValue("blob:fake");
-  URL.revokeObjectURL = jest.fn();
-  jest.spyOn(document.body, "appendChild").mockImplementation(() => {});
-  jest.spyOn(document.body, "removeChild").mockImplementation(() => {});
+  it("disables ADD TO CALENDAR and shows ADDED after click", async () => {
+    URL.createObjectURL = jest.fn().mockReturnValue("blob:fake");
+    URL.revokeObjectURL = jest.fn();
+    // Stub the anchor click (jsdom cannot navigate), but NOT document.body.appendChild:
+    // Testing Library uses its return value as the render container.
+    jest
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
 
-  render_();
-  fireEvent.click(screen.getByRole("button", { name: /add to calendar/i }));
+    render_();
+    fireEvent.click(screen.getByRole("button", { name: /add to calendar/i }));
 
-  // Advance fake timers so the async action handler resolves
-  await act(async () => {
-    jest.advanceTimersByTime(100);
+    await act(async () => {
+      jest.advanceTimersByTime(100);
+    });
+
+    expect(screen.getByRole("button", { name: /added/i })).toBeDisabled();
   });
-
-  expect(screen.getByRole("button", { name: /added/i })).toBeDisabled();
-});
   // ── Memoization ───────────────────────────────────────────────────────────
 
   it("does not re-render when unrelated props stay the same", () => {

@@ -863,4 +863,26 @@ describe("TicketPage", () => {
     // Either the suspense fallback or the query loading spinner is visible
     expect(screen.getByTestId("loading-spinner")).toBeInTheDocument();
   });
+
+  // ------------------ Real Recovery Test
+  it("mounts the children again 5 seconds after dismiss", () => {
+    jest.useFakeTimers();
+    let shouldThrow = true;
+    const Flaky = () => {
+      if (shouldThrow) throw new Error("pdf generation failed");
+      return <p>recovered</p>;
+    };
+    render(
+      <TicketActionBoundary ticketId={ticketId}>
+        <Flaky />
+      </TicketActionBoundary>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /dismiss error/i }));
+    shouldThrow = false;
+    act(() => {
+      jest.advanceTimersByTime(5000);
+    });
+    expect(screen.getByText("recovered")).toBeInTheDocument();
+    jest.useRealTimers();
+  });
 });

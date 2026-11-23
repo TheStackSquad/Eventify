@@ -60,7 +60,7 @@ export default function DashboardSwitcher({
   };
 
   return (
-    <div className="p-6 lg:p-10">
+    <div className="p-3 pb-24 sm:p-6 sm:pb-6 lg:p-10">
       <AnimatePresence mode="wait">
         {activeView === "events" && (
           <motion.div key="events" {...pageTransition}>

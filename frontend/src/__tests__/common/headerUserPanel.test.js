@@ -207,14 +207,14 @@ describe("UserPanel — guest state", () => {
   it("shows 'Welcome!' heading in the panel when not logged in", () => {
     render(<Header />);
     openGuestPanel();
-    expect(screen.getByText("Welcome!")).toBeInTheDocument();
+    expect(byText("Welcome!")).toBeInTheDocument();
   });
 
   it("shows 'Sign in to unlock all features' prompt", () => {
     render(<Header />);
     openGuestPanel();
     expect(
-      screen.getByText(/Sign in to unlock all features/i),
+      byText(/Sign in to unlock all features/i),
     ).toBeInTheDocument();
   });
 
@@ -265,25 +265,25 @@ describe("UserPanel — logged-in state", () => {
   it("displays the user's name in the panel", () => {
     render(<Header />);
     openPanel();
-    expect(screen.getByText("Amara Okonkwo")).toBeInTheDocument();
+    expect(byText("Amara Okonkwo")).toBeInTheDocument();
   });
 
   it("displays the user's email in the panel", () => {
     render(<Header />);
     openPanel();
-    expect(screen.getByText("amara@test.com")).toBeInTheDocument();
+    expect(byText("amara@test.com")).toBeInTheDocument();
   });
 
   it("shows the 'Active' status badge", () => {
     render(<Header />);
     openPanel();
-    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(byText("Active")).toBeInTheDocument();
   });
 
   it("renders the user's role badge when role is provided", () => {
     render(<Header />);
     openPanel();
-    expect(screen.getByText("vendor")).toBeInTheDocument();
+    expect(byText("vendor")).toBeInTheDocument();
   });
 
   it("does NOT render a role badge when user.role is absent", () => {
@@ -311,7 +311,7 @@ describe("UserPanel — logged-in state", () => {
   it("renders a Dashboard link in the panel", () => {
     render(<Header />);
     openPanel();
-    expect(screen.getByRole("link", { name: /dashboard/i })).toHaveAttribute(
+    expect(byRole("link", { name: /dashboard/i })).toHaveAttribute(
       "href",
       "/dashboard",
     );
@@ -320,7 +320,7 @@ describe("UserPanel — logged-in state", () => {
   it("renders a Settings link pointing to notification settings", () => {
     render(<Header />);
     openPanel();
-    expect(screen.getByRole("link", { name: /settings/i })).toHaveAttribute(
+    expect(byRole("link", { name: /settings/i })).toHaveAttribute(
       "href",
       "/settings/notifications",
     );
@@ -330,14 +330,14 @@ describe("UserPanel — logged-in state", () => {
     render(<Header />);
     openPanel();
     expect(
-      screen.getByRole("button", { name: /Email Preferences/i }),
+      byRole("button", { name: /Email Preferences/i }),
     ).toBeInTheDocument();
   });
 
   it("renders the Logout button", () => {
     render(<Header />);
     openPanel();
-    expect(screen.getByRole("button", { name: /logout/i })).toBeInTheDocument();
+    expect(byRole("button", { name: /logout/i })).toBeInTheDocument();
   });
 });
 
@@ -368,7 +368,7 @@ describe("UserPanel — profile image", () => {
     mockUseAuth.mockReturnValue(loggedInAuth({ name: undefined }));
     render(<Header />);
     openPanel();
-    expect(screen.getByText("User")).toBeInTheDocument();
+    expect(byText("User")).toBeInTheDocument();
   });
 });
 
@@ -388,7 +388,7 @@ describe("UserPanel — open and close", () => {
   it("panel becomes visible after ProfileCircle click", () => {
     render(<Header />);
     openPanel();
-    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(byText("Active")).toBeInTheDocument();
   });
 
   it("clicking ProfileCircle again closes the panel", () => {
@@ -410,7 +410,7 @@ describe("UserPanel — open and close", () => {
   it("Dashboard link click closes the panel", () => {
     render(<Header />);
     openPanel();
-    fireEvent.click(screen.getByRole("link", { name: /dashboard/i }));
+    fireEvent.click(byRole("link", { name: /dashboard/i }));
     expect(screen.queryByText("Active")).toBeNull();
   });
 });
@@ -425,14 +425,14 @@ describe("UserPanel — Email Preferences", () => {
   it("closes the user panel when Email Preferences is clicked", () => {
     render(<Header />);
     openPanel();
-    fireEvent.click(screen.getByRole("button", { name: /Email Preferences/i }));
+    fireEvent.click(byRole("button", { name: /Email Preferences/i }));
     expect(screen.queryByText("Active")).toBeNull();
   });
 
   it("opens the email preferences modal when Email Preferences is clicked", () => {
     render(<Header />);
     openPanel();
-    fireEvent.click(screen.getByRole("button", { name: /Email Preferences/i }));
+    fireEvent.click(byRole("button", { name: /Email Preferences/i }));
     expect(screen.getByTestId("email-pref-modal")).toBeInTheDocument();
   });
 });

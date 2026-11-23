@@ -230,7 +230,7 @@ describe("AboutPartnerCard", () => {
     render(<AboutPartnerCard name="Paystack" logo={MockLogo} />);
     const logo = screen.getByTestId("partner-logo");
     // Logo should receive the transition/sizing class string
-    expect(logo.className).toMatch(/transition-colors/);
+    expect(logo.getAttribute("class")).toMatch(/transition-colors/);
   });
 });
 

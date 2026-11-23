@@ -26,25 +26,20 @@ const {
   makeExpiringTodaySubscription,
 } = require("@/__fixtures__/dashboardFixtures");
 
+jest.mock("@/utils/navigation", () => ({ redirectTo: jest.fn() }));
+
+const { redirectTo } = require("@/utils/navigation");
+
 // ─────────────────────────────────────────────────────────────────
 // window.location setup (component does href assignment on button click)
 // ─────────────────────────────────────────────────────────────────
 
-let mockLocation;
-let locationSpy;
-
 beforeEach(() => {
   jest.useFakeTimers();
   jest.setSystemTime(new Date(MOCK_NOW));
-
-  mockLocation = { href: "" };
-  locationSpy = jest
-    .spyOn(window, "location", "get")
-    .mockReturnValue(mockLocation);
 });
 
 afterEach(() => {
-  locationSpy.mockRestore();
   jest.useRealTimers();
   jest.clearAllMocks();
 });
@@ -157,7 +152,7 @@ describe("SubscriptionCard – expiring soon state", () => {
   it("navigates to renewal page on Renew Now click", () => {
     render(<SubscriptionCard subscription={makeExpiringSoonSubscription()} />);
     fireEvent.click(screen.getByRole("button", { name: /renew now/i }));
-    expect(mockLocation.href).toBe("/dashboard/subscription/renew");
+    expect(redirectTo).toHaveBeenCalledWith("/dashboard/subscription/renew");
   });
 });
 
@@ -194,7 +189,7 @@ describe("SubscriptionCard – expired state", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /reactivate subscription/i }),
     );
-    expect(mockLocation.href).toBe("/dashboard/subscription/renew");
+    expect(redirectTo).toHaveBeenCalledWith("/dashboard/subscription/renew");
   });
 
   it("shows expiry distance text (e.g. '5 days ago') in the date row", () => {

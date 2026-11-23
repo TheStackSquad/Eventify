@@ -140,6 +140,10 @@ jest.mock(
     },
 );
 
+jest.mock("@/utils/navigation", () => ({ redirectTo: jest.fn() }));
+const { redirectTo } = require("@/utils/navigation");
+beforeEach(() => redirectTo.mockClear());
+
 // ─── Hook & service mocks ─────────────────────────────────────────────────────
 
 const mockUseDropdownReturn = [
@@ -320,33 +324,6 @@ describe("Header — logout handler", () => {
   // jest.spyOn or a plain delete+reassign (jsdom resolves the string to a full
   // URL). Instead we use Object.defineProperty with a setter spy so we can
   // assert exactly what value the component tried to assign.
-beforeAll(() => {
-  delete window.location;
-});
-
-let hrefSetter;
-
-beforeEach(() => {
-  mockUseAuth.mockReturnValue(loggedInAuth);
-  hrefSetter = jest.fn();
-  Object.defineProperty(window, "location", {
-    configurable: true,
-    value: {
-      assign: jest.fn(),
-      replace: jest.fn(),
-      get href() {
-        return "";
-      },
-      set href(v) {
-        hrefSetter(v);
-      },
-    },
-  });
-});
-
-afterEach(() => {
-  delete window.location;
-});
 
   // UserPanel renders twice (desktop + mobile), so getByRole with a shared
   // name finds two matches. Use getAllByRole(...)[0] to target the first.

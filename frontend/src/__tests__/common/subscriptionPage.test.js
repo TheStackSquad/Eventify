@@ -77,17 +77,6 @@ jest.mock(
     },
 );
 
-jest.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: jest.fn(),
-    replace: jest.fn(),
-    back: jest.fn(),
-    prefetch: jest.fn(),
-  }),
-  useSearchParams: () => new URLSearchParams(),
-  usePathname: () => "/subscription",
-}));
-
 // Import after mocks
 const SubscriptionPage = require("@/app/subscription/page").default;
 

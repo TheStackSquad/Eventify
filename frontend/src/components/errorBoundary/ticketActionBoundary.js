@@ -16,6 +16,7 @@ class TicketActionBoundary extends Component {
 
     // Bind methods
     this.handleDismiss = this.handleDismiss.bind(this);
+    this.resetTimer = null;
   }
 
   static getDerivedStateFromError(error) {
@@ -54,8 +55,10 @@ class TicketActionBoundary extends Component {
   handleDismiss() {
     this.setState({ isDismissed: true });
 
-    // Auto-reset after 5 seconds
-    setTimeout(() => {
+    // Until the reset fires, the failed subtree stays unmounted (render returns null);
+    // rendering it again would throw immediately.
+    clearTimeout(this.resetTimer);
+    this.resetTimer = setTimeout(() => {
       this.setState({
         hasError: false,
         errorAction: null,
@@ -65,8 +68,13 @@ class TicketActionBoundary extends Component {
     }, 5000);
   }
 
-  render() {
-    if (this.state.hasError && !this.state.isDismissed) {
+  componentWillUnmount() {
+    clearTimeout(this.resetTimer);
+  }
+
+      render() {
+    if (this.state.hasError && this.state.isDismissed) return null;
+    if (this.state.hasError) {
       const actionMessages = {
         download: {
           title: "Download Failed",

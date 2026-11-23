@@ -25,6 +25,7 @@ import MobileMenu from "@/components/common/nav/mobileMenu";
 import CartIcon from "@/components/common/cartIcon";
 import EmailPreferencesModal from "@/components/modal/emailPreferencesModal";
 import toastAlert from "@/components/common/toast/toastAlert";
+import { redirectTo } from "@/utils/navigation";
 
 const navItems = [
   { path: "/events", label: "Events" },
@@ -391,7 +392,8 @@ export default function Header() {
       await logoutApi();
       toastAlert.success("Logged out successfully");
       // Redirect to home or login page
-      window.location.href = "/";
+     // window.location.href = "/";
+      redirectTo("/");
     } catch (error) {
       console.error("Logout failed:", error);
       toastAlert.error("Logout failed. Please try again.");
