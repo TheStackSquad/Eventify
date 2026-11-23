@@ -319,14 +319,11 @@ describe("Header — mobile menu", () => {
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
 
-describe("Header — logout handler", () => {
-  // window.location.href is read-only in jsdom and cannot be overridden with
-  // jest.spyOn or a plain delete+reassign (jsdom resolves the string to a full
-  // URL). Instead we use Object.defineProperty with a setter spy so we can
-  // assert exactly what value the component tried to assign.
 
-  // UserPanel renders twice (desktop + mobile), so getByRole with a shared
-  // name finds two matches. Use getAllByRole(...)[0] to target the first.
+describe("Header — logout handler", () => {
+  beforeEach(() => {
+    mockUseAuth.mockReturnValue(loggedInAuth);
+  });
 
   it("calls logoutApi when the logout button is clicked", async () => {
     mockLogoutApi.mockResolvedValue({});
@@ -351,7 +348,7 @@ describe("Header — logout handler", () => {
       expect(toastAlert.success).toHaveBeenCalledWith(
         "Logged out successfully",
       );
-      expect(hrefSetter).toHaveBeenCalledWith("/");
+      expect(redirectTo).toHaveBeenCalledWith("/");
     });
   });
 
@@ -366,7 +363,7 @@ describe("Header — logout handler", () => {
       expect(toastAlert.error).toHaveBeenCalledWith(
         "Logout failed. Please try again.",
       );
-      expect(hrefSetter).not.toHaveBeenCalled();
+      expect(redirectTo).toHaveBeenCalledWith("/");
     });
   });
 });

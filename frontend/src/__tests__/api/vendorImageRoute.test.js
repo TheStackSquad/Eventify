@@ -84,7 +84,7 @@ beforeEach(() => {
 });
 
 
-
+const USER_ID = "11111111-1111-4111-8111-111111111111";
 const mockRequireUser = jest.fn();
 jest.mock("@/utils/server/requireUser", () => ({
   requireUser: (...args) => mockRequireUser(...args),
