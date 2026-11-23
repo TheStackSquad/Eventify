@@ -2,19 +2,19 @@
   "run": {
     "suite": "ORD",
     "mode": "rig",
-    "generated": "2026-11-08T18:07:31.1800314+01:00",
-    "commit": "9b65fef",
-    "branch": "desh/ord-p1a",
-    "uncommittedPaths": 1,
-    "migrationVersion": "5",
+    "generated": "2026-11-15T10:24:38.1689337+01:00",
+    "commit": "0aefd9b",
+    "branch": "desh/ord-p2a1",
+    "uncommittedPaths": 12,
+    "migrationVersion": "14",
     "dbZone": "Etc/UTC",
     "paystack": "local stub from the compose rig (not real Paystack)",
     "stub": "http://localhost:9099"
   },
   "counts": {
-    "FAIL": 14,
+    "FAIL": 3,
     "INFO": 7,
-    "PASS": 59
+    "PASS": 72
   },
   "results": [
     {
@@ -66,6 +66,14 @@
       "Note": "Guest checkout and guest-owned verify depend on this cookie."
     },
     {
+      "Id": "ORD-S0",
+      "Name": "the database is migrated to the level this suite needs",
+      "Expected": ">= 14 and not dirty",
+      "Actual": "version 14",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
       "Id": "ORD-S1",
       "Name": "the tables the order path needs exist",
       "Expected": "8 tables",
@@ -109,7 +117,7 @@
       "Id": "ORD-S5",
       "Name": "orders.reference is unique",
       "Expected": ">= 1 unique index",
-      "Actual": "2",
+      "Actual": "1",
       "Outcome": "PASS",
       "Note": ""
     },
@@ -123,43 +131,51 @@
     },
     {
       "Id": "ORD-S7",
-      "Name": "order tables guard totals, amounts and quantities with CHECK constraints",
-      "Expected": ">= 1",
-      "Actual": "0",
-      "Outcome": "FAIL",
-      "Note": "known finding F211"
+      "Name": "order tables carry the six CHECK constraints (amounts, quantities, attempts, ticket code)",
+      "Expected": "6",
+      "Actual": "6",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-S8",
       "Name": "money columns are bigint",
       "Expected": "0 columns narrower than bigint",
-      "Actual": "9",
-      "Outcome": "FAIL",
-      "Note": "known finding F218"
+      "Actual": "0",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-S9",
       "Name": "order_items timestamps carry a time zone",
       "Expected": "0 columns without one",
-      "Actual": "2",
-      "Outcome": "FAIL",
-      "Note": "known finding F214"
+      "Actual": "0",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-S10",
       "Name": "no identical duplicate indexes on the order tables",
       "Expected": "0 duplicate groups",
-      "Actual": "4",
-      "Outcome": "FAIL",
-      "Note": "known finding F212"
+      "Actual": "0",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-S11",
       "Name": "orders has a status-transition guard",
       "Expected": ">= 1 trigger besides updated_at",
-      "Actual": "0",
-      "Outcome": "FAIL",
-      "Note": "known finding F211"
+      "Actual": "1",
+      "Outcome": "PASS",
+      "Note": ""
+    },
+    {
+      "Id": "ORD-S11b",
+      "Name": "order status changes: the legal lifecycle is allowed, everything else is refused",
+      "Expected": "25 of 25 as designed",
+      "Actual": "all 25 transitions behave as designed",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-S12",
@@ -189,7 +205,7 @@
       "Id": "ORD-I1.1",
       "Name": "a guest can start an order and gets a reference and a payment link",
       "Expected": "201 with reference, order_id, amount_kobo, authorization_url",
-      "Actual": "201 TIX_1794157608590_7071cc4e",
+      "Actual": "201 TIX_1794734653682_02aa4c26",
       "Outcome": "PASS",
       "Note": ""
     },
@@ -365,17 +381,17 @@
       "Id": "ORD-I4.14",
       "Name": "a first name longer than the column (300 characters) is rejected, not a server error",
       "Expected": "4xx and nothing written",
-      "Actual": "500 ORDER_FAILED, +0 orders, +0 sold",
-      "Outcome": "FAIL",
-      "Note": "known finding F220"
+      "Actual": "400 INVALID_ORDER, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I4.15",
       "Name": "a phone number longer than the column (25 characters) is rejected, not a server error",
       "Expected": "4xx and nothing written",
-      "Actual": "500 ORDER_FAILED, +0 orders, +0 sold",
-      "Outcome": "FAIL",
-      "Note": "known finding F220"
+      "Actual": "400 INVALID_ORDER, +0 orders, +0 sold",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-I4.16",
@@ -525,9 +541,9 @@
       "Id": "ORD-P2.3",
       "Name": "2 x 3,000 naira (6,000 subtotal): app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
       "Expected": "service_fee - paystack_fee = 27242",
-      "Actual": "30767",
-      "Outcome": "FAIL",
-      "Note": "known finding F210"
+      "Actual": "27242",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-P3.1",
@@ -549,9 +565,9 @@
       "Id": "ORD-P3.3",
       "Name": "1 x 10,000 naira: app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
       "Expected": "service_fee - paystack_fee = 48791",
-      "Actual": "54416",
-      "Outcome": "FAIL",
-      "Note": "known finding F210"
+      "Actual": "48791",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-P4.1",
@@ -589,9 +605,9 @@
       "Id": "ORD-P5.3",
       "Name": "1 x 5,000.01 naira: app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
       "Expected": "service_fee - paystack_fee = 21855",
-      "Actual": "24855",
-      "Outcome": "FAIL",
-      "Note": "known finding F210"
+      "Actual": "21855",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-P6.1",
@@ -629,9 +645,9 @@
       "Id": "ORD-P7.3",
       "Name": "10 x 3,000 naira (the cap): app_profit leaves VAT out (VAT is owed to the tax authority, it is not profit)",
       "Expected": "service_fee - paystack_fee = 156533",
-      "Actual": "172658",
-      "Outcome": "FAIL",
-      "Note": "known finding F210"
+      "Actual": "156533",
+      "Outcome": "PASS",
+      "Note": ""
     },
     {
       "Id": "ORD-P8.1",

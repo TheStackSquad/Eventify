@@ -5,11 +5,20 @@ package models
 import (
 	"errors"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
 
 const MaxTicketsPerOrder int32 = 10
+
+// Column limits of the orders table (varchar sizes). Longer input is refused here with a 400
+// instead of failing the insert with a 500 (F220).
+const (
+	MaxEmailLen = 255
+	MaxNameLen  = 255
+	MaxPhoneLen = 20
+)
 
 type OrderInitializationRequest struct {
 	Email     string                        `json:"email" binding:"required,email"`
@@ -18,6 +27,7 @@ type OrderInitializationRequest struct {
 	Phone     string                        `json:"phone"`
 	Items     []OrderInitializationItem     `json:"items" binding:"required,min=1,dive"`
 	UserID    *uuid.UUID                    `json:"userId,omitempty"`
+	IdempotencyKey string `json:"-"` // set from the Idempotency-Key header, never from the body
 }
 
 type OrderInitializationItem struct {
@@ -41,6 +51,18 @@ func (r *OrderInitializationRequest) Validate() error {
 	}
 	if len(r.Items) == 0 {
 		return errors.New("at least one item is required")
+	}
+	if utf8.RuneCountInString(r.Email) > MaxEmailLen {
+		return fmt.Errorf("email must be at most %d characters", MaxEmailLen)
+	}
+	if utf8.RuneCountInString(r.FirstName) > MaxNameLen {
+		return fmt.Errorf("first name must be at most %d characters", MaxNameLen)
+	}
+	if utf8.RuneCountInString(r.LastName) > MaxNameLen {
+		return fmt.Errorf("last name must be at most %d characters", MaxNameLen)
+	}
+	if utf8.RuneCountInString(r.Phone) > MaxPhoneLen {
+		return fmt.Errorf("phone must be at most %d characters", MaxPhoneLen)
 	}
 	var total int32
 	for i, item := range r.Items {

@@ -282,7 +282,7 @@ func (s *OrderServiceImpl) finalizeOrder(ctx context.Context, order *models.Orde
 	//order.ServiceFee = int64(data.Fees)
 	if data.Fees > 0 {
 		order.PaystackFee = int64(data.Fees)
-		order.AppProfit = order.ServiceFee + order.VATAmount - order.PaystackFee
+		order.AppProfit = order.ServiceFee - order.PaystackFee // VAT is not profit (F210)
 	}
 	order.PaymentChannel = models.ToNullString(data.Channel)
 

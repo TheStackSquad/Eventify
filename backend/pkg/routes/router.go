@@ -408,8 +408,8 @@ func corsConfig() gin.HandlerFunc {
 	return cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000", "https://eventify-tix.vercel.app"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "HEAD", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-CSRF-Token"},
-		ExposeHeaders:    []string{"Content-Length", "X-CSRF-Token"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-CSRF-Token", "Idempotency-Key"}, // WIRING:ord
+		ExposeHeaders:    []string{"Content-Length", "X-CSRF-Token", "Retry-After", "Idempotent-Replay"}, // WIRING:ord
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	})
