@@ -1,0 +1,177 @@
+﻿[
+    {
+        "Id":  "VER-1",
+        "Name":  "no proof",
+        "Expected":  "400",
+        "Actual":  "400",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-2",
+        "Name":  "forged signature",
+        "Expected":  "403",
+        "Actual":  "403",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-3",
+        "Name":  "another user\u0027s proof",
+        "Expected":  "403",
+        "Actual":  "403",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-4",
+        "Name":  "expired proof",
+        "Expected":  "403",
+        "Actual":  "403",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-5",
+        "Name":  "self-declared flags without a proof",
+        "Expected":  "400",
+        "Actual":  "400",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-6",
+        "Name":  "CAC proof without an identity proof",
+        "Expected":  "400",
+        "Actual":  "400",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-7",
+        "Name":  "CAC proof where the owner did not match",
+        "Expected":  "403",
+        "Actual":  "403",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-8",
+        "Name":  "registration with both proofs",
+        "Expected":  "201",
+        "Actual":  "201",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-9",
+        "Name":  "owner can read /vendors/me",
+        "Expected":  "200",
+        "Actual":  "200",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-10",
+        "Name":  "identity verified from the proof",
+        "Expected":  "true",
+        "Actual":  "True",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-11",
+        "Name":  "names come from the proof, not the form",
+        "Expected":  "Probe Tester",
+        "Actual":  "Probe Tester",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-12",
+        "Name":  "only the last 4 of the vNIN is exposed",
+        "Expected":  "12CD",
+        "Actual":  "12CD",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-13",
+        "Name":  "business verified, CAC saved, name overridden",
+        "Expected":  "PROBE FOODS LIMITED / RC1234567",
+        "Actual":  "PROBE FOODS LIMITED / RC1234567",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-14",
+        "Name":  "CAC badge flag is set",
+        "Expected":  "true",
+        "Actual":  "True",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-15",
+        "Name":  "owner update is accepted",
+        "Expected":  "200",
+        "Actual":  "200",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-16",
+        "Name":  "verified names and business name are immutable",
+        "Expected":  "Probe Tester / PROBE FOODS LIMITED",
+        "Actual":  "Probe Tester / PROBE FOODS LIMITED",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-17",
+        "Name":  "flags stay verified",
+        "Expected":  "true / true",
+        "Actual":  "True / True",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-18",
+        "Name":  "owner cannot change moderation status",
+        "Expected":  "active",
+        "Actual":  "active",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-19",
+        "Name":  "someone else\u0027s vendor cannot be edited",
+        "Expected":  "403",
+        "Actual":  "403",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-20",
+        "Name":  "/vendors/me needs a session",
+        "Expected":  "401",
+        "Actual":  "401",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-21",
+        "Name":  "/contact needs a session",
+        "Expected":  "401",
+        "Actual":  "401",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-22",
+        "Name":  "a signed-in user can reveal the number",
+        "Expected":  "200 + 08099990000",
+        "Actual":  "200 08099990000",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-23",
+        "Name":  "reveals are rate limited (max 20 per hour)",
+        "Expected":  "429 seen, \u003c= 20 served",
+        "Actual":  "20 served, 429 seen: True",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-24",
+        "Name":  "public list has no phoneNumber, email or vnin",
+        "Expected":  "none of the three",
+        "Actual":  "none",
+        "Outcome":  "PASS"
+    },
+    {
+        "Id":  "VER-25",
+        "Name":  "public detail: hasPhone true, no phoneNumber, no vnin",
+        "Expected":  "hasPhone only",
+        "Actual":  "hasPhone true",
+        "Outcome":  "PASS"
+    }
+]
