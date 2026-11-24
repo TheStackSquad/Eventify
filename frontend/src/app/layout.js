@@ -177,7 +177,12 @@ export default function RootLayout({ children }) {
       <body>
         <ErrorBoundaryProvider>
           <ReactQueryProvider>
-            <ReactQueryDevtools initialIsOpen={false} />
+            {process.env.NEXT_PUBLIC_RQ_DEVTOOLS === "1" && (
+              <ReactQueryDevtools
+                initialIsOpen={false}
+                buttonPosition="top-left"
+              />
+            )}
             <SessionProvider>
               <CartProvider>
                 <PaystackScriptProvider>
