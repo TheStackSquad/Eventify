@@ -150,7 +150,7 @@ describe("TicketActionBoundary", () => {
 
   it("renders children when there is no error", () => {
     render(
-      <TicketActionBoundary ticketId={ticketId}>
+        <TicketActionBoundary ticketId="t-1">
         <button>Download</button>
       </TicketActionBoundary>,
     );
