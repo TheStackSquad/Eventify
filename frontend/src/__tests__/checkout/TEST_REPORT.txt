@@ -1,0 +1,32 @@
+================================================================================
+DOMAIN TEST REPORT: CHECKOUT (src/__tests__/checkout/)
+Last Updated: 2026-11-14 | Branch: fix/checkout-production-gaps
+Status: 8/8 Suites Passing (241/241 Tests) | Time: ~10.6s
+================================================================================
+
+1. SUITE INVENTORY & STATUS
+- checkoutCalculations.test.js  [PASS]
+- checkoutConfirmation.test.js  [PASS]
+- checkoutHooks.test.js         [PASS]
+- checkoutPage.test.js          [PASS]
+- checkoutUI.test.js            [PASS]
+- checkoutValidation.test.js    [PASS]
+- customerForm.test.js          [PASS]
+- verifyPaymentContent.test.js  [PASS]
+
+2. ARCHITECTURAL CHANGES & PRODUCTION FIXES APPLIED
+- [UX GAP FIXED] `CustomerForm` & `CheckoutPage` Persistence:
+  - Updated `CustomerForm` to accept, destructure, and hydrate form state from `initialData` (supporting both flat user objects and nested `{ user }` payloads).
+  - Added a client-side `useEffect` in `CheckoutPage` to safely read `localStorage.getItem('userData')` with SSR and JSON parse error handling, passing it down as `initialData`.
+- [NULL GUARD GAP FIXED] `OrderSummary` Price Formatting:
+  - Added strict null/undefined/NaN guards and optional chaining (`?.`) combined with `?? 0` defaults in `OrderSummary.formatPrice` and breakdown calculations, gracefully outputting `'₦0'` instead of throwing a `TypeError`.
+- [SILENT FAILURE FIXED] Cart Calculation Error Handling:
+  - Enhanced `calculateCartTotals` to flag invalid item prices (`hasCalculationError`, `calculationError`).
+  - Added a visible user-facing `role="alert"` warning banner in `CheckoutPage` and disabled checkout payment readiness when cart calculation anomalies occur.
+- [REACT LIFECYCLE GAP FIXED] Unmounted State Updates & Effect Stability:
+  - Implemented `isMountedRef` and cleanup flags in `VerifyPaymentContent` to eliminate unmounted `setState` warnings.
+  - Stabilized `useEffect` dependencies by wrapping `refetch` in `useRef` to prevent infinite re-verification loops caused by reference identity changes.
+
+3. RESOLVED REGRESSION GAPS & TEST ALIGNMENT
+- Updated all test suites (`checkoutUI.test.js`, `checkoutPage.test.js`, `customerForm.test.js`, `verifyPaymentContent.test.js`) to assert correct production behavior for persistence, null safety, error banners, and mount cleanup.
+================================================================================

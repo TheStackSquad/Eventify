@@ -1,4 +1,4 @@
-// frontend/src/components/dashboard/sidebar.js
+// frontend/src/components/dashboard/eventComponent/sidebar.js
 
 "use client";
 
@@ -18,6 +18,7 @@ import {
   Edit,
   Sparkles,
   TrendingUp,
+  MoreHorizontal,
 } from "lucide-react";
 import DeleteAccountModal from "@/components/modal/deleteAccountModal";
 import { useAuth } from "@/utils/hooks/useAuth";
@@ -35,6 +36,7 @@ export default function Sidebar({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isModalRendered, setIsModalRendered] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
 
   // Dynamic menu items based on user state
   const menuItems = useMemo(() => {
@@ -80,6 +82,28 @@ export default function Sidebar({
 
     return items;
   }, [user]);
+
+  // Phones get a bottom bar instead of the side rail: one flat list of destinations.
+  const mobileItems = useMemo(() => {
+    const short = (id, fallback) =>
+      id === "events"
+        ? "Events"
+        : id === "vendor"
+          ? "Stats"
+          : id === "vendor-register"
+            ? user?.vendorId
+              ? "Profile"
+              : "Register"
+            : fallback;
+    const flat = [];
+    menuItems.forEach((item) => {
+      const leaves = item.subItems ? item.subItems : [item];
+      leaves.forEach((leaf) =>
+        flat.push({ ...leaf, short: short(leaf.id, leaf.label) }),
+      );
+    });
+    return flat;
+  }, [menuItems, user]);
 
   // Manage modal portal
   useEffect(() => {
@@ -132,7 +156,7 @@ export default function Sidebar({
         className={`
           bg-white border-r border-gray-200 transition-all duration-300 ease-in-out
           ${isCollapsed ? "w-20" : "w-72"}
-          flex flex-col h-screen sticky top-0 z-30
+          hidden sm:flex flex-col h-screen sticky top-0 z-30
         `}
       >
         {/* Header with Gradient */}
@@ -347,6 +371,98 @@ export default function Sidebar({
           </div>
         )}
       </div>
+
+      {/* Phones: fixed bottom bar (the side rail is hidden below 640px) */}
+      <nav
+        aria-label="Dashboard"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden"
+      >
+        <ul className="mx-auto flex max-w-md items-stretch justify-around">
+          {mobileItems.map((item) => {
+            const ItemIcon = item.icon;
+            const active = activeView === item.id;
+            return (
+              <li key={item.id} className="flex-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMoreOpen(false);
+                    onViewChange(item.id);
+                  }}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex min-h-14 w-full flex-col items-center justify-center gap-0.5 text-[11px] font-medium ${
+                    active ? "text-indigo-600" : "text-gray-500"
+                  }`}
+                >
+                  <ItemIcon className="h-5 w-5" aria-hidden="true" />
+                  <span>{item.short}</span>
+                </button>
+              </li>
+            );
+          })}
+          <li className="flex-1">
+            <button
+              type="button"
+              onClick={() => router.push("/subscription")}
+              className="flex min-h-14 w-full flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-gray-500"
+            >
+              <CreditCard className="h-5 w-5" aria-hidden="true" />
+              <span>Plan</span>
+            </button>
+          </li>
+          <li className="flex-1">
+            <button
+              type="button"
+              onClick={() => setIsMoreOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={isMoreOpen}
+              className="flex min-h-14 w-full flex-col items-center justify-center gap-0.5 text-[11px] font-medium text-gray-500"
+            >
+              <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+              <span>More</span>
+            </button>
+          </li>
+        </ul>
+
+        {isMoreOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setIsMoreOpen(false)}
+              aria-hidden="true"
+            />
+            <div
+              role="menu"
+              className="absolute bottom-full right-2 z-50 mb-2 w-52 rounded-xl border border-gray-200 bg-white p-1 shadow-xl"
+            >
+              <button
+                role="menuitem"
+                type="button"
+                onClick={() => {
+                  setIsMoreOpen(false);
+                  onLogout();
+                }}
+                className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-red-600 hover:bg-red-50"
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                Logout
+              </button>
+              <button
+                role="menuitem"
+                type="button"
+                onClick={() => {
+                  setIsMoreOpen(false);
+                  setIsDeleteModalOpen(true);
+                }}
+                className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-gray-500 hover:bg-red-50 hover:text-red-600"
+              >
+                <UserX className="h-4 w-4" aria-hidden="true" />
+                Delete Account
+              </button>
+            </div>
+          </>
+        )}
+      </nav>
 
       {isModalRendered && (
         <DeleteAccountModal

@@ -1,0 +1,1482 @@
+
+> frontend@0.1.0 test:api
+> jest src/__tests__/api --verbose --silent
+
+jest-haste-map: Haste module naming collision: frontend
+  The following files share their name; please adjust your hasteImpl:
+    * <rootDir>\package.json
+    * <rootDir>\.next\standalone\package.json
+
+jest-haste-map: Haste module naming collision: frontend
+  The following files share their name; please adjust your hasteImpl:
+    * <rootDir>\package.json
+    * <rootDir>\.next\standalone\package.json
+
+FAIL node src/__tests__/api/middleware.test.js
+  isTokenValid / isAuthenticated
+    √ treats a token with a future exp as valid (3 ms)
+    √ treats a token with a past exp as invalid → redirects
+    √ treats a token with no exp field as invalid (missing expiry rejected)
+    √ treats exp=0 token as invalid (epoch 1970 is expired) (1 ms)
+    √ treats a malformed / unparseable token as invalid
+    √ treats a missing cookie as unauthenticated
+  matchesRoute
+    √ matches an exact protected route (/dashboard)
+    √ matches a protected route prefix (/dashboard/settings) (1 ms)
+    √ matches a protected route deep path (/events/my-events/123) (1 ms)
+    √ matches a dynamic segment (/events/[slug] → /events/my-slug) (1 ms)
+    √ matches a dynamic vendor segment (/vendors/[id] → /vendors/456) (1 ms)
+    √ /api/upload-image passes through to default handler (not in any explicit list) (2 ms)
+    √ does not match an unrelated path as protected (1 ms)
+  middleware — auth routes
+    √ redirects authenticated user from /account/auth/login to /dashboard
+    √ redirects authenticated user to a valid callbackUrl when present
+    √ redirects authenticated user away from /account/auth/signup
+    √ allows unauthenticated user to access /account/auth/login
+    √ allows unauthenticated user to access /account/auth/signup
+  middleware — protected UI routes
+    √ allows authenticated user to access /dashboard
+    √ allows authenticated user to access /profile
+    √ allows authenticated user to access /events/create-events (1 ms)
+    √ allows authenticated user to access /events/my-events
+    √ redirects unauthenticated user from /dashboard → login with callbackUrl (1 ms)
+    √ redirects unauthenticated user from /profile → login
+    √ redirects unauthenticated user from /events/create-events → login (1 ms)
+    √ redirects unauthenticated user from /events/my-events → login
+    √ deletes cookies when token is expired and redirect fires (1 ms)
+    √ deletes cookies when token is present but malformed
+    √ does NOT delete cookies when there is no token at all (1 ms)
+    √ /events/create-events is protected even though /events is public
+  middleware — public UI routes (unauthenticated)
+    √ allows access to / without a token
+    √ allows access to /about without a token
+    √ allows access to /contact without a token
+    √ allows access to /events without a token (1 ms)
+    √ allows access to /forgot-password without a token (1 ms)
+    √ allows access to /reset-password without a token
+    √ allows access to /confirmation without a token
+    √ allows access to /vendors/123 without a token (dynamic segment)
+  middleware — public UI routes (authenticated user)
+    √ allows authenticated user to access / (no redirect to dashboard) (1 ms)
+    √ allows authenticated user to access /about
+    √ allows authenticated user to access /events (1 ms)
+  middleware — public API routes
+    √ allows /api/payments/verify without a token
+    √ allows /api/orders/initialize without a token
+    √ allows /api/webhooks/paystack without a token
+    √ allows /api/v1/feedback without a token (1 ms)
+    √ allows /api/v1/vendors without a token
+    √ allows /auth/login without a token
+    √ allows /auth/refresh without a token
+    √ allows /auth/signup without a token (1 ms)
+    √ allows /auth/forgot-password without a token
+  middleware — default passthrough with x-user-id header injection
+    √ injects x-user-id for authenticated requests on unknown routes
+    √ does NOT inject x-user-id when token is absent (1 ms)
+    √ does NOT inject x-user-id when token is invalid
+    √ does NOT inject x-user-id when decoded token has no user_id field
+  middleware — open redirect protection
+    √ absolute callbackUrl is rejected — falls back to /dashboard (1 ms)
+    √ protocol-relative callbackUrl is rejected — falls back to /dashboard
+    √ bare-slash callbackUrl (/) is rejected — regex requires non-slash after /
+    √ valid relative callbackUrl is honoured
+    √ GAP: unknown /api route falls through to default handler (no 401)
+  matchesRoute — image routes hit PUBLIC_UI_ROUTES (not default handler)
+    × /api/event-image is served by PUBLIC_UI_ROUTES handler
+    × /api/feedback-image is served by PUBLIC_UI_ROUTES handler
+    × /api/vendor-image is served by PUBLIC_UI_ROUTES handler
+  matchesRoute — PUBLIC_API_ROUTES prefix collision (documented gap)
+    √ GAP: /api/v1/vendors/admin-panel is treated as public (prefix match)
+    √ GAP: /api/v1/vendors/9999/delete is treated as public (prefix match) (1 ms)
+  middleware — cookie deletion edge cases
+    √ deletes cookies for expired token (covered in protected routes too — explicit here)
+  middleware — security response headers (default handler)
+    √ sets X-Frame-Options: DENY
+    √ sets X-Content-Type-Options: nosniff (1 ms)
+    √ sets Referrer-Policy: strict-origin-when-cross-origin
+    √ security headers are present on authenticated default-path requests too (1 ms)
+
+  ● matchesRoute — image routes hit PUBLIC_UI_ROUTES (not default handler) › /api/event-image is served by PUBLIC_UI_ROUTES handler
+
+    TypeError: _server.NextResponse.json is not a function
+
+    [0m [90m 138 |[39m
+     [90m 139 |[39m   [36mif[39m (matchesRoute(pathname[33m,[39m [33mAUTH_REQUIRED_API_ROUTES[39m) [33m&&[39m [33m![39mhasValidToken) {
+    [31m[1m>[22m[39m[90m 140 |[39m       [36mreturn[39m [33mNextResponse[39m[33m.[39mjson(
+     [90m     |[39m                           [31m[1m^[22m[39m
+     [90m 141 |[39m         { message[33m:[39m [32m"Authentication required."[39m }[33m,[39m
+     [90m 142 |[39m         { status[33m:[39m [35m401[39m }[33m,[39m
+     [90m 143 |[39m       )[33m;[39m[0m
+
+      at json (src/middleware.js:140:27)
+      at Object.middleware (src/__tests__/api/middleware.test.js:522:17)
+
+  ● matchesRoute — image routes hit PUBLIC_UI_ROUTES (not default handler) › /api/feedback-image is served by PUBLIC_UI_ROUTES handler
+
+    TypeError: _server.NextResponse.json is not a function
+
+    [0m [90m 138 |[39m
+     [90m 139 |[39m   [36mif[39m (matchesRoute(pathname[33m,[39m [33mAUTH_REQUIRED_API_ROUTES[39m) [33m&&[39m [33m![39mhasValidToken) {
+    [31m[1m>[22m[39m[90m 140 |[39m       [36mreturn[39m [33mNextResponse[39m[33m.[39mjson(
+     [90m     |[39m                           [31m[1m^[22m[39m
+     [90m 141 |[39m         { message[33m:[39m [32m"Authentication required."[39m }[33m,[39m
+     [90m 142 |[39m         { status[33m:[39m [35m401[39m }[33m,[39m
+     [90m 143 |[39m       )[33m;[39m[0m
+
+      at json (src/middleware.js:140:27)
+      at Object.middleware (src/__tests__/api/middleware.test.js:528:17)
+
+  ● matchesRoute — image routes hit PUBLIC_UI_ROUTES (not default handler) › /api/vendor-image is served by PUBLIC_UI_ROUTES handler
+
+    TypeError: _server.NextResponse.json is not a function
+
+    [0m [90m 138 |[39m
+     [90m 139 |[39m   [36mif[39m (matchesRoute(pathname[33m,[39m [33mAUTH_REQUIRED_API_ROUTES[39m) [33m&&[39m [33m![39mhasValidToken) {
+    [31m[1m>[22m[39m[90m 140 |[39m       [36mreturn[39m [33mNextResponse[39m[33m.[39mjson(
+     [90m     |[39m                           [31m[1m^[22m[39m
+     [90m 141 |[39m         { message[33m:[39m [32m"Authentication required."[39m }[33m,[39m
+     [90m 142 |[39m         { status[33m:[39m [35m401[39m }[33m,[39m
+     [90m 143 |[39m       )[33m;[39m[0m
+
+      at json (src/middleware.js:140:27)
+      at Object.middleware (src/__tests__/api/middleware.test.js:534:17)
+
+FAIL node src/__tests__/api/feedbackImageRoute.test.js
+  POST — no-file / empty-file handling
+    × returns 200 with empty url when file is null (no attachment) (2 ms)
+    √ does NOT call put() when file is null
+    × [GAP 1] returns 200 for a zero-size file — treats it as no attachment (3 ms)
+    × [GAP 2] zero-size file with no .name returns 200 instead of 400 — check ordering gap
+  POST — file validity checks
+    × returns 400 when file is a plain string (1 ms)
+    × returns 400 when file object has no .name property
+    × returns 413 when file exceeds 5MB
+    × accepts a file exactly at the 5MB boundary (1 ms)
+    √ does NOT call put() when file is a string (1 ms)
+    √ does NOT call put() when file exceeds size limit (1 ms)
+  POST — successful upload
+    × returns 200 with url and filename on valid upload (1 ms)
+    × calls put() with the correct feedback-images/ path (2 ms)
+    × uses the file's contentType in the put() call (1 ms)
+    × returns the blob url from put() in the response
+  POST — error handling
+    √ returns 500 when put() throws
+    √ returns 500 when formData() throws (1 ms)
+  DELETE — validation
+    × returns 400 when no url query param is provided
+    √ does NOT call del() when url param is missing (1 ms)
+    × [GAP 3] calls del() with a non-Vercel URL — no storage provider check
+  DELETE — successful deletion
+    × returns 200 with success message on valid deletion (1 ms)
+    × calls del() with the decoded URL from searchParams
+  DELETE — error handling returns 500 (correct — regression guard)
+    √ returns 500 when del() throws
+    √ returns 500 when request.url is malformed and URL parsing throws
+
+  ● POST — no-file / empty-file handling › returns 200 with empty url when file is null (no attachment)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 102 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 103 |[39m
+    [31m[1m>[22m[39m[90m 104 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 105 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ url[33m:[39m [32m""[39m })[33m;[39m
+     [90m 106 |[39m   })[33m;[39m
+     [90m 107 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/feedbackImageRoute.test.js:104:24)
+
+  ● POST — no-file / empty-file handling › [GAP 1] returns 200 for a zero-size file — treats it as no attachment
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 122 |[39m
+     [90m 123 |[39m     [90m// Documents current behaviour — should likely be 400[39m
+    [31m[1m>[22m[39m[90m 124 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 125 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ url[33m:[39m [32m""[39m })[33m;[39m
+     [90m 126 |[39m   })[33m;[39m
+     [90m 127 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/feedbackImageRoute.test.js:124:24)
+
+  ● POST — no-file / empty-file handling › [GAP 2] zero-size file with no .name returns 200 instead of 400 — check ordering gap
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 136 |[39m     [90m// CURRENT: size === 0 check fires first → 200[39m
+     [90m 137 |[39m     [90m// DESIRED: .name check should fire first → 400[39m
+    [31m[1m>[22m[39m[90m 138 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 139 |[39m   })[33m;[39m
+     [90m 140 |[39m })[33m;[39m
+     [90m 141 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/feedbackImageRoute.test.js:138:24)
+
+  ● POST — file validity checks › returns 400 when file is a plain string
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 149 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 150 |[39m
+    [31m[1m>[22m[39m[90m 151 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 152 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"No valid image file provided."[39m })[33m;[39m
+     [90m 153 |[39m   })[33m;[39m
+     [90m 154 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/feedbackImageRoute.test.js:151:24)
+
+  ● POST — file validity checks › returns 400 when file object has no .name property
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 160 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 161 |[39m
+    [31m[1m>[22m[39m[90m 162 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 163 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"No valid image file provided."[39m })[33m;[39m
+     [90m 164 |[39m   })[33m;[39m
+     [90m 165 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/feedbackImageRoute.test.js:162:24)
+
+  ● POST — file validity checks › returns 413 when file exceeds 5MB
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 413
+    Received: 500
+
+    [0m [90m 170 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 171 |[39m
+    [31m[1m>[22m[39m[90m 172 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m413[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 173 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"Image size exceeds 5MB limit."[39m })[33m;[39m
+     [90m 174 |[39m   })[33m;[39m
+     [90m 175 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/feedbackImageRoute.test.js:172:24)
+
+  ● POST — file validity checks › accepts a file exactly at the 5MB boundary
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 180 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 181 |[39m
+    [31m[1m>[22m[39m[90m 182 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 183 |[39m   })[33m;[39m
+     [90m 184 |[39m
+     [90m 185 |[39m   it([32m"does NOT call put() when file is a string"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.toBe (src/__tests__/api/feedbackImageRoute.test.js:182:24)
+
+  ● POST — successful upload › returns 200 with url and filename on valid upload
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 207 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 208 |[39m
+    [31m[1m>[22m[39m[90m 209 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 210 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({
+     [90m 211 |[39m       url[33m:[39m expect[33m.[39mstringContaining([32m"blob.vercel-storage.com"[39m)[33m,[39m
+     [90m 212 |[39m       filename[33m:[39m expect[33m.[39many([33mString[39m)[33m,[39m[0m
+
+      at Object.toBe (src/__tests__/api/feedbackImageRoute.test.js:209:24)
+
+  ● POST — successful upload › calls put() with the correct feedback-images/ path
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "feedback-images/screenshot.png", Anything, ObjectContaining {"access": "public", "addRandomSuffix": true, "contentType": "image/png"}
+
+    Number of calls: 0
+
+    [0m [90m 221 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 222 |[39m
+    [31m[1m>[22m[39m[90m 223 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 224 |[39m       [32m"feedback-images/screenshot.png"[39m[33m,[39m
+     [90m 225 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 226 |[39m       expect[33m.[39mobjectContaining({[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/feedbackImageRoute.test.js:223:17)
+
+  ● POST — successful upload › uses the file's contentType in the put() call
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: Any<String>, Anything, ObjectContaining {"contentType": "image/webp"}
+
+    Number of calls: 0
+
+    [0m [90m 239 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 240 |[39m
+    [31m[1m>[22m[39m[90m 241 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 242 |[39m       expect[33m.[39many([33mString[39m)[33m,[39m
+     [90m 243 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 244 |[39m       expect[33m.[39mobjectContaining({ contentType[33m:[39m [32m"image/webp"[39m })[33m,[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/feedbackImageRoute.test.js:241:17)
+
+  ● POST — successful upload › returns the blob url from put() in the response
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "https://blob.vercel-storage.com/feedback-images/img-xyz.jpg"
+    Received: undefined
+
+    [0m [90m 257 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 258 |[39m
+    [31m[1m>[22m[39m[90m 259 |[39m     expect(res[33m.[39mbody[33m.[39murl)[33m.[39mtoBe(fakeUrl)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 260 |[39m   })[33m;[39m
+     [90m 261 |[39m })[33m;[39m
+     [90m 262 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/feedbackImageRoute.test.js:259:26)
+
+  ● DELETE — validation › returns 400 when no url query param is provided
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 298 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 299 |[39m
+    [31m[1m>[22m[39m[90m 300 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 301 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"No URL provided for deletion."[39m })[33m;[39m
+     [90m 302 |[39m   })[33m;[39m
+     [90m 303 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/feedbackImageRoute.test.js:300:24)
+
+  ● DELETE — validation › [GAP 3] calls del() with a non-Vercel URL — no storage provider check
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "https://s3.amazonaws.com/mybucket/file.jpg"
+
+    Number of calls: 0
+
+    [0m [90m 318 |[39m     [90m// CURRENT: del() is called with any URL[39m
+     [90m 319 |[39m     [90m// DESIRED: return 400 "Invalid storage provider"[39m
+    [31m[1m>[22m[39m[90m 320 |[39m     expect(del)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 321 |[39m       [32m"https://s3.amazonaws.com/mybucket/file.jpg"[39m[33m,[39m
+     [90m 322 |[39m     )[33m;[39m
+     [90m 323 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/feedbackImageRoute.test.js:320:17)
+
+  ● DELETE — successful deletion › returns 200 with success message on valid deletion
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 337 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 338 |[39m
+    [31m[1m>[22m[39m[90m 339 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 340 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({
+     [90m 341 |[39m       message[33m:[39m [32m"Orphaned image cleaned up successfully."[39m[33m,[39m
+     [90m 342 |[39m     })[33m;[39m[0m
+
+      at Object.toBe (src/__tests__/api/feedbackImageRoute.test.js:339:24)
+
+  ● DELETE — successful deletion › calls del() with the decoded URL from searchParams
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "https://blob.vercel-storage.com/feedback-images/img-abc.jpg"
+
+    Number of calls: 0
+
+    [0m [90m 347 |[39m     [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 348 |[39m
+    [31m[1m>[22m[39m[90m 349 |[39m     expect(del)[33m.[39mtoHaveBeenCalledWith([33mVALID_URL[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 350 |[39m   })[33m;[39m
+     [90m 351 |[39m })[33m;[39m
+     [90m 352 |[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/feedbackImageRoute.test.js:349:17)
+
+FAIL node src/__tests__/api/eventImageRoute.test.js
+  getAuthenticatedUser
+    √ uses x-user-id header when present — skips JWT verification (1 ms)
+    × falls back to Bearer token when x-user-id header is absent (1 ms)
+    √ returns 401 when no x-user-id and no Authorization header
+    √ returns 401 when jwtVerify throws during fallback (1 ms)
+    √ returns 401 when Authorization header is present but jwtVerify rejects
+  POST — file validation
+    × returns 400 when no file is provided (formData returns null) (1 ms)
+    × returns 400 when file field is a plain string (not a File object)
+    × returns 400 when file exceeds 5MB limit (1 ms)
+    √ accepts a file exactly at the 5MB limit
+    × returns 400 for an invalid MIME type (1 ms)
+    × accepts allowed MIME type: image/jpeg
+    × accepts allowed MIME type: image/png (2 ms)
+    × accepts allowed MIME type: image/webp
+    × accepts allowed MIME type: image/gif (1 ms)
+  POST — successful upload
+    × returns 200 with url and filename on valid upload (1 ms)
+    × calls put() with the correct structured pathname (1 ms)
+    × defaults eventId to 'new-event' when not provided
+    × includes uploadedBy and eventId in blob metadata
+    × uses user_id from JWT payload when authenticating via Bearer token
+  POST — error handling
+    × returns 500 when put() throws (1 ms)
+    √ returns 401 when unauthenticated — does not call put()
+  DELETE — validation
+    √ returns 401 when unauthenticated (1 ms)
+    × returns 400 when url is missing from request body
+    × returns 400 when url does not belong to Vercel storage (1 ms)
+    × returns 400 for a url with blob.vercel-storage.com injected in a path param (URL injection attempt)
+  DELETE — successful deletion
+    × returns 200 with success message on valid deletion (1 ms)
+    × calls del() with the provided URL
+    √ does not call del() when unauthenticated
+    √ does not call del() when URL fails storage provider check (1 ms)
+  [GAP 1] DELETE catch block returns 200 regardless of error type
+    × returns 200 even when del() throws a permissions error
+    × returns 200 even when del() throws a network error
+
+  ● getAuthenticatedUser › falls back to Bearer token when x-user-id header is absent
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "-----BEGIN PUBLIC KEY-----
+    fake
+    -----END PUBLIC KEY-----", "RS256"
+
+    Number of calls: 0
+
+    [0m [90m 159 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 160 |[39m
+    [31m[1m>[22m[39m[90m 161 |[39m     expect(importSPKI)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 162 |[39m       process[33m.[39menv[33m.[39m[33mJWT_PUBLIC_KEY[39m[33m,[39m
+     [90m 163 |[39m       [32m"RS256"[39m[33m,[39m
+     [90m 164 |[39m     )[33m;[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/eventImageRoute.test.js:161:24)
+
+  ● POST — file validation › returns 400 when no file is provided (formData returns null)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 401
+
+    [0m [90m 216 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 217 |[39m
+    [31m[1m>[22m[39m[90m 218 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 219 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"No image file provided."[39m })[33m;[39m
+     [90m 220 |[39m   })[33m;[39m
+     [90m 221 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:218:24)
+
+  ● POST — file validation › returns 400 when file field is a plain string (not a File object)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 401
+
+    [0m [90m 227 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 228 |[39m
+    [31m[1m>[22m[39m[90m 229 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 230 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"No image file provided."[39m })[33m;[39m
+     [90m 231 |[39m   })[33m;[39m
+     [90m 232 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:229:24)
+
+  ● POST — file validation › returns 400 when file exceeds 5MB limit
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 401
+
+    [0m [90m 241 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 242 |[39m
+    [31m[1m>[22m[39m[90m 243 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 244 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"Image exceeds 5MB limit."[39m })[33m;[39m
+     [90m 245 |[39m   })[33m;[39m
+     [90m 246 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:243:24)
+
+  ● POST — file validation › returns 400 for an invalid MIME type
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 401
+
+    [0m [90m 269 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 270 |[39m
+    [31m[1m>[22m[39m[90m 271 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 272 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"Invalid file type."[39m })[33m;[39m
+     [90m 273 |[39m   })[33m;[39m
+     [90m 274 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:271:24)
+
+  ● POST — file validation › accepts allowed MIME type: image/jpeg
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 401
+
+    [0m [90m 282 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 283 |[39m
+    [31m[1m>[22m[39m[90m 284 |[39m       expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 285 |[39m     }[33m,[39m
+     [90m 286 |[39m   )[33m;[39m
+     [90m 287 |[39m })[33m;[39m[0m
+
+      at toBe (src/__tests__/api/eventImageRoute.test.js:284:26)
+
+  ● POST — file validation › accepts allowed MIME type: image/png
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 401
+
+    [0m [90m 282 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 283 |[39m
+    [31m[1m>[22m[39m[90m 284 |[39m       expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 285 |[39m     }[33m,[39m
+     [90m 286 |[39m   )[33m;[39m
+     [90m 287 |[39m })[33m;[39m[0m
+
+      at toBe (src/__tests__/api/eventImageRoute.test.js:284:26)
+
+  ● POST — file validation › accepts allowed MIME type: image/webp
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 401
+
+    [0m [90m 282 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 283 |[39m
+    [31m[1m>[22m[39m[90m 284 |[39m       expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 285 |[39m     }[33m,[39m
+     [90m 286 |[39m   )[33m;[39m
+     [90m 287 |[39m })[33m;[39m[0m
+
+      at toBe (src/__tests__/api/eventImageRoute.test.js:284:26)
+
+  ● POST — file validation › accepts allowed MIME type: image/gif
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 401
+
+    [0m [90m 282 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 283 |[39m
+    [31m[1m>[22m[39m[90m 284 |[39m       expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 285 |[39m     }[33m,[39m
+     [90m 286 |[39m   )[33m;[39m
+     [90m 287 |[39m })[33m;[39m[0m
+
+      at toBe (src/__tests__/api/eventImageRoute.test.js:284:26)
+
+  ● POST — successful upload › returns 200 with url and filename on valid upload
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 401
+
+    [0m [90m 299 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 300 |[39m
+    [31m[1m>[22m[39m[90m 301 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 302 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({
+     [90m 303 |[39m       url[33m:[39m expect[33m.[39mstringContaining([32m"blob.vercel-storage.com"[39m)[33m,[39m
+     [90m 304 |[39m       filename[33m:[39m expect[33m.[39many([33mString[39m)[33m,[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:301:24)
+
+  ● POST — successful upload › calls put() with the correct structured pathname
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "users/user-abc-123/events/event-999/banner.png", Anything, ObjectContaining {"access": "public", "addRandomSuffix": true, "contentType": "image/png"}
+
+    Number of calls: 0
+
+    [0m [90m 316 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 317 |[39m
+    [31m[1m>[22m[39m[90m 318 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 319 |[39m       [32m`users/${USER_ID}/events/event-999/banner.png`[39m[33m,[39m
+     [90m 320 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 321 |[39m       expect[33m.[39mobjectContaining({[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/eventImageRoute.test.js:318:17)
+
+  ● POST — successful upload › defaults eventId to 'new-event' when not provided
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "users/user-abc-123/events/new-event/img.jpg", Anything, Anything
+
+    Number of calls: 0
+
+    [0m [90m 335 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 336 |[39m
+    [31m[1m>[22m[39m[90m 337 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 338 |[39m       [32m`users/${USER_ID}/events/new-event/img.jpg`[39m[33m,[39m
+     [90m 339 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 340 |[39m       expect[33m.[39manything()[33m,[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/eventImageRoute.test.js:337:17)
+
+  ● POST — successful upload › includes uploadedBy and eventId in blob metadata
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: Any<String>, Anything, ObjectContaining {"metadata": {"eventId": "ev-42", "uploadedBy": "user-abc-123"}}
+
+    Number of calls: 0
+
+    [0m [90m 349 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 350 |[39m
+    [31m[1m>[22m[39m[90m 351 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 352 |[39m       expect[33m.[39many([33mString[39m)[33m,[39m
+     [90m 353 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 354 |[39m       expect[33m.[39mobjectContaining({[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/eventImageRoute.test.js:351:17)
+
+  ● POST — successful upload › uses user_id from JWT payload when authenticating via Bearer token
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: StringContaining "users/jwt-user-456", Anything, Anything
+
+    Number of calls: 0
+
+    [0m [90m 371 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 372 |[39m
+    [31m[1m>[22m[39m[90m 373 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 374 |[39m       expect[33m.[39mstringContaining([32m"users/jwt-user-456"[39m)[33m,[39m
+     [90m 375 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 376 |[39m       expect[33m.[39manything()[33m,[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/eventImageRoute.test.js:373:17)
+
+  ● POST — error handling › returns 500 when put() throws
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 500
+    Received: 401
+
+    [0m [90m 393 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 394 |[39m
+    [31m[1m>[22m[39m[90m 395 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m500[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 396 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({
+     [90m 397 |[39m       error[33m:[39m [32m"Internal server error during upload."[39m[33m,[39m
+     [90m 398 |[39m     })[33m;[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:395:24)
+
+  ● DELETE — validation › returns 400 when url is missing from request body
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 401
+
+    [0m [90m 431 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 432 |[39m
+    [31m[1m>[22m[39m[90m 433 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 434 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"Image URL is required"[39m })[33m;[39m
+     [90m 435 |[39m   })[33m;[39m
+     [90m 436 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:433:24)
+
+  ● DELETE — validation › returns 400 when url does not belong to Vercel storage
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 401
+
+    [0m [90m 442 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 443 |[39m
+    [31m[1m>[22m[39m[90m 444 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 445 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"Invalid storage provider"[39m })[33m;[39m
+     [90m 446 |[39m   })[33m;[39m
+     [90m 447 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:444:24)
+
+  ● DELETE — validation › returns 400 for a url with blob.vercel-storage.com injected in a path param (URL injection attempt)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 401
+
+    [0m [90m 459 |[39m     [90m// Desired behaviour: stricter hostname check (startsWith or URL parsing)[39m
+     [90m 460 |[39m     [90m// This test documents the gap — it currently returns 200, not 400[39m
+    [31m[1m>[22m[39m[90m 461 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 462 |[39m   })[33m;[39m
+     [90m 463 |[39m })[33m;[39m
+     [90m 464 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:461:24)
+
+  ● DELETE — successful deletion › returns 200 with success message on valid deletion
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 401
+
+    [0m [90m 476 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 477 |[39m
+    [31m[1m>[22m[39m[90m 478 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 479 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ message[33m:[39m [32m"Image deleted successfully"[39m })[33m;[39m
+     [90m 480 |[39m   })[33m;[39m
+     [90m 481 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:478:24)
+
+  ● DELETE — successful deletion › calls del() with the provided URL
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "https://blob.vercel-storage.com/users/u1/events/ev-1/photo.jpg"
+
+    Number of calls: 0
+
+    [0m [90m 485 |[39m     [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 486 |[39m
+    [31m[1m>[22m[39m[90m 487 |[39m     expect(del)[33m.[39mtoHaveBeenCalledWith([33mVALID_URL[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 488 |[39m   })[33m;[39m
+     [90m 489 |[39m
+     [90m 490 |[39m   it([32m"does not call del() when unauthenticated"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/eventImageRoute.test.js:487:17)
+
+  ● [GAP 1] DELETE catch block returns 200 regardless of error type › returns 200 even when del() throws a permissions error
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 401
+
+    [0m [90m 525 |[39m     [90m// CURRENT behaviour: always 200 — caller cannot distinguish success from failure[39m
+     [90m 526 |[39m     [90m// DESIRED behaviour: permissions errors should return 500 or 403[39m
+    [31m[1m>[22m[39m[90m 527 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 528 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ message[33m:[39m [32m"Delete operation processed"[39m })[33m;[39m
+     [90m 529 |[39m   })[33m;[39m
+     [90m 530 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:527:24)
+
+  ● [GAP 1] DELETE catch block returns 200 regardless of error type › returns 200 even when del() throws a network error
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 401
+
+    [0m [90m 542 |[39m     [90m// CURRENT behaviour: network failures are silently swallowed[39m
+     [90m 543 |[39m     [90m// DESIRED behaviour: distinguish "already deleted" (404) from actual failures[39m
+    [31m[1m>[22m[39m[90m 544 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 545 |[39m   })[33m;[39m
+     [90m 546 |[39m })[33m;[39m
+     [90m 547 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/eventImageRoute.test.js:544:24)
+
+FAIL node src/__tests__/api/vendorImageRoute.test.js
+  POST — file presence validation
+    × returns 400 when no file is provided (1 ms)
+    × returns 400 when file is a plain string
+    √ does NOT call put() when file is missing
+  POST — file size validation
+    × returns 400 when file exceeds 5MB
+    × accepts a file exactly at the 5MB boundary
+    √ does NOT call put() when file exceeds size limit (1 ms)
+  POST — file type validation
+    × returns 400 for an invalid MIME type (1 ms)
+    × returns 400 for image/svg+xml (1 ms)
+    × accepts valid MIME type: image/jpeg (1 ms)
+    × accepts valid MIME type: image/png (1 ms)
+    × accepts valid MIME type: image/webp
+    × accepts valid MIME type: image/gif
+    × [GAP 1] image/jpg is in ALLOWED_TYPES but is not a real browser MIME type (3 ms)
+    √ does NOT call put() for invalid MIME type (1 ms)
+  POST — filename sanitization
+    × lowercases the filename (1 ms)
+    × replaces spaces with underscores (1 ms)
+    × replaces special characters with underscores (1 ms)
+    × preserves dots in the filename (extension separator) (1 ms)
+    × preserves alphanumeric characters unchanged (1 ms)
+    × [GAP 2] path traversal filename is sanitized but not explicitly blocked — dots preserved (1 ms)
+  POST — vendorId path organization
+    × uses vendor-images/{vendorId}/{filename} path when vendorId is provided (1 ms)
+    × uses vendor-images/{filename} path when vendorId is absent (1 ms)
+  POST — successful upload response
+    × returns 200 with url, filename, size, and contentType (2 ms)
+    × passes access: public and addRandomSuffix: true to put() (1 ms)
+  POST — specific error handling
+    × returns 429 when put() throws a rate limit error (1 ms)
+    × returns 507 when put() throws a quota error
+    √ returns 500 for a generic put() error
+    × includes details field in development environment (4 ms)
+    √ omits details field in production environment
+    √ returns 500 when formData() throws (1 ms)
+  DELETE — validation
+    × returns 400 when url is missing from body
+    × returns 400 when url is not a string
+    × returns 400 when url is null (1 ms)
+    × returns 400 when URL does not belong to Vercel storage (1 ms)
+    √ does NOT call del() when URL fails storage check (1 ms)
+    × [GAP 3] URL injection bypasses storage provider check via .includes() (1 ms)
+  DELETE — successful deletion
+    × returns 200 with success message and echoed url (1 ms)
+    × calls del() with the provided URL (1 ms)
+  DELETE — specific error handling
+    × returns 404 when del() throws a 'not found' error (1 ms)
+    √ returns 500 for a generic del() error (1 ms)
+    × includes details in development when del() throws (1 ms)
+    √ omits details in production when del() throws
+    √ returns 500 when request.json() throws (1 ms)
+
+  ● POST — file presence validation › returns 400 when no file is provided
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 93 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 94 |[39m
+    [31m[1m>[22m[39m[90m 95 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m    |[39m                        [31m[1m^[22m[39m
+     [90m 96 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"No image file provided."[39m })[33m;[39m
+     [90m 97 |[39m   })[33m;[39m
+     [90m 98 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:95:24)
+
+  ● POST — file presence validation › returns 400 when file is a plain string
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 101 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 102 |[39m
+    [31m[1m>[22m[39m[90m 103 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 104 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"No image file provided."[39m })[33m;[39m
+     [90m 105 |[39m   })[33m;[39m
+     [90m 106 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:103:24)
+
+  ● POST — file size validation › returns 400 when file exceeds 5MB
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 123 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 124 |[39m
+    [31m[1m>[22m[39m[90m 125 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 126 |[39m     expect(res[33m.[39mbody[33m.[39merror)[33m.[39mtoContain([32m"5MB"[39m)[33m;[39m
+     [90m 127 |[39m   })[33m;[39m
+     [90m 128 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:125:24)
+
+  ● POST — file size validation › accepts a file exactly at the 5MB boundary
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 133 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 134 |[39m
+    [31m[1m>[22m[39m[90m 135 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 136 |[39m   })[33m;[39m
+     [90m 137 |[39m
+     [90m 138 |[39m   it([32m"does NOT call put() when file exceeds size limit"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:135:24)
+
+  ● POST — file type validation › returns 400 for an invalid MIME type
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 156 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 157 |[39m
+    [31m[1m>[22m[39m[90m 158 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 159 |[39m     expect(res[33m.[39mbody[33m.[39merror)[33m.[39mtoContain([32m"Invalid file type"[39m)[33m;[39m
+     [90m 160 |[39m   })[33m;[39m
+     [90m 161 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:158:24)
+
+  ● POST — file type validation › returns 400 for image/svg+xml
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 166 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 167 |[39m
+    [31m[1m>[22m[39m[90m 168 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 169 |[39m   })[33m;[39m
+     [90m 170 |[39m
+     [90m 171 |[39m   it[33m.[39meach([[32m"image/jpeg"[39m[33m,[39m [32m"image/png"[39m[33m,[39m [32m"image/webp"[39m[33m,[39m [32m"image/gif"[39m])([0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:168:24)
+
+  ● POST — file type validation › accepts valid MIME type: image/jpeg
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 176 |[39m       })[33m;[39m
+     [90m 177 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+    [31m[1m>[22m[39m[90m 178 |[39m       expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 179 |[39m     }[33m,[39m
+     [90m 180 |[39m   )[33m;[39m
+     [90m 181 |[39m[0m
+
+      at toBe (src/__tests__/api/vendorImageRoute.test.js:178:26)
+
+  ● POST — file type validation › accepts valid MIME type: image/png
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 176 |[39m       })[33m;[39m
+     [90m 177 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+    [31m[1m>[22m[39m[90m 178 |[39m       expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 179 |[39m     }[33m,[39m
+     [90m 180 |[39m   )[33m;[39m
+     [90m 181 |[39m[0m
+
+      at toBe (src/__tests__/api/vendorImageRoute.test.js:178:26)
+
+  ● POST — file type validation › accepts valid MIME type: image/webp
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 176 |[39m       })[33m;[39m
+     [90m 177 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+    [31m[1m>[22m[39m[90m 178 |[39m       expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 179 |[39m     }[33m,[39m
+     [90m 180 |[39m   )[33m;[39m
+     [90m 181 |[39m[0m
+
+      at toBe (src/__tests__/api/vendorImageRoute.test.js:178:26)
+
+  ● POST — file type validation › accepts valid MIME type: image/gif
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 176 |[39m       })[33m;[39m
+     [90m 177 |[39m       [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+    [31m[1m>[22m[39m[90m 178 |[39m       expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                          [31m[1m^[22m[39m
+     [90m 179 |[39m     }[33m,[39m
+     [90m 180 |[39m   )[33m;[39m
+     [90m 181 |[39m[0m
+
+      at toBe (src/__tests__/api/vendorImageRoute.test.js:178:26)
+
+  ● POST — file type validation › [GAP 1] image/jpg is in ALLOWED_TYPES but is not a real browser MIME type
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 194 |[39m
+     [90m 195 |[39m     [90m// Documents that image/jpg is accepted — but notes it is a dead entry[39m
+    [31m[1m>[22m[39m[90m 196 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 197 |[39m   })[33m;[39m
+     [90m 198 |[39m
+     [90m 199 |[39m   it([32m"does NOT call put() for invalid MIME type"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:196:24)
+
+  ● POST — filename sanitization › lowercases the filename
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: StringContaining "mylogo.jpg", Anything, Anything
+
+    Number of calls: 0
+
+    [0m [90m 217 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 218 |[39m
+    [31m[1m>[22m[39m[90m 219 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 220 |[39m       expect[33m.[39mstringContaining([32m"mylogo.jpg"[39m)[33m,[39m
+     [90m 221 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 222 |[39m       expect[33m.[39manything()[33m,[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/vendorImageRoute.test.js:219:17)
+
+  ● POST — filename sanitization › replaces spaces with underscores
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: StringContaining "my_vendor_logo.png", Anything, Anything
+
+    Number of calls: 0
+
+    [0m [90m 230 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 231 |[39m
+    [31m[1m>[22m[39m[90m 232 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 233 |[39m       expect[33m.[39mstringContaining([32m"my_vendor_logo.png"[39m)[33m,[39m
+     [90m 234 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 235 |[39m       expect[33m.[39manything()[33m,[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/vendorImageRoute.test.js:232:17)
+
+  ● POST — filename sanitization › replaces special characters with underscores
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: StringContaining "logo_2x_final.jpg", Anything, Anything
+
+    Number of calls: 0
+
+    [0m [90m 243 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 244 |[39m
+    [31m[1m>[22m[39m[90m 245 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 246 |[39m       expect[33m.[39mstringContaining([32m"logo_2x_final.jpg"[39m)[33m,[39m
+     [90m 247 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 248 |[39m       expect[33m.[39manything()[33m,[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/vendorImageRoute.test.js:245:17)
+
+  ● POST — filename sanitization › preserves dots in the filename (extension separator)
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: StringContaining "logo.v2.final.png", Anything, Anything
+
+    Number of calls: 0
+
+    [0m [90m 256 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 257 |[39m
+    [31m[1m>[22m[39m[90m 258 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 259 |[39m       expect[33m.[39mstringContaining([32m"logo.v2.final.png"[39m)[33m,[39m
+     [90m 260 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 261 |[39m       expect[33m.[39manything()[33m,[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/vendorImageRoute.test.js:258:17)
+
+  ● POST — filename sanitization › preserves alphanumeric characters unchanged
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: StringContaining "vendor123logo.webp", Anything, Anything
+
+    Number of calls: 0
+
+    [0m [90m 269 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 270 |[39m
+    [31m[1m>[22m[39m[90m 271 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 272 |[39m       expect[33m.[39mstringContaining([32m"vendor123logo.webp"[39m)[33m,[39m
+     [90m 273 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 274 |[39m       expect[33m.[39manything()[33m,[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/vendorImageRoute.test.js:271:17)
+
+  ● POST — filename sanitization › [GAP 2] path traversal filename is sanitized but not explicitly blocked — dots preserved
+
+    TypeError: Cannot read properties of undefined (reading '0')
+
+    [0m [90m 287 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 288 |[39m
+    [31m[1m>[22m[39m[90m 289 |[39m     [36mconst[39m calledPath [33m=[39m put[33m.[39mmock[33m.[39mcalls[[35m0[39m][[35m0[39m][33m;[39m
+     [90m     |[39m                                         [31m[1m^[22m[39m
+     [90m 290 |[39m     [90m// Slashes are gone — no literal path traversal in the storage key[39m
+     [90m 291 |[39m     expect(calledPath)[33m.[39mnot[33m.[39mtoContain([32m"../"[39m)[33m;[39m
+     [90m 292 |[39m     expect(calledPath)[33m.[39mnot[33m.[39mtoContain([32m"/etc/"[39m)[33m;[39m[0m
+
+      at Object.<anonymous> (src/__tests__/api/vendorImageRoute.test.js:289:41)
+
+  ● POST — vendorId path organization › uses vendor-images/{vendorId}/{filename} path when vendorId is provided
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "vendor-images/vendor-xyz/logo.jpg", Anything, Anything
+
+    Number of calls: 0
+
+    [0m [90m 311 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 312 |[39m
+    [31m[1m>[22m[39m[90m 313 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 314 |[39m       [32m"vendor-images/vendor-xyz/logo.jpg"[39m[33m,[39m
+     [90m 315 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 316 |[39m       expect[33m.[39manything()[33m,[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/vendorImageRoute.test.js:313:17)
+
+  ● POST — vendorId path organization › uses vendor-images/{filename} path when vendorId is absent
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "vendor-images/logo.jpg", Anything, Anything
+
+    Number of calls: 0
+
+    [0m [90m 325 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 326 |[39m
+    [31m[1m>[22m[39m[90m 327 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 328 |[39m       [32m"vendor-images/logo.jpg"[39m[33m,[39m
+     [90m 329 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 330 |[39m       expect[33m.[39manything()[33m,[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/vendorImageRoute.test.js:327:17)
+
+  ● POST — successful upload response › returns 200 with url, filename, size, and contentType
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 344 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 345 |[39m
+    [31m[1m>[22m[39m[90m 346 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 347 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({
+     [90m 348 |[39m       url[33m:[39m expect[33m.[39mstringContaining([32m"blob.vercel-storage.com"[39m)[33m,[39m
+     [90m 349 |[39m       filename[33m:[39m expect[33m.[39many([33mString[39m)[33m,[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:346:24)
+
+  ● POST — successful upload response › passes access: public and addRandomSuffix: true to put()
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: Any<String>, Anything, ObjectContaining {"access": "public", "addRandomSuffix": true}
+
+    Number of calls: 0
+
+    [0m [90m 357 |[39m     [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 358 |[39m
+    [31m[1m>[22m[39m[90m 359 |[39m     expect(put)[33m.[39mtoHaveBeenCalledWith(
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 360 |[39m       expect[33m.[39many([33mString[39m)[33m,[39m
+     [90m 361 |[39m       expect[33m.[39manything()[33m,[39m
+     [90m 362 |[39m       expect[33m.[39mobjectContaining({[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/vendorImageRoute.test.js:359:17)
+
+  ● POST — specific error handling › returns 429 when put() throws a rate limit error
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 429
+    Received: 500
+
+    [0m [90m 379 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 380 |[39m
+    [31m[1m>[22m[39m[90m 381 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m429[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 382 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({
+     [90m 383 |[39m       error[33m:[39m expect[33m.[39mstringContaining([32m"rate limit"[39m)[33m,[39m
+     [90m 384 |[39m     })[33m;[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:381:24)
+
+  ● POST — specific error handling › returns 507 when put() throws a quota error
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 507
+    Received: 500
+
+    [0m [90m 391 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 392 |[39m
+    [31m[1m>[22m[39m[90m 393 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m507[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 394 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({
+     [90m 395 |[39m       error[33m:[39m expect[33m.[39mstringContaining([32m"quota"[39m)[33m,[39m
+     [90m 396 |[39m     })[33m;[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:393:24)
+
+  ● POST — specific error handling › includes details field in development environment
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "dev error detail"
+    Received: "Cannot read properties of undefined (reading 'get')"
+
+    [0m [90m 416 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mPOST[39m(req)[33m;[39m
+     [90m 417 |[39m
+    [31m[1m>[22m[39m[90m 418 |[39m     expect(res[33m.[39mbody[33m.[39mdetails)[33m.[39mtoBe([32m"dev error detail"[39m)[33m;[39m
+     [90m     |[39m                              [31m[1m^[22m[39m
+     [90m 419 |[39m   })[33m;[39m
+     [90m 420 |[39m
+     [90m 421 |[39m   it([32m"omits details field in production environment"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:418:30)
+
+  ● DELETE — validation › returns 400 when url is missing from body
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 447 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 448 |[39m
+    [31m[1m>[22m[39m[90m 449 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 450 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"Image URL is required"[39m })[33m;[39m
+     [90m 451 |[39m   })[33m;[39m
+     [90m 452 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:449:24)
+
+  ● DELETE — validation › returns 400 when url is not a string
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 455 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 456 |[39m
+    [31m[1m>[22m[39m[90m 457 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 458 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"Image URL is required"[39m })[33m;[39m
+     [90m 459 |[39m   })[33m;[39m
+     [90m 460 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:457:24)
+
+  ● DELETE — validation › returns 400 when url is null
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 463 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 464 |[39m
+    [31m[1m>[22m[39m[90m 465 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 466 |[39m   })[33m;[39m
+     [90m 467 |[39m
+     [90m 468 |[39m   it([32m"returns 400 when URL does not belong to Vercel storage"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:465:24)
+
+  ● DELETE — validation › returns 400 when URL does not belong to Vercel storage
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 400
+    Received: 500
+
+    [0m [90m 472 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 473 |[39m
+    [31m[1m>[22m[39m[90m 474 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m400[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 475 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({ error[33m:[39m [32m"Invalid Vercel Blob URL"[39m })[33m;[39m
+     [90m 476 |[39m   })[33m;[39m
+     [90m 477 |[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:474:24)
+
+  ● DELETE — validation › [GAP 3] URL injection bypasses storage provider check via .includes()
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+    [0m [90m 495 |[39m     [90m// CURRENT: .includes() passes → del() is called → 200[39m
+     [90m 496 |[39m     [90m// DESIRED: strict hostname check → 400 "Invalid Vercel Blob URL"[39m
+    [31m[1m>[22m[39m[90m 497 |[39m     expect(del)[33m.[39mtoHaveBeenCalled()[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 498 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m 499 |[39m   })[33m;[39m
+     [90m 500 |[39m })[33m;[39m[0m
+
+      at Object.toHaveBeenCalled (src/__tests__/api/vendorImageRoute.test.js:497:17)
+
+  ● DELETE — successful deletion › returns 200 with success message and echoed url
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+    [0m [90m 512 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 513 |[39m
+    [31m[1m>[22m[39m[90m 514 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m200[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 515 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({
+     [90m 516 |[39m       message[33m:[39m [32m"Vendor image deleted successfully"[39m[33m,[39m
+     [90m 517 |[39m       url[33m:[39m [33mVALID_URL[39m[33m,[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:514:24)
+
+  ● DELETE — successful deletion › calls del() with the provided URL
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "https://blob.vercel-storage.com/vendor-images/vendor-xyz/logo.jpg"
+
+    Number of calls: 0
+
+    [0m [90m 522 |[39m     [36mconst[39m req [33m=[39m makeDeleteRequest({ url[33m:[39m [33mVALID_URL[39m })[33m;[39m
+     [90m 523 |[39m     [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+    [31m[1m>[22m[39m[90m 524 |[39m     expect(del)[33m.[39mtoHaveBeenCalledWith([33mVALID_URL[39m)[33m;[39m
+     [90m     |[39m                 [31m[1m^[22m[39m
+     [90m 525 |[39m   })[33m;[39m
+     [90m 526 |[39m })[33m;[39m
+     [90m 527 |[39m[0m
+
+      at Object.toHaveBeenCalledWith (src/__tests__/api/vendorImageRoute.test.js:524:17)
+
+  ● DELETE — specific error handling › returns 404 when del() throws a 'not found' error
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 404
+    Received: 500
+
+    [0m [90m 539 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 540 |[39m
+    [31m[1m>[22m[39m[90m 541 |[39m     expect(res[33m.[39mstatus)[33m.[39mtoBe([35m404[39m)[33m;[39m
+     [90m     |[39m                        [31m[1m^[22m[39m
+     [90m 542 |[39m     expect(res[33m.[39mbody)[33m.[39mtoMatchObject({
+     [90m 543 |[39m       error[33m:[39m [32m"Image not found or already deleted"[39m[33m,[39m
+     [90m 544 |[39m     })[33m;[39m[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:541:24)
+
+  ● DELETE — specific error handling › includes details in development when del() throws
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "dev delete detail"
+    Received: "Cannot read properties of undefined (reading 'get')"
+
+    [0m [90m 564 |[39m     [36mconst[39m res [33m=[39m [36mawait[39m [33mDELETE[39m(req)[33m;[39m
+     [90m 565 |[39m
+    [31m[1m>[22m[39m[90m 566 |[39m     expect(res[33m.[39mbody[33m.[39mdetails)[33m.[39mtoBe([32m"dev delete detail"[39m)[33m;[39m
+     [90m     |[39m                              [31m[1m^[22m[39m
+     [90m 567 |[39m   })[33m;[39m
+     [90m 568 |[39m
+     [90m 569 |[39m   it([32m"omits details in production when del() throws"[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+      at Object.toBe (src/__tests__/api/vendorImageRoute.test.js:566:30)
+
+Test Suites: 4 failed, 4 total
+Tests:       73 failed, 93 passed, 166 total
+Snapshots:   0 total
+Time:        0.971 s, estimated 1 s

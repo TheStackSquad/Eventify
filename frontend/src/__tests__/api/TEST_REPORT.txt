@@ -1,0 +1,52 @@
+# frontend/src/__tests__/api/TEST_REPORT.txt
+
+================================================================================
+TEST REPORT — <domain>/                                   Status: GREEN|AMBER|RED
+================================================================================
+Generated : <YYYY-MM-DD HH:MM>   Branch: <branch>   Commit: <short sha>
+Runner    : Jest <version> | Node <version> | Project(s): jsdom|node
+Command   : npm run test:<domain>
+
+--- 1. VITALS ------------------------------------------------------------------
+Suites : <passed>/<total>        Tests : <passed> passed, <failed> failed, <skipped> skipped
+Runtime: <seconds>s              Flaky/timeouts observed: <none | list>
+Coverage of this domain's source files (only if a coverage run was done): <stmts/branch/funcs/lines>
+
+--- 2. FILE INVENTORY ----------------------------------------------------------
+<file>.test.js   <n tests>   <PASS|FAIL>   Subject under test: <src path>
+(Helpers/fixtures that are not tests: <file> - purpose)
+
+--- 3. WHAT IS PROVEN (behaviors covered) --------------------------------------
+- <behavior in plain language>  [test file]
+(Business-critical paths covered: money, auth, tickets, PII handling)
+
+--- 4. FINDINGS ----------------------------------------------------------------
+Product defects : <id> <symptom> | <file:line> | severity | status
+Test defects    : <id> <symptom> | cause (stale copy / mock / timing / isolation) | status
+Coverage gaps   : <source file> <%> - why it matters
+Security/PII    : <anything logged or exposed; never paste real values>
+
+--- 5. FAILURE DETAIL (only for failing tests) ---------------------------------
+Test      : <describe > it>
+Symptom   : <one line, the assertion or error>
+Diagnosis : <why it fails>
+Fix owner : test | component | config      Fix: <one line>
+
+--- 6. ENVIRONMENT & MOCKING NOTES ---------------------------------------------
+Mocked    : <module> - reason, and what the mock can hide
+Real      : <module> - deliberately unmocked, and why
+Gotchas   : <jsdom limitation, fake timers, hoisting, location, etc.>
+
+--- 7. CHANGE LOG --------------------------------------------------------------
+<date> <who/agent> <what changed> <result: n failing -> m failing>
+
+--- 8. OPEN QUESTIONS (need a human decision) ----------------------------------
+- <question>
+
+--- 9. NEXT ACTIONS (ordered, for the next agent) ------------------------------
+1. <action> | files: <paths> | done when: <test or command that proves it>
+
+--- 10. HOW TO RE-VERIFY -------------------------------------------------------
+npm run test:<domain>
+<any extra command, e.g. a single-file run>
+================================================================================

@@ -4,6 +4,7 @@
 
 import { Calendar, AlertCircle, CheckCircle } from "lucide-react";
 import { formatDistanceToNow, differenceInDays } from "date-fns";
+import { redirectTo } from "../../../../utils/navigation";
 
 export default function SubscriptionCard({ subscription }) {
   if (!subscription) {
@@ -79,7 +80,8 @@ export default function SubscriptionCard({ subscription }) {
       {(isExpiringSoon || isExpired) && (
         <button
           onClick={() =>
-            (window.location.href = "/dashboard/subscription/renew")
+           // (window.location.href = "/dashboard/subscription/renew")
+            redirectTo("/dashboard/subscription/renew")
           }
           className="mt-4 w-full py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
         >

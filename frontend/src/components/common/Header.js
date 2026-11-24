@@ -25,6 +25,7 @@ import MobileMenu from "@/components/common/nav/mobileMenu";
 import CartIcon from "@/components/common/cartIcon";
 import EmailPreferencesModal from "@/components/modal/emailPreferencesModal";
 import toastAlert from "@/components/common/toast/toastAlert";
+import { redirectTo } from "@/utils/navigation";
 
 const navItems = [
   { path: "/events", label: "Events" },
@@ -363,19 +364,27 @@ export default function Header() {
     }
   }, [menuOpen, closeMobileFeatures, closeMobileBenefit]);
 
-  const handleMenuToggle = () => {
-    setMenuOpen((prev) => {
-      const next = !prev;
+  // const handleMenuToggle = () => {
+  //   setMenuOpen((prev) => {
+  //     const next = !prev;
 
-      if (!next) {
-        closeMobileFeatures();
-        closeMobileBenefit();
+  //     if (!next) {
+  //       closeMobileFeatures();
+  //       closeMobileBenefit();
+  //       closeFeatures();
+  //       closeBenefit();
+  //     }
+
+  //     return next;
+  //   });
+  // };
+
+  const handleMenuToggle = () => {
+      if (menuOpen) {
         closeFeatures();
         closeBenefit();
       }
-
-      return next;
-    });
+      setMenuOpen((prev) => !prev);
   };
 
   const handleProfileClick = () => {
@@ -391,7 +400,8 @@ export default function Header() {
       await logoutApi();
       toastAlert.success("Logged out successfully");
       // Redirect to home or login page
-      window.location.href = "/";
+     // window.location.href = "/";
+      redirectTo("/");
     } catch (error) {
       console.error("Logout failed:", error);
       toastAlert.error("Logout failed. Please try again.");

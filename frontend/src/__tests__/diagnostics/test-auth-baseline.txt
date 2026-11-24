@@ -1,0 +1,414 @@
+
+> frontend@0.1.0 test:auth
+> jest src/__tests__/auth --verbose --silent
+
+PASS jsdom src/__tests__/auth/submissionAndAuth.test.js
+  useEventSubmission — pre-submission guards
+    √ detects 'undefined' string eventId (Next.js params edge case) (10 ms)
+    √ detects undefined eventId (2 ms)
+    √ detects null eventId (2 ms)
+    √ accepts a valid eventId string (1 ms)
+    √ blocks submission when userId is null (1 ms)
+    √ blocks submission when userId is empty string (4 ms)
+    √ allows submission with a valid userId (1 ms)
+    √ validateEventForm gate: API is NOT called when validation fails (3 ms)
+    √ validateEventForm gate: API IS called when validation passes (1 ms)
+    √ setErrors receives errorMap on validation failure (3 ms)
+  useEventSubmission — image rollback on DB failure
+    √ deleteImage is called when upload succeeds but DB write fails (2 ms)
+    √ deleteImage is NOT called when upload was never attempted (existing image URL) (2 ms)
+    √ deleteImage is NOT called when upload fails (no URL to roll back) (1 ms)
+    √ rollback does not throw even if deleteImage itself fails (2 ms)
+  useEventSubmission — navigation after success
+    √ router.push is called with ROUTES.BASE after successful create (8 ms)
+    √ router.push is NOT called before submission completes
+  useEventSubmission — state machine transitions
+    √ isSubmitting starts false (1 ms)
+    √ isSubmitting is true during submission (1 ms)
+    √ isSubmitting resets to false in finally block (1 ms)
+    √ uploadProgress resets to 0 in finally block
+    √ currentStep resets to empty string in finally block (1 ms)
+  AuthGuard — route protection
+    √ unauthenticated user cannot access protected route (2 ms)
+    √ authenticated user can access protected route (3 ms)
+    √ loading state prevents premature redirect (no flash of login screen) (1 ms)
+    √ redirects only after loading completes with no user (2 ms)
+    √ does NOT redirect when user is present even if authLoading is false (1 ms)
+    √ does NOT redirect while authLoading even if user is null (1 ms)
+  mediaServices — validateImageFile: accepted types
+    √ accepts JPEG (3 ms)
+    √ accepts PNG (1 ms)
+    √ accepts WebP (1 ms)
+    √ accepts GIF (1 ms)
+  mediaServices — validateImageFile: rejections
+    √ rejects null input (1 ms)
+    √ rejects file over 5MB (7 ms)
+    √ rejects PDF (wrong MIME type) (1 ms)
+    √ rejects SVG (XSS vector — not in allowedTypes) (1 ms)
+    √ rejects MP4 video files (1 ms)
+    √ rejects text files (1 ms)
+  mediaServices — validateImageFile: custom options
+    √ respects custom maxSize (3 ms)
+    √ respects custom allowedTypes whitelist (1 ms)
+    √ accepts file when it meets custom constraints (1 ms)
+  mediaServices — deleteImage URL safety check
+    √ recognises valid Vercel Blob URL
+    √ rejects non-Vercel URL from deletion (1 ms)
+    √ rejects null URL (1 ms)
+    √ rejects empty string URL (1 ms)
+    √ rejects URL that partially mentions vercel but wrong pattern (1 ms)
+
+PASS jsdom src/__tests__/auth/tokenService.test.js
+  tokenService
+    setBackendInstanceRef
+      √ makes hasBackendRef true in getRefreshStatus (29 ms)
+      √ makes hasBackendRef false when called with null (6 ms)
+    scheduleTokenRefresh — scheduling mechanics
+      √ schedules a refresh that fires at the default REFRESH_INTERVAL (22 ms)
+      √ respects a custom interval (16 ms)
+      √ cancels a previously scheduled timer when called again (6 ms)
+      √ sets isScheduled to true immediately after being called (5 ms)
+    scheduleTokenRefresh — on successful refresh
+      √ calls post with the /auth/refresh endpoint (5 ms)
+      √ dispatches a tokenRefreshed custom event (8 ms)
+      √ includes a timestamp in the tokenRefreshed event detail (7 ms)
+      √ schedules the next refresh after success (self-renewing) (5 ms)
+    scheduleTokenRefresh — spam guard
+      √ skips the refresh call and reschedules when last attempt is too recent (8 ms)
+    scheduleTokenRefresh — on 401 failure
+      √ stops the refresh scheduler (no new timer) (10 ms)
+      √ dispatches a sessionExpired event with REFRESH_TOKEN_EXPIRED reason (5 ms)
+    scheduleTokenRefresh — on 403 failure (security violation)
+      √ stops the refresh scheduler (4 ms)
+      √ does NOT dispatch sessionExpired (silent stop — let backend handle it) (10 ms)
+    scheduleTokenRefresh — on network error
+      √ reschedules with a 5-minute backoff rather than stopping (16 ms)
+    scheduleTokenRefresh — no backendInstanceRef
+      √ returns without throwing or calling post when ref is null (5 ms)
+    clearRefreshTimer
+      √ cancels an active timer so the callback never fires (4 ms)
+      √ sets isScheduled to false (3 ms)
+      √ is a safe no-op when no timer is active (13 ms)
+      √ is idempotent — calling twice does not throw (14 ms)
+    clearAuthCookies
+      √ cancels an active refresh timer (8 ms)
+      √ is a safe no-op when no timer is active (3 ms)
+      √ does not throw when called multiple times in a row (7 ms)
+    initializeTokenRefresh
+      √ starts the refresh scheduler (9 ms)
+      √ schedules a timer at the default REFRESH_INTERVAL (5 ms)
+    triggerManualRefresh
+      √ throws synchronously when no backendInstanceRef is set (67 ms)
+      √ calls post with the /auth/refresh endpoint (4 ms)
+      √ returns response.data on success (5 ms)
+      √ resets the automatic scheduler after a successful manual refresh (3 ms)
+      √ updates lastRefreshAttempt on success (4 ms)
+      √ updates lastRefreshAttempt even before the post call completes (optimistic lock) (3 ms)
+      √ rethrows the original error on failure (6 ms)
+      √ does not swallow non-auth errors (4 ms)
+    getRefreshStatus
+      √ returns correct initial state (no timer, no previous attempt) (7 ms)
+      √ returns isScheduled: true after scheduleTokenRefresh (6 ms)
+      √ returns isScheduled: false after clearRefreshTimer (3 ms)
+      √ returns hasBackendRef: false when ref is cleared (4 ms)
+      √ returns a non-null timeSinceLastAttempt after a manual refresh (10 ms)
+      √ timeSinceLastAttempt increases as fake time advances (3 ms)
+
+PASS jsdom src/__tests__/auth/interceptorService.test.js
+  interceptorService
+    createRequestInterceptor
+      √ returns the config object unchanged (43 ms)
+    non-401 errors
+      √ passes through 404 Not Found without touching auth state (15 ms)
+      √ passes through 403 Forbidden without touching auth state (5 ms)
+      √ passes through 500 Internal Server Error without touching auth state (6 ms)
+      √ passes through 422 Validation Error without touching auth state (6 ms)
+      √ passes through network error (no response object) without touching auth state (10 ms)
+    401 on auth endpoints
+      √ rejects immediately for /auth/login without triggering a refresh (5 ms)
+      √ rejects immediately for /auth/signup without triggering a refresh (12 ms)
+      √ clears auth state when /auth/refresh itself returns 401 (8 ms)
+      √ still rejects the original error after /auth/refresh 401 (4 ms)
+      √ does not start a new refresh when /auth/refresh 401 fires (12 ms)
+    _retry guard
+      √ clears auth and rejects when the request is already marked _retry (28 ms)
+      √ does not attempt another refresh for a _retry request (6 ms)
+      √ dispatches authExpired event on a protected route (8 ms)
+    redirect behaviour (clearAuthAndRedirect)
+      √ redirects to login with callbackUrl when on protected route /dashboard (14 ms)
+      √ redirects to login with callbackUrl when on protected route /dashboard/settings (6 ms)
+      √ redirects to login with callbackUrl when on protected route /dashboard/events/42 (11 ms)
+      √ redirects to login with callbackUrl when on protected route /create-events (13 ms)
+      √ redirects to login with callbackUrl when on protected route /create-events/new (5 ms)
+      √ redirects to login with callbackUrl when on protected route /vendor (10 ms)
+      √ redirects to login with callbackUrl when on protected route /vendor/profile (8 ms)
+      √ does NOT redirect when on public route /about (8 ms)
+      √ does NOT redirect when on public route /events/123 (4 ms)
+      √ does NOT redirect when on public route /pricing (9 ms)
+      √ does NOT redirect when already on the login page (3 ms)
+      √ dispatches authExpired event with originalPath on protected route (22 ms)
+      √ does NOT dispatch authExpired event on public route (6 ms)
+    successful token refresh
+      √ calls backendInstance.post with the /auth/refresh endpoint (5 ms)
+      √ calls scheduleTokenRefresh exactly once after a successful refresh (3 ms)
+      √ dispatches a tokenRefreshed custom event (8 ms)
+      √ retries the original request after refresh (5 ms)
+      √ marks the retried request with _retry = true to prevent loops (9 ms)
+      √ returns the response of the retried request (5 ms)
+      √ does not call clearAuthCookies or clearRefreshTimer on success (3 ms)
+      √ does not redirect to login on a successful refresh (5 ms)
+    failed token refresh
+      401 from /auth/refresh (session expired)
+        √ calls clearAuthCookies and clearRefreshTimer (4 ms)
+        √ redirects to login from a protected route (5 ms)
+        √ rejects the interceptor promise (3 ms)
+        √ does not call scheduleTokenRefresh (4 ms)
+      403 / SECURITY_VIOLATION from /auth/refresh
+        √ calls clearAuthCookies and clearRefreshTimer (18 ms)
+        √ dispatches authExpired with SECURITY_VIOLATION reason on protected route (4 ms)
+        √ rejects the interceptor promise (3 ms)
+      network error from /auth/refresh (no response)
+        √ calls clearAuthCookies and clearRefreshTimer (4 ms)
+        √ rejects the interceptor promise (4 ms)
+    concurrent request queuing
+      √ queues a second 401 while refresh is in flight, then retries both on success (6 ms)
+      √ releases all queued requests when refresh succeeds (4 ms)
+      √ rejects all queued requests when refresh fails (4 ms)
+      √ immediately rejects when the queue is full (> 50 requests) (31 ms)
+      √ rejects a queued request with REFRESH_TIMEOUT after 10 seconds (13 ms)
+      √ only sends one refresh request regardless of how many 401s are concurrent (4 ms)
+
+PASS jsdom src/__tests__/auth/axiosTokenService.test.js
+  tokenService — clearRefreshTimer
+    √ is idempotent — calling twice does not throw (9 ms)
+    √ marks timer as not scheduled after clearing (9 ms)
+  tokenService — initializeTokenRefresh
+    √ schedules a timer after initialization (4 ms)
+    √ calling twice replaces the previous timer — no double scheduling (3 ms)
+  tokenService — scheduleTokenRefresh
+    √ does NOT fire before the interval (8 ms)
+    √ fires the refresh at the given interval (16 ms)
+    √ dispatches 'tokenRefreshed' event on success (5 ms)
+    √ reschedules after a successful refresh (keeps the cycle alive) (4 ms)
+    √ dispatches 'sessionExpired' and stops scheduling on 401 (9 ms)
+    √ stops scheduling on 403 (security violation — token reuse) (4 ms)
+    √ retries with 5-minute backoff on network errors (4 ms)
+    √ enforces MIN_REFRESH_INTERVAL — skips if called too soon after last attempt (5 ms)
+    √ does nothing if backendInstanceRef is not set (3 ms)
+  tokenService — triggerManualRefresh
+    √ calls POST /auth/refresh immediately (4 ms)
+    √ throws when backendInstance is not set (35 ms)
+    √ rethrows errors from the API (6 ms)
+    √ reschedules the automatic refresh cycle after manual trigger (3 ms)
+  tokenService — getRefreshStatus
+    √ returns correct shape with all expected keys (5 ms)
+    √ reports hasBackendRef true when instance is set (2 ms)
+    √ reports hasBackendRef false when instance is cleared (3 ms)
+    √ isScheduled is false before any scheduling (4 ms)
+  tokenService — clearAuthCookies
+    √ clears the refresh timer (scheduler side effect only) (13 ms)
+    √ does NOT attempt to clear HttpOnly cookies via document.cookie (security contract) (4 ms)
+
+PASS jsdom src/__tests__/auth/useAuth.test.js
+  useAuth()
+    √ returns context values when inside SessionProvider (68 ms)
+    √ throws when called outside of SessionProvider (82 ms)
+  useCurrentUser()
+    √ returns null when not logged in (12 ms)
+    √ returns user object when logged in (17 ms)
+  useIsAdmin()
+    √ returns false for customer role (8 ms)
+    √ returns false for vendor role (55 ms)
+    √ returns true for admin role (6 ms)
+    √ returns false when user is null (6 ms)
+  useCanAccessEvents()
+    √ returns false when user has no events and is not a vendor (8 ms)
+    √ returns true when user has events (4 ms)
+    √ returns true when user is a vendor (5 ms)
+    √ returns false when user is null (2 ms)
+  useCanAccessVendorTools()
+    √ returns false for non-vendor (5 ms)
+    √ returns true for vendor (3 ms)
+  useLogin()
+    √ calls loginApi with credentials on mutate (27 ms)
+    √ calls setUser with user data on success (10 ms)
+    √ calls initializeTokenRefresh on successful login (5 ms)
+    √ does NOT call setUser on error (5 ms)
+    √ sets queryData for ['session'] key on success (8 ms)
+  useSignup()
+    √ calls signupApi with form data (5 ms)
+    √ clears queryClient cache on success (6 ms)
+    √ ⚠️ [KNOWN DESIGN GAP] does NOT authenticate user after signup (no setUser call) (4 ms)
+  useLogout()
+    √ calls clearAuth on successful logout (6 ms)
+    √ calls clearRefreshTimer on logout (7 ms)
+    √ still clears auth even when logoutApi fails (defensive logout) (4 ms)
+    √ clears queryClient on logout (3 ms)
+
+PASS jsdom src/__tests__/auth/authAPI.test.js
+  verifySessionApi()
+    √ calls GET /auth/me and returns response.data.user (3 ms)
+    √ does NOT return the full response.data envelope (2 ms)
+    √ throws when API call fails (2 ms)
+    √ does not log in test/production environment (IS_DEV=false) (2 ms)
+  loginApi()
+    √ calls POST /auth/login with credentials (2 ms)
+    √ does NOT log the password in debug output (1 ms)
+    √ propagates errors without wrapping (1 ms)
+    √ includes rememberMe in the login payload (2 ms)
+  signupApi()
+    √ calls POST /auth/signup with user data (2 ms)
+    √ does NOT receive confirmPassword when called correctly from SignUpForm (1 ms)
+    √ re-throws errors with original error object (3 ms)
+  logoutApi()
+    √ calls POST /auth/logout (1 ms)
+    √ re-throws errors (logout error should still propagate) (9 ms)
+  refreshTokenApi()
+    √ calls POST /auth/refresh (1 ms)
+    √ re-throws on 401 (expired refresh token) (1 ms)
+  forgotPasswordApi()
+    √ calls POST /auth/forgot-password with email object (1 ms)
+    √ re-throws errors (3 ms)
+  verifyResetTokenApi()
+    √ calls POST /auth/verify-reset-token with token object (1 ms)
+  resetPasswordApi()
+    √ calls POST /auth/reset-password with data payload (1 ms)
+
+PASS jsdom src/__tests__/auth/axiosInterceptorService.test.js
+  createResponseInterceptor — non-401 passthrough
+    √ passes through 400 Bad Request without retry (16 ms)
+    √ passes through 403 Forbidden without retry (4 ms)
+    √ passes through 404 Not Found without retry (3 ms)
+    √ passes through 422 Unprocessable Entity without retry (2 ms)
+    √ passes through 500 Internal Server Error without retry (2 ms)
+  createResponseInterceptor — auth endpoint exclusions
+    √ does NOT retry 401 on /auth/login (prevents login loop) (5 ms)
+    √ does NOT retry 401 on /auth/signup (2 ms)
+    √ clears auth and redirects when /auth/refresh itself returns 401 (dead session) (10 ms)
+  createResponseInterceptor — 401 on protected resource
+    √ attempts POST /auth/refresh on 401 for non-auth endpoint (3 ms)
+    √ retries the original request after successful refresh (3 ms)
+    √ does NOT retry a request that already has _retry: true (no infinite loop) (2 ms)
+    √ redirects to login with callbackUrl when refresh fails on a protected route (7 ms)
+    √ does NOT redirect when user is on a public route (no unnecessary logout) (3 ms)
+    √ dispatches 'authExpired' event on redirect (2 ms)
+  createResponseInterceptor — concurrent 401 queuing
+    √ issues only ONE refresh call despite multiple concurrent 401s (2 ms)
+    √ all queued requests resolve after refresh completes (1 ms)
+    √ all queued requests reject when refresh fails (4 ms)
+  interceptor — event mutation 401 handling (demo-critical)
+    √ retries createEvent (POST /events) after 401 — submission not silently lost (2 ms)
+    √ retries updateEvent (PUT /events/evt-001) after 401 (3 ms)
+    √ retries deleteEvent (DELETE /events/evt-001) after 401 (1 ms)
+    √ retries fetchUserEvents (GET /events/user) after 401 (3 ms)
+    √ retries fetchEventAnalytics after 401 (1 ms)
+    √ on /create-events route: redirects with callbackUrl when refresh fails (3 ms)
+    √ does NOT infinite-loop on event mutation with _retry: true already set (3 ms)
+  interceptor — frontendInstance isolation (image upload)
+    √ frontendInstance 401 rejects immediately without refresh attempt (4 ms)
+    √ image upload 401 propagates to useEventSubmission catch (enables rollback) (1 ms)
+    √ backendInstance and frontendInstance use different baseURLs — interceptors must not cross-call
+  interceptor — CSRF error handling
+    √ detects CSRF_TOKEN_MISSING and dispatches csrfError event (1 ms)
+    √ detects CSRF_TOKEN_INVALID and dispatches csrfError event (5 ms)
+    √ returns false for non-CSRF errors (does not interfere) (1 ms)
+    √ returns false for errors with no response body (8 ms)
+    √ state-changing methods (POST/PUT/PATCH/DELETE) require CSRF token on backendInstance (2 ms)
+    √ createEvent POST would have CSRF token attached (backendInstance guards it) (1 ms)
+  interceptor — PROTECTED_ROUTES redirect logic
+    √ redirects to login from protected route: /dashboard (3 ms)
+    √ redirects to login from protected route: /create-events (2 ms)
+    √ redirects to login from protected route: /vendor (1 ms)
+    √ does NOT redirect from public route: / (1 ms)
+    √ does NOT redirect from public route: /events (2 ms)
+    √ does NOT redirect from public route: /account/auth/login (2 ms)
+    √ does NOT redirect from public route: /about (6 ms)
+    √ sub-routes of /dashboard are also protected (/dashboard/settings) (1 ms)
+    √ sub-routes of /create-events are protected (/create-events/edit) (1 ms)
+
+PASS jsdom src/__tests__/auth/authFormBoundary.test.js
+  AuthFormBoundary — happy path
+    √ renders children normally when no error is thrown (80 ms)
+    √ catches a thrown error and renders the fallback UI (275 ms)
+    √ shows the formType in the error title on first error (40 ms)
+    √ defaults to 'form' in the title when formType prop is omitted (31 ms)
+    √ fires a toast error notification when it catches an error (26 ms)
+    √ renders Try Again and Back to Home buttons in the fallback UI (21 ms)
+    √ resets to showing children after Try Again is clicked (22 ms)
+    √ Back to Home button is present and clickable without crashing (16 ms)
+  AuthFormBoundary — circuit breaker
+    √ shows normal title and no error count on the first error (22 ms)
+    √ shows 'Persistent Issue' title after 2 rapid errors (< 3s apart) (51 ms)
+    √ shows error count indicator when errorCount > 1 (49 ms)
+    √ fires a second escalation toast on the third rapid error (56 ms)
+    √ resets error count to 1 when next error occurs more than 3s after the last (33 ms)
+    √ shows error details block in development mode (13 ms)
+  AuthFormBoundary — code gaps
+    [GAP 2] >= 3 rapid errors must trigger automatic navigation
+      √ calls handleGoHome after the 3rd rapid error (42 ms)
+
+PASS jsdom src/__tests__/auth/sessionAndBoundary.test.js
+  SessionProvider
+    √ sets isAuthenticated=true when session is valid (169 ms)
+    √ exposes user email from session (56 ms)
+    √ calls initializeTokenRefresh when session is valid (47 ms)
+    √ marks isInitialized=true after session check completes (30 ms)
+    √ sets isAuthenticated=false when no session exists (14 ms)
+    √ calls clearRefreshTimer when no session (32 ms)
+    √ attempts token refresh on initial 401, then re-verifies session (47 ms)
+    √ sets unauthenticated when both verify AND refresh fail (10 ms)
+    √ sets unauthenticated (not throws) when session returns 403 (7 ms)
+    √ ⚠️ [KNOWN ISSUE] loading is true during background refetches after initialization (32 ms)
+    √ invalidates session cache when 'tokenRefreshed' event fires (28 ms)
+    √ clears refresh timer on unmount (49 ms)
+    √ setUser updates authentication state (27 ms)
+  AuthFormBoundary
+    √ renders children when there is no error (5 ms)
+    √ renders fallback UI when child throws (58 ms)
+    √ shows toast error when child throws (12 ms)
+    √ shows Try Again and Back to Home buttons in fallback (13 ms)
+    √ resets error state when Try Again is clicked (16 ms)
+    √ redirects home when Back to Home is clicked (13 ms)
+    √ shows 'Persistent Issue' title after 2+ errors (8 ms)
+    √ ⚠️ [KNOWN DESIGN GAP] fallback has max-w-sm but SignUpForm has max-w-md container (12 ms)
+    √ ⚠️ [TODO] errors are not sent to any monitoring service (Sentry commented out) (1 ms)
+  Axios CSRF Token Injection
+    √ extracts CSRF token from cookie correctly (1 ms)
+    √ returns null when no CSRF cookie is set
+    √ handles URL-encoded CSRF tokens
+    √ ⚠️ [KNOWN BUG] CSRF error handler is on frontendInstance, not backendInstance
+    √ ⚠️ [KNOWN BUG] LoginInputField does not forward the `disabled` prop to <input>
+
+PASS jsdom src/__tests__/auth/sessionProvider.test.js (8.942 s)
+  SessionProvider — happy path
+    √ renders with loading=true, authenticated=false before the query resolves (139 ms)
+    √ becomes authenticated and exposes user after a valid session (114 ms)
+    √ calls initializeTokenRefresh (and not clearRefreshTimer) after valid session (49 ms)
+    √ stays unauthenticated and calls clearRefreshTimer when verifySessionApi returns null (30 ms)
+    √ recovers the session: verify→401, refresh→ok, re-verify→user (66 ms)
+    √ stays unauthenticated when both verify and refresh fail with 401 (45 ms)
+    √ stays unauthenticated when verifySessionApi returns 403 (32 ms)
+    √ setUser() immediately sets authenticated+user without a network call (44 ms)
+    √ clearAuth() immediately resets to unauthenticated and cancels refresh timer (37 ms)
+    √ tokenRefreshed event invalidates query and triggers a re-verify call (53 ms)
+    √ cleans up the tokenRefreshed listener and calls clearRefreshTimer on unmount (40 ms)
+  SessionProvider — gap regressions
+    [GAP 1] transient 5xx on re-verify after refresh should not clear auth
+      √ does NOT call clearRefreshTimer when 5xx hits the second verifySessionApi call (1048 ms)
+    [GAP 2] retry() operator precedence — network errors must retry
+      √ retries network errors up to 2 times and resolves on the third attempt (3080 ms)
+      √ does NOT retry 401 errors — they are definitive auth failures (48 ms)
+    [GAP 3] loading must be true during background refetch after token rotation
+      √ exposes loading=true while re-verifying after a tokenRefreshed event (95 ms)
+    [GAP 4] setUser() must invalidate query cache to prevent ghost sessions
+      √ marks the session query as invalidated after setUser so the next refetch re-verifies (63 ms)
+  SessionProvider — new code gaps
+    [NEW GAP A] clearAuth() must invalidate the query cache on logout
+      √ marks session query as invalidated after clearAuth so next focus re-verifies (45 ms)
+    [NEW GAP B] exhausted network retries must not actively destroy session state
+      √ sets initialized=true and unauthenticated WITHOUT calling clearRefreshTimer after all retries fail (3038 ms)
+
+Test Suites: 10 passed, 10 total
+Tests:       305 passed, 305 total
+Snapshots:   0 total
+Time:        11.64 s

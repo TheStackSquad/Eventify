@@ -1,0 +1,46 @@
+# frontend/src/__tests__/auth/TEST_REPORT.txt
+
+================================================================================
+DOMAIN TEST REPORT: AUTH (src/__tests__/auth/)
+Last Updated: 2026-11-13 | Branch: fix/test-suite-baseline
+Status: 10/10 Suites Passing (305/305 Tests) | Time: ~13.7s
+================================================================================
+
+1. SUITE INVENTORY & STATUS
+- authAPI.test.js                 [PASS - 19/19 tests]
+- authFormBoundary.test.js        [PASS - 15/15 tests]
+- axiosInterceptorService.test.js [PASS - 42/42 tests]
+- axiosTokenService.test.js       [PASS - 23/23 tests]
+- interceptorService.test.js      [PASS - 51/51 tests]
+- sessionAndBoundary.test.js      [PASS - 27/27 tests]
+- sessionProvider.test.js         [PASS - 19/19 tests]
+- submissionAndAuth.test.js       [PASS - 45/45 tests]
+- tokenService.test.js            [PASS - 39/39 tests]
+- useAuth.test.js                 [PASS - 25/25 tests]
+
+2. ARCHITECTURAL CHANGES & FIXES APPLIED
+- Split `axiosInterceptors.test.js` (800+ lines) into 3 isolated modules:
+  1. `authTestHelpers.js`: Shared MOCK_API_ENDPOINTS, makeError(), navigateTo(),
+     advanceAndFlush(), and createMockAxiosInstance().
+  2. `axiosTokenService.test.js`: Tests REAL `tokenService` without top-level
+     module mocks, eliminating Jest hoisting collisions on triggerManualRefresh().
+  3. `axiosInterceptorService.test.js`: Tests `createResponseInterceptor` and
+     Axios instance isolation with mocked `tokenService`.
+- Fixed relative fixture path in `submissionAndAuth.test.js`:
+  Changed `@/__fixtures__/eventFixtures` -> `@/__fixtures__/eventFixtures`.
+
+3. SURFACED BUGS & SECURITY ITEMS (CODIFIED IN PASSING TESTS)
+- [SECURITY BUG] `sessionAndBoundary.test.js`: CSRF error handler is currently
+  attached to `frontendInstance` (Next.js upload routes) instead of
+  `backendInstance` (Go Gin API where POST/PUT/PATCH/DELETE mutations run).
+- [UX/AUTH GAP] `useAuth.test.js`: `useSignup()` clears cache on success but
+  does NOT authenticate/set user state post-signup (`no setUser call`).
+- [UI BUG] `sessionAndBoundary.test.js`: `LoginInputField` does not forward
+  the `disabled` prop down to the underlying `<input>` element.
+- [OBSERVABILITY TODO] `sessionAndBoundary.test.js`: `AuthFormBoundary` error
+  reporting to external monitoring (Sentry) is commented out.
+
+4. NEXT ACTIONS FOR PRODUCTION FIX PR
+- Move CSRF error handler onto `backendInstance` and invert the known-bug
+  assertion in `sessionAndBoundary.test.js` to assert proper backend handling.
+================================================================================

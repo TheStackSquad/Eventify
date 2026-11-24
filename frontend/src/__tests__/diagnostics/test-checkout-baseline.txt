@@ -1,0 +1,328 @@
+
+> frontend@0.1.0 test:checkout
+> jest src/__tests__/checkout --verbose --silent
+
+PASS jsdom src/__tests__/checkout/checkoutCalculations.test.js
+  calculateServiceFee
+    small ticket tier (price ≤ ₦5,000)
+      √ charges 10% flat with zero VAT at exactly ₦5,000 (boundary) (23 ms)
+      √ charges 10% flat at ₦1,000 (2 ms)
+    premium ticket tier (price > ₦5,000)
+      √ crosses to premium at ₦5,001 (3 ms)
+      √ applies 7% + ₦50 + 7.5% VAT at ₦10,000 (7 ms)
+    edge cases
+      √ returns zeros for price = 0 (2 ms)
+      √ returns zeros for NaN input (1 ms)
+      √ returns zeros for negative price (2 ms)
+      √ coerces string price — no rejection, no warning thrown (2 ms)
+  calculateCartTotals
+    empty / invalid input
+      √ returns zero-safe defaults for: [] (6 ms)
+      √ returns zero-safe defaults for: null (2 ms)
+      √ returns zero-safe defaults for: undefined (1 ms)
+      √ returns zero-safe defaults for: "not-an-array" (2 ms)
+    single small ticket
+      √ matches pre-calculated expected totals for ₦5,000 × 1 (3 ms)
+      √ scales fee and itemCount correctly with quantity 3 (4 ms)
+    single premium ticket
+      √ matches pre-calculated expected totals for ₦10,000 × 1 (includes VAT) (2 ms)
+    mixed tier cart
+      √ sets hasMixedTiers = true when both tiers present (1 ms)
+      √ sums fees from both tiers correctly (1 ms)
+    data integrity — gap exposure
+      √ coerces string price without throwing or warning
+      √ defaults missing quantity to 1 (1 ms)
+      √ ⚠️ ZERO QUANTITY: item is processed into breakdown but itemCount = 0 (1 ms)
+      √ finalTotalKobo is always a safe integer (no float drift) (1 ms)
+  formatOrderMetadata
+    √ includes all required customer_info fields (2 ms)
+    √ includes order_breakdown with correct shape and types (1 ms)
+    √ maps items with event_title, tier, and pricing (8 ms)
+    √ cartId matching makes merge order-independent (index-merge gap fixed) (2 ms)
+
+PASS jsdom src/__tests__/checkout/checkoutValidation.test.js
+  validateCustomerInfo — valid data
+    √ returns isValid: true for a complete, correct submission (2 ms)
+    √ accepts international-format email (2 ms)
+  required field enforcement
+    √ rejects empty firstName (1 ms)
+    √ rejects empty lastName (1 ms)
+    √ rejects empty email (1 ms)
+    √ rejects empty phone (1 ms)
+    √ rejects empty city (1 ms)
+    √ rejects empty state (1 ms)
+    √ treats whitespace-only firstName as missing (1 ms)
+    √ treats whitespace-only lastName as missing (1 ms)
+    √ treats whitespace-only email as missing (1 ms)
+    √ treats whitespace-only phone as missing (31 ms)
+    √ treats whitespace-only city as missing (1 ms)
+    √ treats whitespace-only state as missing (3 ms)
+    √ ⚠️ COUNTRY NOT VALIDATED: submitting with empty country passes (1 ms)
+  email validation
+    √ rejects email without @ (1 ms)
+    √ rejects email with missing domain extension (user@domain) (1 ms)
+    √ rejects email with spaces (1 ms)
+    √ ⚠️ EMAIL REGEX INCONSISTENCY: form accepts single-char TLD, hook rejects it (1 ms)
+  phone validation
+    √ rejects number shorter than 11 digits after stripping (3 ms)
+    √ accepts standard 080XXXXXXXX (11 digits) (1 ms)
+    √ accepts international format +2348012345678 (13 digits after strip)
+    √ strips spaces and hyphens before length check (1 ms)
+    √ strips parentheses and dashes before length check (1 ms)
+  name length validation
+    √ rejects single-character first name (1 ms)
+    √ rejects single-character last name (1 ms)
+    √ accepts two-character first name (1 ms)
+  edge cases
+    √ handles null and undefined field values without throwing (1 ms)
+    √ returns independent errors for multiple invalid fields simultaneously (2 ms)
+    √ does not produce cross-field contamination — each field error is isolated
+
+PASS jsdom src/__tests__/checkout/checkoutUI.test.js
+  OrderSummary — simple variant
+    √ renders 'Order Summary' heading (235 ms)
+    √ shows customer full name when firstName is present (22 ms)
+    √ hides customer section when firstName is empty (27 ms)
+    √ shows subtotal with Nigerian currency format (17 ms)
+    √ uses plural 'items' for count > 1 (18 ms)
+    √ uses singular 'item' for count = 1 (14 ms)
+    √ hides VAT row when vat = 0 (12 ms)
+    √ shows VAT row when vat > 0 (11 ms)
+    √ shows Total Due amount (20 ms)
+    √ renders safely with ₦0 defaults when orderBreakdown has undefined fields (11 ms)
+  OrderSummaryCard — feature-rich variant
+    √ renders 'Order summary' heading (24 ms)
+    √ displays Total due with correct amount (17 ms)
+    √ shows service fee info tooltip button (20 ms)
+    √ shows VAT row for premium tier items (19 ms)
+    √ shows service fee info button for mixed tier fee breakdown (25 ms)
+    √ toggles ticket list visibility when summary accordion button is clicked (164 ms)
+    √ shows customer name section when firstName is provided (20 ms)
+    √ hides customer name section when firstName is empty (16 ms)
+  CheckoutForm
+    √ renders both Customer Information and Payment Method sections (13 ms)
+    √ renders the CustomerForm child component (15 ms)
+    √ shows placeholder (no PaystackCheckout) when form is invalid (13 ms)
+    √ shows PaystackCheckout when isFormValid=true AND email is present (22 ms)
+    √ ⚠️ hides PaystackCheckout when email is present but isFormValid=false (20 ms)
+    √ ⚠️ shows 'Ready to proceed!' when isFormValid=true but email is absent (19 ms)
+    √ shows Secure Payment notice inside PaystackCheckout section (21 ms)
+
+PASS jsdom src/__tests__/checkout/checkoutPage.test.js
+  empty cart state
+    √ renders empty cart message (158 ms)
+    √ shows link back to events (16 ms)
+    √ does NOT render CustomerForm or OrderSummary (31 ms)
+    √ does NOT render PaystackCheckout (6 ms)
+  checkout with items in cart
+    √ renders 'Secure checkout' heading (197 ms)
+    √ hides PaystackCheckout until form is valid (41 ms)
+    √ ⚠️ does NOT pass initialData to CustomerForm (removed in CheckoutPage) (50 ms)
+    √ renders CustomerForm and OrderSummary (32 ms)
+    √ calls router.back() when back button is clicked (49 ms)
+    √ reveals PaystackCheckout after form becomes valid and email is present (52 ms)
+    √ wraps each major section in CheckoutSectionBoundary (32 ms)
+  localStorage userData loading
+    √ mounts successfully when userData is present and valid (57 ms)
+    √ handles corrupted JSON in localStorage without crashing (58 ms)
+    √ handles missing userData entry in localStorage without crashing (26 ms)
+    √ ⚠️ does NOT pass userData as initialData to CustomerForm (removed from CheckoutPage) (63 ms)
+  cart calculation error resilience
+    √ renders an error alert banner when items have invalid prices (41 ms)
+    √ ⚠️ NULL METADATA: paymentMetadata can be null when formatOrderMetadata fails (34 ms)
+
+PASS jsdom src/__tests__/checkout/checkoutHooks.test.js
+  usePaystackIntegration
+    isReady flag
+      √ is true when email is valid and cart has items (50 ms)
+      √ is false for empty string email (18 ms)
+      √ is false for malformed email (no @) (19 ms)
+      √ is false when cart is empty (9 ms)
+      √ is false when useCart returns undefined items (13 ms)
+      √ ⚠️ EMAIL REGEX MISMATCH: single-char TLD is false here, but passes form validation (13 ms)
+    handlePayment — pre-flight validation
+      √ shows error toast and skips API call for bad email (41 ms)
+      √ shows error toast and skips API call when cart is empty (6 ms)
+    handlePayment — API call shape
+      √ sends correct payload structure to ORDERS.INITIALIZE endpoint (27 ms)
+      √ sets isLoading=true during API call (30 ms)
+    handlePayment — success path
+      √ redirects to authorization_url on success (4 ms)
+      √ ⚠️ LOADING STUCK: isLoading is NOT reset to false after successful redirect (6 ms)
+      √ throws error when authorization_url is missing from response (5 ms)
+    handlePayment — error handling
+      √ shows sold-out toast for 409 response (8 ms)
+      √ shows server error toast for 500 response (57 ms)
+      √ shows timeout toast for ECONNABORTED error (19 ms)
+      √ shows server message for unknown non-network error (15 ms)
+      √ silently ignores cancelled requests (isCancel = true) (3 ms)
+    cleanup
+      √ AbortController aborts pending request on unmount (27 ms)
+  usePaymentVerification
+    initial state
+      √ starts with verificationStatus='verifying' (3 ms)
+      √ ⚠️ NULL TRXREF: stays 'verifying' forever — should be 'error' (3 ms)
+      √ exposes trxref, retryCount and formatCurrency in return value (5 ms)
+    success path
+      √ transitions to 'success' on status='success' response (65 ms)
+      √ populates paymentData from response on success (78 ms)
+      √ calls clearCart on successful verification (70 ms)
+      √ clears checkout draft from sessionStorage on success (77 ms)
+      √ does NOT call verify again after first success (hasVerifiedRef guard) (112 ms)
+    pending path
+      √ transitions to 'pending' on status='pending' response (77 ms)
+      √ transitions to 'pending_timeout' after 3 retries without success (11 ms)
+    error paths
+      √ transitions to 'not_found' on 404 response (75 ms)
+      √ transitions to 'failed' on 400 response (77 ms)
+      √ transitions to 'error' on unexpected network failure (71 ms)
+      √ transitions to 'failed' when response status is not 'success' or 'pending' (77 ms)
+    formatCurrency helper
+      √ formats naira with NGN locale and no fractional digits for round amounts (42 ms)
+      √ returns a string for 0 amount (1 ms)
+    ⚠️ localStorage reference preservation gap
+      √ does NOT store trxref in localStorage before verification begins (1 ms)
+
+PASS jsdom src/__tests__/checkout/customerForm.test.js
+  CustomerForm — rendering
+    √ renders all required input fields with correct test IDs (239 ms)
+    √ all fields start empty (no auto-fill) (107 ms)
+    √ state dropdown contains Nigerian states (40 ms)
+  initialData prop — pre-fills returning user fields
+    √ pre-fills firstName and email from initialData.user (58 ms)
+  validation callbacks
+    √ calls onValidationChange(false) on initial render (empty form is invalid) (40 ms)
+    √ calls onCustomerInfoChange with updated object on field input (60 ms)
+    √ onCustomerInfoChange always receives all fields, not just the changed one (61 ms)
+  field error display
+    √ does NOT show error before a field is touched (41 ms)
+    √ shows required error after blurring empty firstName (61 ms)
+    √ clears error once user types a valid value (93 ms)
+  draft recovery banner
+    √ does NOT show banner when sessionStorage is empty (70 ms)
+    √ shows recovery banner when sessionStorage has meaningful draft data (96 ms)
+    √ does NOT show banner when draft only contains default country value (37 ms)
+    √ does NOT show banner if user previously dismissed it (DISMISSED_KEY set) (44 ms)
+    √ restores draft into form fields on 'Restore My Info' click (120 ms)
+    √ dismisses banner and calls clearData on 'Start Fresh' click (94 ms)
+  SaveStatusIndicator
+    √ renders nothing when status is 'idle' (4 ms)
+    √ renders nothing for unrecognised status (3 ms)
+    √ shows 'Saving…' for saving status (9 ms)
+    √ shows 'Saved' for saved status (3 ms)
+    √ shows 'Couldn’t save' for error status (2 ms)
+  DraftRecoveryBanner
+    √ renders restore and dismiss action buttons (13 ms)
+    √ calls onRestore when 'Restore My Info' is clicked (10 ms)
+    √ calls onDismiss when the X icon button is clicked (11 ms)
+    √ calls onDismiss when 'Start Fresh' is clicked (5 ms)
+
+PASS jsdom src/__tests__/checkout/checkoutConfirmation.test.js
+  VerifyingStatus
+    √ renders 'Verifying Payment' heading (205 ms)
+    √ displays the trxref reference code (55 ms)
+    √ shows retry indicator when retryCount > 0 (35 ms)
+    √ does NOT show retry indicator when retryCount = 0 (19 ms)
+    √ ⚠️ PROGRESS CAPPED AT 99%: never shows 100% even on final retry (18 ms)
+    √ shows step 2 as completed (green) when retryCount > 0 (23 ms)
+    √ renders 'don't close this page' warning (29 ms)
+  PendingStatus
+    √ renders 'Payment Processing' heading (8 ms)
+    √ shows the reference in the pending message (5 ms)
+  PendingTimeoutStatus
+    √ renders timeout heading (17 ms)
+    √ shows the reference code in a monospace element (11 ms)
+    √ provides link to /tickets page (14 ms)
+    √ provides link to /support page (7 ms)
+  FailedStatus
+    √ renders 'Payment Failed' heading (11 ms)
+    √ confirms no charges were made (9 ms)
+    √ 'Try Again' link goes to /checkout (10 ms)
+    √ shows common failure reasons (8 ms)
+  NotFoundStatus
+    √ renders 'Order Not Found' heading (11 ms)
+    √ shows the reference in the info panel (8 ms)
+    √ 'Refresh Page' button is present and triggers reload (19 ms)
+  ErrorStatus
+    √ renders 'Verification Error' heading (18 ms)
+    √ shows the reference when trxref is provided (11 ms)
+    √ shows fallback message when trxref is null (7 ms)
+    √ 'Contact Support' links to /support (5 ms)
+  SuccessStatus
+    √ renders 'Payment Successful!' heading (41 ms)
+    √ shows customer name when both names are present (7 ms)
+    √ hides customer name section when names are absent (10 ms)
+    √ 'View Your Tickets' link includes the reference (13 ms)
+    √ ⚠️ KOBO ASSUMPTION: amountPaid is divided by 100 assuming it is in kobo (7 ms)
+    √ falls back to trxref when paymentData.reference is absent (9 ms)
+  ConfirmationContentRenderer
+    √ renders correct component for status 'verifying' (11 ms)
+    √ renders correct component for status 'pending' (9 ms)
+    √ renders correct component for status 'pending_timeout' (5 ms)
+    √ renders correct component for status 'failed' (11 ms)
+    √ renders correct component for status 'not_found' (13 ms)
+    √ renders correct component for status 'error' (5 ms)
+    √ falls through to ErrorStatus for unknown status (6 ms)
+    √ renders SuccessStatus wrapped in SuccessStatusBoundary for 'success' (15 ms)
+  CheckoutSectionBoundary
+    √ renders children when no error occurs (5 ms)
+    √ renders error UI when child throws (88 ms)
+    √ shows 'Retry Section' and 'Reload Page' buttons in error state (18 ms)
+    √ resets to render children again when 'Retry Section' is clicked (32 ms)
+    √ ⚠️ RETRY DOES NOT FIX CAUSE: if child still throws after retry, error UI reappears immediately (67 ms)
+  PaymentVerificationBoundary
+    √ renders children when no error (3 ms)
+    √ renders fallback UI with reference when child throws (33 ms)
+    √ saves reference to localStorage when child throws (28 ms)
+    √ shows 'Payment Successful' title if paymentData.status = 'success' (28 ms)
+    √ shows 'UNKNOWN' as reference when trxref is null (26 ms)
+    √ 'Check Ticket Status' button navigates to /tickets with reference (52 ms)
+  PaystackCheckout
+    √ renders 'Pay ₦...' button when isReady=true and isLoading=false (95 ms)
+    √ shows the total amount in the Pay button (14 ms)
+    √ button is disabled and shows 'Getting payment ready…' when isReady=false (19 ms)
+    √ button is disabled and shows 'Processing' when isLoading=true (11 ms)
+    √ calls handlePayment when Pay button is clicked (19 ms)
+    √ shows internal PaymentErrorBoundary fallback when component throws (16 ms)
+    √ shows 'Test mode: no real charge' notice in non-production environment (2 ms)
+
+PASS jsdom src/__tests__/checkout/verifyPaymentContent.test.js
+  VerifyPaymentContent – initial verifying state
+    √ shows the Confirming Your Payment heading immediately (122 ms)
+    √ shows the bank processing description text (16 ms)
+    √ does NOT show success or error UI during verification (13 ms)
+    √ renders the animated progress dots (16 ms)
+  VerifyPaymentContent – success path
+    √ renders the success heading after API returns status=success (60 ms)
+    √ calls refetch to update global subscription state (28 ms)
+    √ fires the success toast (29 ms)
+    √ does NOT fire the error toast on success (33 ms)
+    √ shows feature unlock list in success state (35 ms)
+    √ navigates to /dashboard when Go to Dashboard button is clicked (295 ms)
+    √ calls verifySubscriptionAPI with the reference from URL (30 ms)
+    √ ⚠️ (gap) isVerifying stays true for one extra render cycle after status becomes success (66 ms)
+  VerifyPaymentContent – error path (API throws)
+    √ shows the Verification Pending heading (25 ms)
+    √ shows the 'What happens next?' info box (47 ms)
+    √ shows bank processing time guidance (35 ms)
+    √ does NOT fire the success toast on error (29 ms)
+    √ does NOT call refetch when verification fails (28 ms)
+    √ navigates to /dashboard when Go to Dashboard button is clicked (94 ms)
+    √ navigates to /support when Contact Support button is clicked (112 ms)
+  VerifyPaymentContent – error path (API returns pending status)
+    √ shows error UI when API returns status !== 'success' (21 ms)
+    √ does NOT call refetch when API returns a non-success status (40 ms)
+  VerifyPaymentContent – missing reference
+    √ shows error UI immediately without calling the API (14 ms)
+    √ does NOT show the reference number footer when reference is null (19 ms)
+  VerifyPaymentContent – reference display
+    √ shows the reference number in the error state footer (32 ms)
+    √ does NOT show reference section in success state (28 ms)
+  VerifyPaymentContent – ⚠️ unmount cleanup gap
+    √ ⚠️ (gap) calling setState after unmount produces a React warning (4 ms)
+    √ ⚠️ (gap) refetch is in the dependency array — a new refetch reference re-runs the effect (9 ms)
+
+Test Suites: 8 passed, 8 total
+Tests:       241 passed, 241 total
+Snapshots:   0 total
+Time:        4.703 s

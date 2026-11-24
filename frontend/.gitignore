@@ -27,15 +27,16 @@ cookies.txt
 
 # === Test & Coverage ===
 coverage/
-__tests__/
-__fixtures__/
-__mocks__/
+# __tests__/
+/src/__tests__/diagnostics/
+#__fixtures__/
+#__mocks__/
 .jest/
-*.test.js
-*.test.jsx
-*.test.ts
-*.test.tsx
-*.unit.js
+#*.test.js
+#*.test.jsx
+#*.test.ts
+#*.test.tsx
+#*.unit.js
 
 # === Debug & Logs ===
 npm-debug.log*

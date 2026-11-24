@@ -1,0 +1,93 @@
+================================================================================
+TEST REPORT — vendors/                                                Status: RED
+================================================================================
+Generated : 2026-11-14   Branch: fix/test-suite-vendors-tickets   Commit: <fill>
+Runner    : Jest <fill: npx jest --version> | Project: jsdom
+Command   : npm run test:vendors -- --silent
+Report type: BASELINE (intake), taken before any vendors fixes
+
+--- 1. VITALS ------------------------------------------------------------------
+Suites : 3 passed, 14 failed to load, 17 total
+Tests  : 112 passed, 0 failed (0 EXECUTED in 14 of 17 suites)
+Runtime: 4.5s     Coverage: not measured
+True health: UNKNOWN for 82% of suites. "112 passed" is not a health signal.
+
+--- 2. FILE INVENTORY ----------------------------------------------------------
+LOAD FAIL  vendorTransformers      src/app/vendor/utils/vendorTransformers
+LOAD FAIL  vendorSlugHelper        src/utils/helper/vendorSlugHelper
+LOAD FAIL  vendorValidate          src/utils/validate/vendorValidate
+LOAD FAIL  vendorUtils             .../vendorProfileWrapper/utils/vendorUtils
+LOAD FAIL  vendorSubmission        src/app/vendor/hooks/useVendorSubmission
+LOAD FAIL  vendorProfilePage       src/app/vendor/[id]/page.js
+LOAD FAIL  vendorManagementView    src/components/dashboard/vendorComponents/vendorDashboard.js
+LOAD FAIL  vendorListingPage       src/app/vendor/vendorListingPage
+LOAD FAIL  vNINVerificationField   .../components/form/vNINVerificationField.jsx
+LOAD FAIL  CACVerificationField    .../components/form/CACVerificationField.js
+LOAD FAIL  vendorFormHandler       .../handlers/useVendorFormHandler
+LOAD FAIL  vendorClientDetails     src/app/vendor/[id]/vendorClientDetails
+LOAD FAIL  vendorProfileDetail     .../vendorProfileWrapper/vendorProfileDetail
+LOAD FAIL  vendorCard              src/components/vendorUI/VendorCard
+PASS (112) vendorImageRoute        src/app/api/vendor-image/route.js (ran under jsdom; belongs in node)
+PASS       vendorTrustScoreCard    <fill source path>
+PASS       rateVendor.test.jsx     src/components/common/rateVendor.js
+Cause of all 14 load failures: relative import ../__fixtures__/* broke when the
+tests moved one directory deeper.
+
+--- 3. WHAT IS PROVEN (from the 3 suites that ran) -----------------------------
+- vendor-image POST: missing file, >5MB rejected, exactly 5MB accepted, MIME
+  allowlist (svg rejected), filename sanitization, vendorId path, 429/507/500
+  mapping, dev-only error details.
+- vendor-image DELETE: missing/invalid url rejected, 404/500 mapping.
+- trust card: tiers (>=80 Excellent, 60-79 Good, 40-59 Fair, <40 Needs
+  Improvement), verification labels, trend, account status, metrics.
+- rateVendor: rendering, star interaction, field state, payload, validation.
+NOT PROVEN: everything in the 14 unloaded suites; any schema contract, VNIN
+masking/locking, name override, accessibility or viewport behavior.
+
+--- 4. FINDINGS ----------------------------------------------------------------
+V-01 BLOCKER  14 suites cannot load (fixture paths). Fix: @/__fixtures__ alias.
+V-02 HIGH     SECURITY. vendor-image DELETE host check uses .includes();
+              https://evil.com/blob.vercel-storage.com/file.jpg is accepted and
+              del() is called. Test [GAP 3] asserts the bug as correct.
+V-03 MEDIUM   vendor-image filename sanitizer keeps dots; ".." survives ([GAP 2]).
+V-04 MEDIUM   vendorImageRoute runs in jsdom; must run in node.
+V-05 MEDIUM   rateVendor: dead validateForm, requireUserInfo not passed, silent
+              onError, hoverRating not reset, setTimeout without cleanup.
+V-06 PROCESS  [GAP] tests assert buggy behavior as expected. Convert to it.failing.
+V-07 HIGH     vendorFileInputField calls toastAlert without importing it
+              (ReferenceError on a >5MB file). Fixed in the rewritten component.
+CONTRACT RISKS (to be pinned by tests): minPrice int32 kobo overflow; status
+'draft' missing in Go; tier vocabulary mismatch; null vs '' normalization;
+VNIN raw 16 chars; length limits incl. multi-byte; state/category value sets;
+fixtures contain fields the backend never sends.
+
+--- 5. FAILURE DETAIL ----------------------------------------------------------
+Not available until V-01 is fixed.
+
+--- 6. ENVIRONMENT & MOCKING NOTES ---------------------------------------------
+jsdom has no URL.createObjectURL: stub in jest.setup.js for the new file input.
+jsdom does no layout: viewport and "opens within viewport" claims need Playwright.
+Tailwind 4 applies hover variants only on hover-capable devices.
+
+--- 7. CHANGE LOG --------------------------------------------------------------
+2026-11-14 baseline captured (3/17 suites ran).
+
+--- 8. OPEN QUESTIONS ----------------------------------------------------------
+Q1 Public response exposes names, email, phone and CAC to unauthenticated callers:
+   intended? Q2 Name precedence when VNIN and CAC disagree. Q3 Status and tier
+   vocabularies. Q4 Where is vendors.email set (not visible in the form)?
+Q5 Is minPrice entered in naira and stored in kobo?
+
+--- 9. NEXT ACTIONS ------------------------------------------------------------
+1. Fixture alias fix + move route tests to api/ | done when all 17 suites load.
+2. Triage real failures, fix drift | done when 0 failing.
+3. Contract suite vs schema/Go model | done when fixtures are subsets of the
+   real response shapes and payload limits are pinned.
+4. VNIN mask/lock + name override tests | done when sec. 4 cases pass.
+5. Fix V-02/V-03 in route, flip GAP tests.
+6. Playwright viewport + jest-axe suites for the vendor form.
+
+--- 10. HOW TO RE-VERIFY -------------------------------------------------------
+npm run test:vendors -- --silent
+npx jest src/__tests__/vendors/<file> --verbose
+================================================================================

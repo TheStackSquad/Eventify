@@ -2,19 +2,18 @@
 import { put, del } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { requireUser } from "@/utils/server/requireUser";
+import { isOwnBlobUrl, sanitizeFilename } from "@/utils/server/blobPaths";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
+const unauthorized = () =>
+  NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
 export async function POST(request) {
   try {
-    const auth = await requireUser(request);
-    if (auth?.errorResponse) {
-      return auth.errorResponse;
-    }
-    if (!auth?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const user = await requireUser(request);
+    if (!user) return unauthorized();
 
     const formData = await request.formData();
     const file = formData.get("file"); // Key must match client-side append
@@ -45,11 +44,15 @@ export async function POST(request) {
       );
     }
 
-    const blob = await put(`feedback-images/${file.name}`, file, {
-      access: "public",
-      addRandomSuffix: true,
-      contentType: file.type,
-    });
+    const blob = await put(
+      `feedback-images/${user.id}/${sanitizeFilename(file.name)}`,
+      file,
+      {
+        access: "public",
+        addRandomSuffix: true,
+        contentType: file.type,
+      },
+    );
 
     return NextResponse.json(
       { url: blob.url, filename: blob.pathname },
@@ -66,13 +69,8 @@ export async function POST(request) {
 
 export async function DELETE(request) {
   try {
-    const auth = await requireUser(request);
-    if (auth?.errorResponse) {
-      return auth.errorResponse;
-    }
-    if (!auth?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const user = await requireUser(request);
+    if (!user) return unauthorized();
 
     const { searchParams } = new URL(request.url);
     const urlToDelete = searchParams.get("url");
@@ -80,6 +78,14 @@ export async function DELETE(request) {
     if (!urlToDelete) {
       return NextResponse.json(
         { error: "No URL provided for deletion." },
+        { status: 400 },
+      );
+    }
+
+    // Only an https Vercel Blob URL inside THIS user's folder may be deleted.
+    if (!isOwnBlobUrl(urlToDelete, `/feedback-images/${user.id}/`)) {
+      return NextResponse.json(
+        { error: "Invalid image URL." },
         { status: 400 },
       );
     }

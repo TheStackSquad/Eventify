@@ -66,6 +66,11 @@ func (h *VendorHandler) GetVendorProfile(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve vendor profile."})
 		return
 	}
+		// Only live vendors are public. Owners see their own profile through GET /vendors/me.
+	if vendor.Status != models.VendorStatusActive || vendor.DeletedAt.Valid {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Vendor profile not found."})
+		return
+	}
 
 	c.JSON(http.StatusOK, vendor.ToPublicResponse())
 }
