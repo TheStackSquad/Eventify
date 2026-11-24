@@ -3,7 +3,10 @@ package auth
 
 import (
 	"net/http"
-	"github.com/eventify/backend/pkg/models"
+	"errors"
+
+    "github.com/eventify/backend/pkg/models"
+    repoauth "github.com/eventify/backend/pkg/repository/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -11,15 +14,24 @@ import (
 
 // Signup handles new user registration
 func (h *AuthHandler) Signup(c *gin.Context) {
-	var user models.User
-	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid input details."})
-		return
-	}
+	var in signupInput
+    if err := c.ShouldBindJSON(&in); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"message": "Invalid input details."})
+        return
+    }
+    if len([]byte(in.Password)) > maxPasswordBytes {
+        c.JSON(http.StatusBadRequest, gin.H{"message": "Password is too long (72 bytes at most)."})
+        return
+    }
+    user := models.User{Name: in.Name, Email: in.Email, Password: in.Password}
 
 	userID, err := h.AuthService.Signup(c.Request.Context(), &user)
 	if err != nil {
-		log.Error().Err(err).Msg("Auth: Signup service failure")
+		if errors.Is(err, repoauth.ErrEmailTaken) {
+            c.JSON(http.StatusConflict, gin.H{"message": "An account with this email already exists."})
+            return
+        }
+        log.Error().Err(err).Msg("Auth: Signup service failure")
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Could not create account."})
 		return
 	}

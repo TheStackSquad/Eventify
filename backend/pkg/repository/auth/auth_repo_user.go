@@ -32,14 +32,17 @@ func (r *PostgresAuthRepository) CreateUser(ctx context.Context, user *models.Us
 	).Scan(&insertedID)
 
 	if err != nil {
-		return uuid.Nil, errors.New("user with this email already exists")
+		if isUniqueViolation(err) {
+            return uuid.Nil, ErrEmailTaken
+        }
+        return uuid.Nil, err
 	}
 	return insertedID, nil
 }
 
 func (r *PostgresAuthRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	var user models.User
-	query := "SELECT * FROM users WHERE email = $1"
+	query := "SELECT * FROM users WHERE lower(email) = lower($1)"
 
 	err := r.DB.GetContext(ctx, &user, query, email)
 	if err != nil {
