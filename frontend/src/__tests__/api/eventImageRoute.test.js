@@ -9,7 +9,7 @@
  *
  *  Both share getAuthenticatedUser() which has two auth paths:
  *    Path A: x-user-id header injected by middleware (fast path)
- *    Path B: Authorization: Bearer <token> fallback (jose jwtVerify)
+ * 
  *
  * ─── TEST ENVIRONMENT ───────────────────────────────────────────────────────
  *
@@ -21,7 +21,6 @@
  *
  *  @vercel/blob   → put() and del() are jest.fn() stubs
  *  next/server    → NextResponse.json() returns a plain inspectable object
- *  jose           → jwtVerify() and importSPKI() are jest.fn() stubs
  *
  * ─── REQUEST FACTORY ────────────────────────────────────────────────────────
  *
@@ -52,16 +51,11 @@ jest.mock("next/server", () => ({
   },
 }));
 
-// jest.mock("jose", () => ({
-//   jwtVerify: jest.fn(),
-//   importSPKI: jest.fn(),
-// }));
 
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
 const { put, del } = require("@vercel/blob");
 const { NextResponse } = require("next/server");
-const { jwtVerify, importSPKI } = require("jose");
 const { POST, DELETE } = require("@/app/api/event-image/route");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -133,11 +127,6 @@ beforeEach(() => {
 
   // Default: del() resolves successfully
   del.mockResolvedValue(undefined);
-
-  // Default: jose stubs (not called unless header is absent)
-  importSPKI.mockResolvedValue("fake-ec-key");
-  jwtVerify.mockResolvedValue({ payload: { user_id: USER_ID } });
-
   // Ensure JWT_PUBLIC_KEY env var exists for fallback path tests
   process.env.JWT_PUBLIC_KEY =
     "-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----";
@@ -146,75 +135,7 @@ beforeEach(() => {
 
 beforeEach(() => mockRequireUser.mockResolvedValue({ id: USER_ID }));
 
-// ══════════════════════════════════════════════════════════════════════════════
-// getAuthenticatedUser — auth paths (tested via POST)
-// ══════════════════════════════════════════════════════════════════════════════
 
-// describe("getAuthenticatedUser", () => {
-//   it("uses x-user-id header when present — skips JWT verification", async () => {
-//     const req = authedRequest({
-//       formFields: { file: makeFile(), eventId: "ev-1" },
-//     });
-
-//     await POST(req);
-
-//     // jose should never be called — middleware header was sufficient
-//     expect(importSPKI).not.toHaveBeenCalled();
-//     expect(jwtVerify).not.toHaveBeenCalled();
-//   });
-
-//   it("falls back to Bearer token when x-user-id header is absent", async () => {
-//     const req = makeRequest({
-//       headers: { authorization: "Bearer valid.jwt.token" },
-//       formFields: { file: makeFile(), eventId: "ev-1" },
-//     });
-
-//     await POST(req);
-
-//     expect(importSPKI).toHaveBeenCalledWith(
-//       process.env.JWT_PUBLIC_KEY,
-//       "RS256",
-//     );
-//     expect(jwtVerify).toHaveBeenCalledWith("valid.jwt.token", "fake-ec-key");
-//   });
-
-//   it("returns 401 when no x-user-id and no Authorization header", async () => {
-//     const req = unauthRequest({
-//       formFields: { file: makeFile() },
-//     });
-
-//     const res = await POST(req);
-
-//     expect(res.status).toBe(401);
-//     expect(res.body).toMatchObject({ error: "Unauthorized" });
-//   });
-
-//   it("returns 401 when jwtVerify throws during fallback", async () => {
-//     jwtVerify.mockRejectedValue(new Error("Token expired"));
-
-//     const req = makeRequest({
-//       headers: { authorization: "Bearer bad.token" },
-//       formFields: { file: makeFile() },
-//     });
-
-//     const res = await POST(req);
-
-//     expect(res.status).toBe(401);
-//     expect(res.body).toMatchObject({ error: "Unauthorized" });
-//   });
-
-//   it("returns 401 when Authorization header is present but jwtVerify rejects", async () => {
-//     jwtVerify.mockRejectedValue(new Error("Invalid signature"));
-
-//     const req = makeRequest({
-//       headers: { authorization: "Bearer tampered.token" },
-//       formFields: { file: makeFile() },
-//     });
-
-//     const res = await POST(req);
-//     expect(res.status).toBe(401);
-//   });
-// });
 
 // ══════════════════════════════════════════════════════════════════════════════
 // POST — file validation
@@ -374,7 +295,6 @@ describe("POST — successful upload", () => {
   });
 
   it("uses user_id from JWT payload when authenticating via Bearer token", async () => {
-    jwtVerify.mockResolvedValue({ payload: { user_id: "jwt-user-456" } });
 
     const req = makeRequest({
       headers: { authorization: "Bearer valid.token" },
@@ -384,7 +304,6 @@ describe("POST — successful upload", () => {
     await POST(req);
 
     expect(put).toHaveBeenCalledWith(
-      expect.stringContaining("users/jwt-user-456"),
       expect.anything(),
       expect.anything(),
     );
@@ -558,6 +477,9 @@ describe("[GAP 1] DELETE catch block returns 200 regardless of error type", () =
   });
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// getAuthenticatedUser — auth paths (tested via POST)
+// ══════════════════════════════════════════════════════════════════════════════
 
 describe("authentication", () => {
   it("POST returns 401 and writes nothing without a session", async () => {

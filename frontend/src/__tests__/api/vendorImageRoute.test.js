@@ -94,63 +94,73 @@ const OTHER_ID = "00000000-0000-4000-8000-000000000002";
 
 beforeEach(() => mockRequireUser.mockResolvedValue({ id: USER_ID }));
 
+
 describe("authentication", () => {
+  const ownUrl = `https://abc.public.blob.vercel-storage.com/vendor-images/${USER_ID}/logo.jpg`;
+
   it("POST returns 401 and writes nothing without a session", async () => {
     mockRequireUser.mockResolvedValue(null);
-    const res = await POST(makeRequest());
+    const res = await POST(makePostRequest({ file: makeFile() }));
     expect(res.status).toBe(401);
-    expect(mockPut).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
   });
 
   it("a spoofed x-user-id header does not authenticate", async () => {
     mockRequireUser.mockResolvedValue(null);
-    const res = await POST(makeRequest({ headers: { "x-user-id": USER_ID } }));
+    const req = {
+      ...makePostRequest({ file: makeFile() }),
+      headers: new Headers({ "x-user-id": USER_ID }),
+    };
+    const res = await POST(req);
     expect(res.status).toBe(401);
-    expect(mockPut).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
   });
 
   it("DELETE returns 401 and deletes nothing without a session", async () => {
     mockRequireUser.mockResolvedValue(null);
-    const res = await DELETE(
-      makeDeleteRequest(
-        `https://abc.public.blob.vercel-storage.com/x/${USER_ID}/a.jpg`,
-      ),
-    );
+    const res = await DELETE(makeDeleteRequest({ url: ownUrl }));
     expect(res.status).toBe(401);
-    expect(mockDel).not.toHaveBeenCalled();
+    expect(del).not.toHaveBeenCalled();
   });
 
   it("scopes uploads to the signed-in user", async () => {
-    await POST(makeRequest());
-    expect(mockPut).toHaveBeenCalledWith(
-      expect.stringContaining(USER_ID),
+    await POST(makePostRequest({ file: makeFile() }));
+    expect(put).toHaveBeenCalledWith(
+      `vendor-images/${USER_ID}/logo.jpg`,
       expect.anything(),
       expect.anything(),
     );
+  });
+
+  it("deletes the user's own file", async () => {
+    const res = await DELETE(makeDeleteRequest({ url: ownUrl }));
+    expect(res.status).toBe(200);
+    expect(del).toHaveBeenCalledWith(ownUrl);
   });
 
   it("refuses to delete another user's file", async () => {
-    const res = await DELETE(
-      makeDeleteRequest(
-        `https://abc.public.blob.vercel-storage.com/x/${OTHER_ID}/a.jpg`,
-      ),
-    );
+    const url = `https://abc.public.blob.vercel-storage.com/vendor-images/${OTHER_ID}/logo.jpg`;
+    const res = await DELETE(makeDeleteRequest({ url }));
     expect(res.status).toBe(400);
-    expect(mockDel).not.toHaveBeenCalled();
+    expect(del).not.toHaveBeenCalled();
   });
 
   it("refuses a look-alike host", async () => {
-    const res = await DELETE(
-      makeDeleteRequest(
-        `https://evil.com/blob.vercel-storage.com/${USER_ID}/a.jpg`,
-      ),
-    );
+    const url = `https://evil.com/blob.vercel-storage.com/vendor-images/${USER_ID}/logo.jpg`;
+    const res = await DELETE(makeDeleteRequest({ url }));
     expect(res.status).toBe(400);
-    expect(mockDel).not.toHaveBeenCalled();
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it("a traversal filename cannot escape the user's folder", async () => {
+    await POST(
+      makePostRequest({ file: makeFile({ name: "../../etc/passwd.jpg" }) }),
+    );
+    const pathname = put.mock.calls[0][0];
+    expect(pathname).toBe(`vendor-images/${USER_ID}/_._etc_passwd.jpg`);
+    expect(pathname).not.toMatch(/\.\./);
   });
 });
-
-
 
 // ══════════════════════════════════════════════════════════════════════════════
 // POST — file presence validation

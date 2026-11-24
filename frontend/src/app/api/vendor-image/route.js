@@ -26,10 +26,17 @@ export async function POST(request) {
         { status: 401 },
       );
     }
-    // TODO(ownership): any signed-in user can still delete any vendor image URL.
     const formData = await request.formData();
     const file = formData.get("file");
     const vendorId = formData.get("vendorId"); // Optional: for organizing uploads
+
+    // Validation: a real file must be present (not missing, not a text field)
+    if (!file || typeof file === "string") {
+      return NextResponse.json(
+        { error: "No image file provided." },
+        { status: 400 },
+      );
+    }
 
     if (vendorId && !/^[0-9a-f-]{36}$/i.test(String(vendorId))) {
       return NextResponse.json(
@@ -135,7 +142,7 @@ export async function DELETE(request) {
         { status: 401 },
       );
     }
-    // TODO(ownership): any signed-in user can still delete any vendor image URL.
+
     const body = await request.json();
     const { url } = body;
 
