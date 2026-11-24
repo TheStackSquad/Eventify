@@ -149,10 +149,18 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	// *request*. The request cookies are still readable after calling clearAuthCookies.
 	refreshToken, _ := c.Cookie(RefreshTokenCookieName)
 	accessToken, _ := c.Cookie(AccessTokenCookieName)
+    headerToken := bearerToken(c)
+    if headerToken != "" && accessToken == "" {
+        accessToken = headerToken // the token that authenticated this request (F408)
+    }
 
 	if userID != uuid.Nil {
 		if err := h.AuthService.Logout(c.Request.Context(), userID, refreshToken, accessToken); err != nil {
 			log.Error().Err(err).Msg("Auth: Logout service reported an error")
+        }
+        if headerToken != "" && headerToken != accessToken {
+            // a request that carries both a cookie and a Bearer header: revoke the header token too
+            _ = h.AuthService.Logout(c.Request.Context(), userID, "", headerToken)
 		}
 	}
 

@@ -105,7 +105,9 @@ func (s *authWriteService) Signup(ctx context.Context, user *models.User) (uuid.
 		return uuid.Nil, err
 	}
 	user.PasswordHash = string(hashedPassword)
-	user.Role = models.RoleCustomer
+user.Role = models.RoleCustomer
+user.Email = normalizeEmail(user.Email)
+user.ID = uuid.Nil // the id is always generated on our side, never taken from the request
 	return s.authRepo.CreateUser(ctx, user)
 }
 
@@ -120,7 +122,9 @@ func (s *authWriteService) Login(
 		Bool("rememberMe", rememberMe).
 		Msg("Login attempt")
 
-	// Account lock check
+	email = normalizeEmail(email)
+
+    // Account lock check
 	locked, _, err := s.authRepo.IsAccountLocked(ctx, email)
 	if err != nil {
 		return nil, nil, err
@@ -131,12 +135,11 @@ func (s *authWriteService) Login(
 
 	// Fetch user
 	user, err := s.authRepo.GetUserByEmail(ctx, email)
-	if err != nil {
-		if recordErr := s.authRepo.RecordLoginAttempt(ctx, email, false); recordErr != nil {
-			log.Error().Err(recordErr).Msg("Failed to record login attempt")
-		}
-		return nil, nil, ErrInvalidCredentials
-	}
+    if err != nil {
+        // An unknown email: spend the time of a real password check and keep no record of the attempt.
+        _ = bcrypt.CompareHashAndPassword(getDummyPasswordHash(), []byte(password))
+        return nil, nil, ErrInvalidCredentials
+    }
 
 	// Verify password
 	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))

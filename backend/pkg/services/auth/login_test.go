@@ -61,22 +61,22 @@ func TestLogin_UnknownEmail_ReturnsErrInvalidCredentials(t *testing.T) {
 	}
 }
 
-// TestLogin_UnknownEmail_RecordsFailedAttempt verifies that a failed user lookup
-// still records a failed login attempt for rate-limiting purposes.
-func TestLogin_UnknownEmail_RecordsFailedAttempt(t *testing.T) {
-	svc, authRepo, _ := buildService(t)
+// TestLogin_UnknownEmail_LeavesNoRecord verifies that a login for an email that does not exist is refused like a wrong
+// password but leaves no row in login_attempts: anyone could otherwise fill the table with made-up emails (F419).
+func TestLogin_UnknownEmail_LeavesNoRecord(t *testing.T) {
+    svc, authRepo, _ := buildService(t)
 
-	authRepo.user = nil
-	authRepo.getUserByEmailErr = errors.New("not found")
+    authRepo.user = nil
+    authRepo.getUserByEmailErr = errors.New("not found")
 
-	svc.Login(context.Background(), "nobody@example.com", "password", "127.0.0.1", "TestAgent/1.0", false) //nolint:errcheck
+    _, _, err := svc.Login(context.Background(), "nobody@example.com", "password", "127.0.0.1", "TestAgent/1.0", false)
 
-	if !authRepo.recordLoginAttemptCalled {
-		t.Error("failed user lookup must still record a failed login attempt")
-	}
-	if authRepo.recordLoginAttemptSuccess {
-		t.Error("login attempt for unknown email must be recorded as failure (success=false)")
-	}
+    if !errors.Is(err, ErrInvalidCredentials) {
+        t.Errorf("unknown email: expected ErrInvalidCredentials, got %v", err)
+    }
+    if authRepo.recordLoginAttemptCalled {
+        t.Error("an unknown email must leave no login_attempts row (F419)")
+    }
 }
 
 // TestLogin_WrongPassword_ReturnsErrInvalidCredentials verifies that a wrong

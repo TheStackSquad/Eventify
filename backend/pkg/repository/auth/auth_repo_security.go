@@ -75,7 +75,7 @@ func (r *PostgresAuthRepository) RecordLoginAttempt(
 			last_attempt_at = EXCLUDED.last_attempt_at
 	`
 
-	_, err := r.DB.ExecContext(ctx, query, email, time.Now())
+	_, err := r.DB.ExecContext(ctx, query, email, time.Now().UTC())
 	return err
 }
 
