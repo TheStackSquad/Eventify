@@ -1,0 +1,266 @@
+[
+  {
+    "Id": "AUTH-B1",
+    "Name": "the backend answers on /health",
+    "Expected": "200",
+    "Actual": "200",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-S1",
+    "Name": "the session tables have the columns the code uses",
+    "Expected": "9 columns",
+    "Actual": "9 columns",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-S2",
+    "Name": "the token blacklist can hold a SHA-256 hash",
+    "Expected": "char(64)",
+    "Actual": "length 64",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-S3",
+    "Name": "the lockout clock has a time zone",
+    "Expected": "timestamp with time zone",
+    "Actual": "timestamp with time zone",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-A1",
+    "Name": "sign-up creates an account",
+    "Expected": "201",
+    "Actual": "201",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-A2",
+    "Name": "a sign-up cannot choose its own role",
+    "Expected": "created as customer",
+    "Actual": "HTTP 201, role 'customer'",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-A3",
+    "Name": "a sign-up cannot choose its own user id",
+    "Expected": "a server-generated id",
+    "Actual": "a different id was used",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-A4",
+    "Name": "the same email twice is refused cleanly",
+    "Expected": "409",
+    "Actual": "409",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-A5",
+    "Name": "the same email in another letter case is the same account",
+    "Expected": "409 (no second account)",
+    "Actual": "409",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-A6",
+    "Name": "invalid sign-ups are rejected",
+    "Expected": "400 for each",
+    "Actual": "400 400 400",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-A7",
+    "Name": "a password longer than bcrypt can use is refused",
+    "Expected": "400",
+    "Actual": "400",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-L1",
+    "Name": "a correct login succeeds and the answer holds no secrets",
+    "Expected": "200, no password, hash or reset token",
+    "Actual": "HTTP 200, secrets in body: False",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-L2",
+    "Name": "a wrong password and an unknown email get the same answer",
+    "Expected": "two identical 401 answers",
+    "Actual": "401 and 401, identical: True",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-L3",
+    "Name": "failed logins for emails that do not exist leave no record",
+    "Expected": "0 rows",
+    "Actual": "0 row(s)",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-C1",
+    "Name": "the session cookies are HttpOnly with SameSite; the CSRF cookie is readable",
+    "Expected": "access and refresh HttpOnly, csrf not",
+    "Actual": "access: HttpOnly=True SameSite=Lax; refresh: HttpOnly=True SameSite=Lax; csrf: HttpOnly=False SameSite=Lax",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-C2",
+    "Name": "the Secure flag on the session cookies",
+    "Expected": "on in production (COOKIE_SECURE=true, or SameSite=None)",
+    "Actual": "Secure=False on this local HTTP run",
+    "Outcome": "INFO",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-C3",
+    "Name": "logout without the CSRF header is refused",
+    "Expected": "403 CSRF_TOKEN_REQUIRED",
+    "Actual": "403 CSRF_TOKEN_REQUIRED",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-C4",
+    "Name": "logout with a wrong CSRF header is refused",
+    "Expected": "403 CSRF_TOKEN_INVALID",
+    "Actual": "403 CSRF_TOKEN_INVALID",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-T1",
+    "Name": "/auth/me without a session is refused",
+    "Expected": "401",
+    "Actual": "401",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-T2",
+    "Name": "/auth/me with a session returns the profile and no secrets",
+    "Expected": "200, own email, no secrets",
+    "Actual": "HTTP 200, email audit_auth_main_b3c7684541@example.com, secrets: False",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-T3",
+    "Name": "forged tokens are refused",
+    "Expected": "401 for each of 3 forgeries",
+    "Actual": "unsigned (alg none) = 401; one signature character changed = 401; another user id, old signature = 401",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-T4",
+    "Name": "after logout the old access and refresh tokens are dead",
+    "Expected": "logout 200, then 401 and 401",
+    "Actual": "logout 200, replay 401 TOKEN_REVOKED, refresh 401",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-T5",
+    "Name": "logging out with a Bearer token revokes it",
+    "Expected": "logout 200, then 401",
+    "Actual": "logout 200, then 401",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-T6",
+    "Name": "refresh issues a new access and a new refresh token",
+    "Expected": "200 and two new tokens",
+    "Actual": "HTTP 200, access changed: True, refresh changed: True",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-T7",
+    "Name": "refresh without a cookie is refused",
+    "Expected": "401",
+    "Actual": "401",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-L5",
+    "Name": "login works whatever the letter case of the email",
+    "Expected": "200",
+    "Actual": "200",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-L4",
+    "Name": "an unknown email takes as long to refuse as a known one",
+    "Expected": "unknown at least half as slow as known",
+    "Actual": "known 92 ms, unknown 118 ms (request overhead removed)",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-K1",
+    "Name": "five wrong passwords lock the account, even for the right password",
+    "Expected": "5 x 401, then 403",
+    "Actual": "401 401 401 401 401, then 403",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-K2",
+    "Name": "the time of the last failed login is stored as the real time",
+    "Expected": "within 2 minutes of now",
+    "Actual": "1 seconds (this PC time zone: W. Central Africa Standard Time)",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-K3",
+    "Name": "the lock ends once the last failed login is 11 minutes old",
+    "Expected": "200",
+    "Actual": "200",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-E1",
+    "Name": "/health does not describe the rate-limit settings",
+    "Expected": "no rate-limit details",
+    "Actual": "HTTP 200, details shown: False",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-E2",
+    "Name": "an unknown website gets no CORS permission",
+    "Expected": "no Access-Control-Allow-Origin",
+    "Actual": "HTTP 403, header: none",
+    "Outcome": "PASS",
+    "Note": ""
+  },
+  {
+    "Id": "AUTH-E3",
+    "Name": "the site itself gets CORS permission with credentials",
+    "Expected": "origin echoed, credentials true",
+    "Actual": "HTTP 204, origin http://localhost:3000, credentials true",
+    "Outcome": "PASS",
+    "Note": ""
+  }
+]
