@@ -93,6 +93,12 @@ const OTHER_ID = "00000000-0000-4000-8000-000000000002";
 
 beforeEach(() => mockRequireUser.mockResolvedValue({ id: USER_ID }));
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+// getAuthenticatedUser — auth paths (tested via POST)
+// ══════════════════════════════════════════════════════════════════════════════
+
+
 describe("authentication", () => {
   const ownUrl = `https://abc.public.blob.vercel-storage.com/vendor-images/${USER_ID}/logo.jpg`;
 
