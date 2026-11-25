@@ -46,27 +46,34 @@ jest.mock(
     },
 );
 
-jest.mock("framer-motion", () => ({
-  motion: new Proxy(
-    {},
-    {
-      get: (_, tag) =>
-        function MockMotion({ children, ...rest }) {
-          const {
-            whileHover,
-            whileTap,
-            animate,
-            initial,
-            exit,
-            transition,
-            ...domProps
-          } = rest;
-          return React.createElement(tag, domProps, children);
+jest.mock("framer-motion", () => {
+  const cache = {};
+  return {
+    motion: new Proxy(
+      {},
+      {
+        get: (_, tag) => {
+          if (!cache[tag]) {
+            cache[tag] = function MockMotion({ children, ...rest }) {
+              const {
+                whileHover,
+                whileTap,
+                animate,
+                initial,
+                exit,
+                transition,
+                ...domProps
+              } = rest;
+              return React.createElement(tag, domProps, children);
+            };
+          }
+          return cache[tag];
         },
-    },
-  ),
-  AnimatePresence: ({ children }) => <>{children}</>,
-}));
+      },
+    ),
+    AnimatePresence: ({ children }) => <>{children}</>,
+  };
+});
 
 jest.mock("lucide-react", () => {
   const icon = (name) =>
@@ -300,12 +307,12 @@ describe("Header — mobile menu", () => {
     // re-renders before the next click reads menuOpen. Without act(),
     // both clicks see the same stale closure value and the menu stays open.
     // Root cause in code: handleMenuToggle should use setMenuOpen(prev => !prev).
-    act(() => {
-      fireEvent.click(btn);
-    }); // open  → menuOpen = true
-    act(() => {
-      fireEvent.click(btn);
-    }); // close → menuOpen = false
+   act(() => {
+     fireEvent.click(screen.getByRole("button", { name: /toggle menu/i }));
+   });
+   act(() => {
+     fireEvent.click(screen.getByRole("button", { name: /toggle menu/i }));
+   });
     expect(screen.queryByTestId("mobile-menu")).toBeNull();
   });
 
@@ -316,9 +323,7 @@ describe("Header — mobile menu", () => {
     expect(screen.queryByTestId("mobile-menu")).toBeNull();
   });
 });
-
 // ─── Logout ───────────────────────────────────────────────────────────────────
-
 
 describe("Header — logout handler", () => {
   beforeEach(() => {

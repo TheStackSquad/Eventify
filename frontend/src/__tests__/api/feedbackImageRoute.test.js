@@ -232,7 +232,7 @@ describe("POST — successful upload", () => {
     await POST(req);
 
     expect(put).toHaveBeenCalledWith(
-      "feedback-images/screenshot.png",
+      `feedback-images/${USER_ID}/feedback.jpg`,
       expect.anything(),
       expect.objectContaining({
         access: "public",
@@ -322,16 +322,22 @@ describe("DELETE — validation", () => {
   // No storage provider hostname check — any URL is accepted and del() is called.
   // Contrast: event-image/route.js validates blob.vercel-storage.com hostname.
   // DESIRED: reject URLs that don't belong to Vercel storage.
-  it("[GAP 3] calls del() with a non-Vercel URL — no storage provider check", async () => {
-    const req = makeDeleteRequest("https://s3.amazonaws.com/mybucket/file.jpg");
-    const res = await DELETE(req);
-
-    // CURRENT: del() is called with any URL
-    // DESIRED: return 400 "Invalid storage provider"
-    expect(del).toHaveBeenCalledWith(
-      "https://s3.amazonaws.com/mybucket/file.jpg",
+  it("refuses a non-Vercel URL and deletes nothing", async () => {
+    const res = await DELETE(
+      makeDeleteRequest(`https://example.com/feedback-images/${USER_ID}/a.jpg`),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it("refuses another user's file", async () => {
+    const res = await DELETE(
+      makeDeleteRequest(
+        `https://abc.public.blob.vercel-storage.com/feedback-images/${OTHER_ID}/a.jpg`,
+      ),
+    );
+    expect(res.status).toBe(400);
+    expect(del).not.toHaveBeenCalled();
   });
 });
 

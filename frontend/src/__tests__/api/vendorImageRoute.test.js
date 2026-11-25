@@ -8,7 +8,6 @@
  *    DELETE — validate URL → delete from Vercel Blob
  *
  *  Notable features vs. the other image routes:
- *    - No authentication (public endpoint)
  *    - Filename sanitization (non-alphanumeric → "_", lowercased)
  *    - Optional vendorId organizes uploads into subdirectories
  *    - Specific error codes: 429 (rate limit), 507 (quota exceeded)
@@ -94,7 +93,6 @@ const OTHER_ID = "00000000-0000-4000-8000-000000000002";
 
 beforeEach(() => mockRequireUser.mockResolvedValue({ id: USER_ID }));
 
-
 describe("authentication", () => {
   const ownUrl = `https://abc.public.blob.vercel-storage.com/vendor-images/${USER_ID}/logo.jpg`;
 
@@ -107,10 +105,7 @@ describe("authentication", () => {
 
   it("a spoofed x-user-id header does not authenticate", async () => {
     mockRequireUser.mockResolvedValue(null);
-    const req = {
-      ...makePostRequest({ file: makeFile() }),
-      headers: new Headers({ "x-user-id": USER_ID }),
-    };
+    const req = { ...makePostRequest({ file: makeFile() }), headers: new Headers({ "x-user-id": USER_ID }) };
     const res = await POST(req);
     expect(res.status).toBe(401);
     expect(put).not.toHaveBeenCalled();
@@ -125,11 +120,7 @@ describe("authentication", () => {
 
   it("scopes uploads to the signed-in user", async () => {
     await POST(makePostRequest({ file: makeFile() }));
-    expect(put).toHaveBeenCalledWith(
-      `vendor-images/${USER_ID}/logo.jpg`,
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(put).toHaveBeenCalledWith(`vendor-images/${USER_ID}/logo.jpg`, expect.anything(), expect.anything());
   });
 
   it("deletes the user's own file", async () => {
@@ -153,15 +144,12 @@ describe("authentication", () => {
   });
 
   it("a traversal filename cannot escape the user's folder", async () => {
-    await POST(
-      makePostRequest({ file: makeFile({ name: "../../etc/passwd.jpg" }) }),
-    );
+    await POST(makePostRequest({ file: makeFile({ name: "../../etc/passwd.jpg" }) }));
     const pathname = put.mock.calls[0][0];
     expect(pathname).toBe(`vendor-images/${USER_ID}/_._etc_passwd.jpg`);
     expect(pathname).not.toMatch(/\.\./);
   });
 });
-
 // ══════════════════════════════════════════════════════════════════════════════
 // POST — file presence validation
 // ══════════════════════════════════════════════════════════════════════════════
@@ -353,28 +341,6 @@ describe("POST — filename sanitization", () => {
       expect.anything(),
     );
   });
-
-  // ── GAP 2 ──────────────────────────────────────────────────────────────────
-  // Path traversal: "../../etc/passwd.jpg" → "__________etc_passwd.jpg"
-  // The sanitizer replaces "/" with "_" but preserves "." (it's in [a-zA-Z0-9.-]).
-  // So "../../etc/passwd.jpg" → ".._.._etc_passwd.jpg" — dots survive intact.
-  // No explicit traversal block at the path level.
-  it("[GAP 2] path traversal filename is sanitized but not explicitly blocked — dots preserved", async () => {
-    const req = makePostRequest({
-      file: makeFile({ name: "../../etc/passwd.jpg", type: "image/jpeg" }),
-    });
-    await POST(req);
-
-    const calledPath = put.mock.calls[0][0];
-    // Slashes are gone — no literal path traversal in the storage key
-    expect(calledPath).not.toContain("../");
-    expect(calledPath).not.toContain("/etc/");
-    // Dots ARE preserved by the regex — ".." remains as ".."
-    expect(calledPath).toContain(".._");
-
-    // Documents that traversal chars are only partially sanitized (/ → _)
-    // DESIRED: explicitly reject filenames containing ".." before sanitization
-  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -382,35 +348,37 @@ describe("POST — filename sanitization", () => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe("POST — vendorId path organization", () => {
-  it("uses vendor-images/{vendorId}/{filename} path when vendorId is provided", async () => {
-    const req = makePostRequest({
-      file: makeFile({ name: "logo.jpg" }),
-      vendorId: "vendor-xyz",
-    });
-    await POST(req);
-
+  it("stores the file under the signed-in user's folder when a vendorId is sent", async () => {
+    await POST(
+      makePostRequest({
+        file: makeFile(),
+        vendorId: "550e8400-e29b-41d4-a716-446655440000",
+      }),
+    );
     expect(put).toHaveBeenCalledWith(
-      "vendor-images/vendor-xyz/logo.jpg",
+      `vendor-images/${USER_ID}/logo.jpg`,
       expect.anything(),
       expect.anything(),
     );
   });
 
-  it("uses vendor-images/{filename} path when vendorId is absent", async () => {
-    const req = makePostRequest({
-      file: makeFile({ name: "logo.jpg" }),
-      // vendorId not in formFields
-    });
-    await POST(req);
-
+  it("stores the file under the signed-in user's folder when no vendorId is sent", async () => {
+    await POST(makePostRequest({ file: makeFile() }));
     expect(put).toHaveBeenCalledWith(
-      "vendor-images/logo.jpg",
+      `vendor-images/${USER_ID}/logo.jpg`,
       expect.anything(),
       expect.anything(),
     );
+  });
+
+  it("rejects a vendorId that is not a UUID", async () => {
+    const res = await POST(
+      makePostRequest({ file: makeFile(), vendorId: "../../x" }),
+    );
+    expect(res.status).toBe(400);
+    expect(put).not.toHaveBeenCalled();
   });
 });
-
 // ══════════════════════════════════════════════════════════════════════════════
 // POST — successful upload response
 // ══════════════════════════════════════════════════════════════════════════════
@@ -560,21 +528,6 @@ describe("DELETE — validation", () => {
     });
     await DELETE(req);
     expect(del).not.toHaveBeenCalled();
-  });
-
-  // ── GAP 3 ──────────────────────────────────────────────────────────────────
-  // url.includes("blob.vercel-storage.com") passes for injected hostnames.
-  // "https://evil.com/blob.vercel-storage.com/../../file.jpg" bypasses the check.
-  it("[GAP 3] URL injection bypasses storage provider check via .includes()", async () => {
-    const req = makeDeleteRequest({
-      url: "https://evil.com/blob.vercel-storage.com/file.jpg",
-    });
-    const res = await DELETE(req);
-
-    // CURRENT: .includes() passes → del() is called → 200
-    // DESIRED: strict hostname check → 400 "Invalid Vercel Blob URL"
-    expect(del).toHaveBeenCalled();
-    expect(res.status).toBe(200);
   });
 });
 
