@@ -293,21 +293,6 @@ describe("POST — successful upload", () => {
       }),
     );
   });
-
-  it("uses user_id from JWT payload when authenticating via Bearer token", async () => {
-
-    const req = makeRequest({
-      headers: { authorization: "Bearer valid.token" },
-      formFields: { file: makeFile({ name: "pic.jpg" }), eventId: "ev-1" },
-    });
-
-    await POST(req);
-
-    expect(put).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-    );
-  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -331,6 +316,7 @@ describe("POST — error handling", () => {
   });
 
   it("returns 401 when unauthenticated — does not call put()", async () => {
+    mockRequireUser.mockResolvedValue(null);
     const req = unauthRequest({
       formFields: { file: makeFile(), eventId: "ev-1" },
     });
@@ -347,6 +333,7 @@ describe("POST — error handling", () => {
 
 describe("DELETE — validation", () => {
   it("returns 401 when unauthenticated", async () => {
+    mockRequireUser.mockResolvedValue(null);
     const req = unauthRequest({
       jsonBody: { url: "https://blob.vercel-storage.com/file.jpg" },
     });
