@@ -420,7 +420,7 @@ describe("DELETE — validation", () => {
   it("returns 401 when unauthenticated", async () => {
     mockRequireUser.mockResolvedValue(null);
     const req = unauthRequest({
-      jsonBody: { url: "https://blob.vercel-storage.com/file.jpg" },
+      jsonBody: { url: `https://abc.public.blob.vercel-storage.com/users/${USER_ID}/events/ev-1/photo.jpg` },
     });
 
     const res = await DELETE(req);
@@ -471,7 +471,7 @@ describe("DELETE — validation", () => {
 
 describe("DELETE — successful deletion", () => {
   const VALID_URL =
-    "https://blob.vercel-storage.com/users/u1/events/ev-1/photo.jpg";
+    `https://abc.public.blob.vercel-storage.com/users/${USER_ID}/events/ev-1/photo.jpg`;
 
   it("returns 200 with success message on valid deletion", async () => {
     const req = authedRequest({ jsonBody: { url: VALID_URL } });
@@ -519,7 +519,7 @@ describe("[GAP 1] DELETE catch block returns 200 regardless of error type", () =
 
     const req = authedRequest({
       jsonBody: {
-        url: "https://blob.vercel-storage.com/users/u1/photo.jpg",
+        url: `https://abc.public.blob.vercel-storage.com/users/${USER_ID}/events/ev-1/photo.jpg`,
       },
     });
 
@@ -536,7 +536,7 @@ describe("[GAP 1] DELETE catch block returns 200 regardless of error type", () =
 
     const req = authedRequest({
       jsonBody: {
-        url: "https://blob.vercel-storage.com/users/u1/photo.jpg",
+        url: `https://abc.public.blob.vercel-storage.com/users/${USER_ID}/events/ev-1/photo.jpg`,
       },
     });
 

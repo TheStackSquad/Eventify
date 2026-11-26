@@ -543,7 +543,7 @@ describe("DELETE — validation", () => {
 
 describe("DELETE — successful deletion", () => {
   const VALID_URL =
-    "https://blob.vercel-storage.com/vendor-images/vendor-xyz/logo.jpg";
+    `https://abc.public.blob.vercel-storage.com/vendor-images/${USER_ID}/logo.jpg`;
 
   it("returns 200 with success message and echoed url", async () => {
     const req = makeDeleteRequest({ url: VALID_URL });
@@ -568,7 +568,7 @@ describe("DELETE — successful deletion", () => {
 // ══════════════════════════════════════════════════════════════════════════════
 
 describe("DELETE — specific error handling", () => {
-  const VALID_URL = "https://blob.vercel-storage.com/vendor-images/logo.jpg";
+  const VALID_URL = `https://abc.public.blob.vercel-storage.com/vendor-images/${USER_ID}/logo.jpg`;
 
   it("returns 404 when del() throws a 'not found' error", async () => {
     del.mockRejectedValue(new Error("blob not found in storage"));
