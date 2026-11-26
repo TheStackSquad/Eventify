@@ -9,8 +9,8 @@ const VendorInputField = ({
   error,
   required,
   helperText,
-  // eslint-disable-line no-unused-vars
-  isVerified = false, // eslint-disable-line no-unused-vars -- keep it out of the DOM props
+   
+  isVerified = false,  
   ...props
 }) => {
   const generatedId = useId();

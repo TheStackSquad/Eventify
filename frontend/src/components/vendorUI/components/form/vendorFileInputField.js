@@ -166,7 +166,6 @@ const VendorFileInputField = ({
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
           aria-describedby={messageId}
-          aria-invalid={Boolean(error)}
           className={`flex aspect-[16/10] w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
             error
               ? "border-red-400 bg-red-50"

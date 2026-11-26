@@ -1,5 +1,9 @@
+/* ==========================================================================
+   Theme Variables & Base Typography
+   ========================================================================== */
+
 @import "tailwindcss";
-@import 'react-toastify/dist/ReactToastify.css';
+@import "react-toastify/dist/ReactToastify.css";
 
 :root {
   --background: #ffffff;
@@ -9,7 +13,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans); 
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -20,28 +24,59 @@
   }
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-montserrat-alt), system-ui, sans-serif; /* Uses Montserrat Alternates as body font */
-}
-
-/* Override font for all heading elements (h1-h6) to use Cormorant Garamond */
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-cormorant), Georgia, serif; /* Uses Cormorant Garamond for headers */
-}
-
-/* Ensure 'a', 'li', and 'button' text specifically use Montserrat Alternates */
-a, li, button {
   font-family: var(--font-montserrat-alt), system-ui, sans-serif;
 }
 
-/*vendor form style*/
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-cormorant), Georgia, serif;
+}
+
+a,
+li,
+button {
+  font-family: var(--font-montserrat-alt), system-ui, sans-serif;
+}
+
+img {
+  content-visibility: auto;
+}
+
+*:focus-visible {
+  outline: 2px solid #fbbf24;
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Keyframes
+   ========================================================================== */
 
 @keyframes fade-in {
   from {
     opacity: 0;
     transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -62,18 +97,6 @@ a, li, button {
   }
 }
 
-
-/* Option 1: Using pure CSS classes (Works everywhere) */
-.animate-fade-in {
-  animation: fade-in 0.5s ease-out;
-}
-
-.animate-shake {
-  animation: shake 0.4s ease-in-out;
-}
-
-
-/* Hero Animations - Moved to global CSS for better performance */
 @keyframes hero-fade-in {
   from {
     opacity: 0;
@@ -85,65 +108,9 @@ a, li, button {
   }
 }
 
-.hero-fade-in {
-  animation: hero-fade-in 0.6s ease-out forwards;
-}
-
-.hero-fade-in-delayed {
-  animation: hero-fade-in 0.6s ease-out 0.15s forwards;
-  opacity: 0;
-}
-
-/* Optimize animations with will-change */
-.hero-fade-in,
-.hero-fade-in-delayed {
-  will-change: transform, opacity;
-}
-
-/* Remove will-change after animation completes to free GPU memory */
-@media (prefers-reduced-motion: no-preference) {
-  .hero-fade-in,
-  .hero-fade-in-delayed {
-    animation-fill-mode: forwards;
-  }
-}
-
-/* Respect user preferences */
-@media (prefers-reduced-motion: reduce) {
-  .hero-fade-in,
-  .hero-fade-in-delayed {
-    animation: none;
-    opacity: 1;
-    transform: none;
-  }
-}
-
-
-/* Custom clip-path for hero section */
-.clip-path-custom {
-  clip-path: polygon(0 0, 100% 0, 100% 85%, 0 100%);
-  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
-}
-
-/* Smooth scroll behavior */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Performance optimizations */
-* {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Image optimization */
-img {
-  content-visibility: auto;
-}
-
-/* Hover animations for cards */
 @keyframes float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
   }
   50% {
@@ -151,19 +118,6 @@ img {
   }
 }
 
-.animate-float {
-  animation: float 3s ease-in-out infinite;
-}
-
-/* Gradient text effect */
-.gradient-text {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Stats counter animation */
 @keyframes countUp {
   from {
     opacity: 0;
@@ -175,11 +129,6 @@ img {
   }
 }
 
-.stat-item {
-  animation: countUp 0.6s ease-out forwards;
-}
-
-/* Shimmer effect for partner logos */
 @keyframes shimmer {
   0% {
     background-position: -1000px 0;
@@ -187,6 +136,75 @@ img {
   100% {
     background-position: 1000px 0;
   }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(251, 191, 36, 0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ==========================================================================
+   Animation & Visual Classes
+   ========================================================================== */
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+.hero-fade-in {
+  animation: hero-fade-in 0.6s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+.hero-fade-in-delayed {
+  animation: hero-fade-in 0.6s ease-out 0.15s forwards;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.clip-path-custom {
+  clip-path: polygon(0 0, 100% 0, 100% 85%, 0 100%);
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.stat-item {
+  animation: countUp 0.6s ease-out forwards;
 }
 
 .shimmer {
@@ -200,44 +218,14 @@ img {
   animation: shimmer 2s infinite;
 }
 
-/* Pulse effect for CTA buttons */
-@keyframes pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7);
-  }
-  50% {
-    box-shadow: 0 0 0 10px rgba(251, 191, 36, 0);
-  }
-}
-
 .pulse-on-hover:hover {
   animation: pulse 1.5s infinite;
-}
-
-/* Fade in on scroll */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .fade-in-up {
   animation: fadeInUp 0.8s ease-out;
 }
 
-/* Responsive utilities */
-@media (max-width: 768px) {
-  .mobile-center {
-    text-align: center;
-  }
-}
-
-/* Loading states */
 .skeleton {
   background: linear-gradient(
     90deg,
@@ -249,31 +237,16 @@ img {
   animation: loading 1.5s ease-in-out infinite;
 }
 
-@keyframes loading {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-/* Focus visible for accessibility */
-*:focus-visible {
-  outline: 2px solid #fbbf24;
-  outline-offset: 2px;
-}
-
-/* Print styles */
-@media print {
-  nav, footer, .no-print {
-    display: none;
-  }
-}
-
-/* frontend/src/app/globals.css or tailwind.config.js */
+/* ==========================================================================
+   Custom Utilities & Media Queries
+   ========================================================================== */
 
 @layer utilities {
+  .font-smoothing {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   .animate-pulse-slow {
     animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
@@ -286,22 +259,41 @@ img {
     animation: fadeIn 0.3s ease-in-out;
   }
 
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
   .scrollbar-thin {
     scrollbar-width: thin;
   }
 
   .scrollbar-thumb-gray-300 {
     scrollbar-color: rgb(209 213 219) transparent;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-fade-in,
+  .hero-fade-in-delayed {
+    animation-fill-mode: forwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-fade-in,
+  .hero-fade-in-delayed {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .mobile-center {
+    text-align: center;
+  }
+}
+
+@media print {
+  nav,
+  footer,
+  .no-print {
+    display: none;
   }
 }

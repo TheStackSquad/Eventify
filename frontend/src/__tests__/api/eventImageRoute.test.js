@@ -115,9 +115,9 @@ const OTHER_ID = "00000000-0000-4000-8000-000000000002";
 
 
 // ─── Global setup ─────────────────────────────────────────────────────────────
-
 beforeEach(() => {
   jest.clearAllMocks();
+  mockRequireUser.mockResolvedValue({ id: USER_ID });
 
   // Default: put() resolves with a fake blob result
   put.mockResolvedValue({
@@ -127,13 +127,10 @@ beforeEach(() => {
 
   // Default: del() resolves successfully
   del.mockResolvedValue(undefined);
-  // Ensure JWT_PUBLIC_KEY env var exists for fallback path tests
   process.env.JWT_PUBLIC_KEY =
     "-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----";
 });
 
-
-beforeEach(() => mockRequireUser.mockResolvedValue({ id: USER_ID }));
 
 
 
@@ -491,6 +488,7 @@ describe("DELETE — successful deletion", () => {
   });
 
   it("does not call del() when unauthenticated", async () => {
+    mockRequireUser.mockResolvedValue(null);
     const req = unauthRequest({ jsonBody: { url: VALID_URL } });
 
     await DELETE(req);

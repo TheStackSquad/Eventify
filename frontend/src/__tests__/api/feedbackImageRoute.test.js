@@ -298,23 +298,23 @@ describe("POST — successful upload", () => {
     });
   });
 
-  it("calls put() with the correct feedback-images/ path", async () => {
-    const req = makePostRequest({
-      file: makeFile({ name: "screenshot.png", type: "image/png" }),
-    });
-
-    await POST(req);
-
-    expect(put).toHaveBeenCalledWith(
-      `feedback-images/${USER_ID}/feedback.jpg`,
-      expect.anything(),
-      expect.objectContaining({
-        access: "public",
-        addRandomSuffix: true,
-        contentType: "image/png",
-      }),
-    );
+it("calls put() with the correct feedback-images/ path", async () => {
+  const req = makePostRequest({
+    file: makeFile({ name: "screenshot.png", type: "image/png" }),
   });
+
+  await POST(req);
+
+  expect(put).toHaveBeenCalledWith(
+    `feedback-images/${USER_ID}/screenshot.png`,
+    expect.anything(),
+    expect.objectContaining({
+      access: "public",
+      addRandomSuffix: true,
+      contentType: "image/png",
+    }),
+  );
+});
 
   it("uses the file's contentType in the put() call", async () => {
     const req = makePostRequest({

@@ -156,7 +156,7 @@ module.exports = async () => {
   const resolvedConfig = await jestConfigFactory();
 
   // Root-only options must not leak into individual projects.
-  // eslint-disable-next-line no-unused-vars
+   
   const {
     collectCoverageFrom: _cov,
     coverageThreshold: _thr,
