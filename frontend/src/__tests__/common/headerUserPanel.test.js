@@ -304,7 +304,7 @@ describe("UserPanel — logged-in state", () => {
     render(<Header />);
     openPanel();
     // CheckCircle2 icon rendered inside the badge
-    expect(screen.getAllByTestId("icon-check-circle"))[0].toBeInTheDocument();
+    expect(screen.getAllByTestId("icon-check-circle")[0]).toBeInTheDocument();
   });
 
   it("does NOT render the vendor badge when user.isVendor is false", () => {

@@ -873,7 +873,7 @@ describe("TicketPage", () => {
       return <p>recovered</p>;
     };
     render(
-      <TicketActionBoundary ticketId={ticketId}>
+      <TicketActionBoundary ticketId="t-1">
         <Flaky />
       </TicketActionBoundary>,
     );

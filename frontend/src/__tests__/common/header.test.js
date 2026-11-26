@@ -368,7 +368,7 @@ describe("Header — logout handler", () => {
       expect(toastAlert.error).toHaveBeenCalledWith(
         "Logout failed. Please try again.",
       );
-      expect(redirectTo).toHaveBeenCalledWith("/");
+      expect(redirectTo).not.toHaveBeenCalled();
     });
   });
 });

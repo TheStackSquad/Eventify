@@ -23,9 +23,6 @@
  *         AND no .name hits the first block and returns 200 instead of 400.
  *         The "no .name" check never fires for zero-size files.
  *
- *  GAP 3: DELETE has no storage provider safety check — any arbitrary URL
- *         (S3, Cloudinary, etc.) can be passed and del() will be called.
- *         Contrast with event-image/route.js which validates the hostname.
  *
  * @jest-environment node
  */
@@ -301,23 +298,23 @@ describe("POST — successful upload", () => {
     });
   });
 
-  it("calls put() with the correct feedback-images/ path", async () => {
-    const req = makePostRequest({
-      file: makeFile({ name: "screenshot.png", type: "image/png" }),
-    });
-
-    await POST(req);
-
-    expect(put).toHaveBeenCalledWith(
-      `feedback-images/${USER_ID}/feedback.jpg`,
-      expect.anything(),
-      expect.objectContaining({
-        access: "public",
-        addRandomSuffix: true,
-        contentType: "image/png",
-      }),
-    );
+it("calls put() with the correct feedback-images/ path", async () => {
+  const req = makePostRequest({
+    file: makeFile({ name: "screenshot.png", type: "image/png" }),
   });
+
+  await POST(req);
+
+  expect(put).toHaveBeenCalledWith(
+    `feedback-images/${USER_ID}/screenshot.png`,
+    expect.anything(),
+    expect.objectContaining({
+      access: "public",
+      addRandomSuffix: true,
+      contentType: "image/png",
+    }),
+  );
+});
 
   it("uses the file's contentType in the put() call", async () => {
     const req = makePostRequest({
@@ -335,7 +332,7 @@ describe("POST — successful upload", () => {
 
   it("returns the blob url from put() in the response", async () => {
     const fakeUrl =
-      "https://blob.vercel-storage.com/feedback-images/img-xyz.jpg";
+      `https://abc.public.blob.vercel-storage.com/feedback-images/${USER_ID}/img-xyz.jpg`;
     put.mockResolvedValue({
       url: fakeUrl,
       pathname: "feedback-images/img-xyz.jpg",
@@ -395,9 +392,7 @@ describe("DELETE — validation", () => {
     expect(del).not.toHaveBeenCalled();
   });
 
-  // ── GAP 3 ──────────────────────────────────────────────────────────────────
-  // No storage provider hostname check — any URL is accepted and del() is called.
-  // Contrast: event-image/route.js validates blob.vercel-storage.com hostname.
+
   // DESIRED: reject URLs that don't belong to Vercel storage.
   it("refuses a non-Vercel URL and deletes nothing", async () => {
     const res = await DELETE(
@@ -424,7 +419,7 @@ describe("DELETE — validation", () => {
 
 describe("DELETE — successful deletion", () => {
   const VALID_URL =
-    "https://blob.vercel-storage.com/feedback-images/img-abc.jpg";
+    `https://abc.public.blob.vercel-storage.com/feedback-images/${USER_ID}/img-abc.jpg`;
 
   it("returns 200 with success message on valid deletion", async () => {
     const req = makeDeleteRequest(VALID_URL);
@@ -453,7 +448,7 @@ describe("DELETE — error handling returns 500 (correct — regression guard)",
     del.mockRejectedValue(new Error("Storage error"));
 
     const req = makeDeleteRequest(
-      "https://blob.vercel-storage.com/feedback-images/img.jpg",
+      `https://abc.public.blob.vercel-storage.com/feedback-images/${USER_ID}/img.jpg`,
     );
     const res = await DELETE(req);
 

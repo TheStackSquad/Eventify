@@ -115,9 +115,9 @@ const OTHER_ID = "00000000-0000-4000-8000-000000000002";
 
 
 // ─── Global setup ─────────────────────────────────────────────────────────────
-
 beforeEach(() => {
   jest.clearAllMocks();
+  mockRequireUser.mockResolvedValue({ id: USER_ID });
 
   // Default: put() resolves with a fake blob result
   put.mockResolvedValue({
@@ -127,13 +127,10 @@ beforeEach(() => {
 
   // Default: del() resolves successfully
   del.mockResolvedValue(undefined);
-  // Ensure JWT_PUBLIC_KEY env var exists for fallback path tests
   process.env.JWT_PUBLIC_KEY =
     "-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----";
 });
 
-
-beforeEach(() => mockRequireUser.mockResolvedValue({ id: USER_ID }));
 
 
 
@@ -420,7 +417,7 @@ describe("DELETE — validation", () => {
   it("returns 401 when unauthenticated", async () => {
     mockRequireUser.mockResolvedValue(null);
     const req = unauthRequest({
-      jsonBody: { url: "https://blob.vercel-storage.com/file.jpg" },
+      jsonBody: { url: `https://abc.public.blob.vercel-storage.com/users/${USER_ID}/events/ev-1/photo.jpg` },
     });
 
     const res = await DELETE(req);
@@ -471,7 +468,7 @@ describe("DELETE — validation", () => {
 
 describe("DELETE — successful deletion", () => {
   const VALID_URL =
-    "https://blob.vercel-storage.com/users/u1/events/ev-1/photo.jpg";
+    `https://abc.public.blob.vercel-storage.com/users/${USER_ID}/events/ev-1/photo.jpg`;
 
   it("returns 200 with success message on valid deletion", async () => {
     const req = authedRequest({ jsonBody: { url: VALID_URL } });
@@ -491,6 +488,7 @@ describe("DELETE — successful deletion", () => {
   });
 
   it("does not call del() when unauthenticated", async () => {
+    mockRequireUser.mockResolvedValue(null);
     const req = unauthRequest({ jsonBody: { url: VALID_URL } });
 
     await DELETE(req);
@@ -519,7 +517,7 @@ describe("[GAP 1] DELETE catch block returns 200 regardless of error type", () =
 
     const req = authedRequest({
       jsonBody: {
-        url: "https://blob.vercel-storage.com/users/u1/photo.jpg",
+        url: `https://abc.public.blob.vercel-storage.com/users/${USER_ID}/events/ev-1/photo.jpg`,
       },
     });
 
@@ -536,7 +534,7 @@ describe("[GAP 1] DELETE catch block returns 200 regardless of error type", () =
 
     const req = authedRequest({
       jsonBody: {
-        url: "https://blob.vercel-storage.com/users/u1/photo.jpg",
+        url: `https://abc.public.blob.vercel-storage.com/users/${USER_ID}/events/ev-1/photo.jpg`,
       },
     });
 

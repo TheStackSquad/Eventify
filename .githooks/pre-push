@@ -1,0 +1,3 @@
+#!/bin/sh
+# Pre-push quality gate (scripts/pre-push-gate.mjs). Emergency bypass: SKIP_GATE=1 git push
+exec node "$(git rev-parse --show-toplevel)/scripts/pre-push-gate.mjs" "$@"
