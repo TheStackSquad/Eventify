@@ -21,6 +21,11 @@ frontend/out/
 frontend/build/
 .eslintignore
 
+
+/e2e/.auth/
+/test-results/
+/playwright-report/
+
 # --- Scripts & Testing ---
 *.sh
 !scripts/deploy.sh
