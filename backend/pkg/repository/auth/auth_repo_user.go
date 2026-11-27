@@ -158,7 +158,7 @@ func (r *PostgresAuthRepository) IsUserAdmin(ctx context.Context, id uuid.UUID) 
 	err := r.DB.GetContext(ctx, &role, query, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return false, errors.New("user not found")
+			return false, ErrUserNotFound
 		}
 		return false, err
 	}

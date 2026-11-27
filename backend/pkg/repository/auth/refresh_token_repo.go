@@ -189,7 +189,7 @@ func (r *PostgresRefreshTokenRepository) GetActiveTokenCount(
 func (r *PostgresRefreshTokenRepository) GetByHash(ctx context.Context, tokenHash string) (*models.RefreshToken, error) {
 	var token models.RefreshToken
 	query := `
-		SELECT id, user_id, token_hash, revoked, expires_at, created_at, consumed_at, parent_id
+		SELECT id, user_id, token_hash, revoked, expires_at, created_at, session_started_at, consumed_at, parent_id
 		FROM refresh_tokens
 		WHERE token_hash = $1
 		LIMIT 1
