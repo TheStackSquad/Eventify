@@ -24,6 +24,13 @@ $AuthHints = @{
     'AUTH-T10' = 'F406: the 30-day absolute limit is measured from the created_at of the current token, which restarts at every refresh, so a session never ends. Measure from the first login of the chain.'
     'AUTH-T11' = 'Reusing a refresh token after its grace window must revoke the whole chain and answer 403 SECURITY_VIOLATION.'
     'AUTH-T12' = 'A repeat refresh with the same old token inside the grace window must return the same new tokens, so no second session appears.'
+    'AUTH-T13' = 'F405: every refresh gives the new token 30 days, so a browser session stored with a 24-hour life silently becomes a 30-day session. A rotated token must live as long as the one it replaces.'
+    'AUTH-T14' = 'A "remember me" session must keep its 30-day life across a refresh (a guard against making the T13 fix too strict).'
+    'AUTH-P1' = 'Admin routes must answer 401 without a session.'
+    'AUTH-P2' = 'AdminMiddleware must refuse a customer with 403.'
+    'AUTH-P3' = 'An admin action must be refused for a customer before it runs.'
+    'AUTH-P4' = 'An admin must reach the admin routes.'
+    'AUTH-P5' = 'F420: AdminMiddleware compares the lookup error with errors.Is on a fresh errors.New, which never matches, so a user deleted after login gets a 500. The repository must return a shared ErrUserNotFound and the middleware must compare with it.'
     'AUTH-C1' = 'Session cookies must be HttpOnly with SameSite; the CSRF cookie must stay readable by the page.'
     'AUTH-C2' = 'F414: Secure depends on COOKIE_SECURE (default off). Production must set it, and logout must clear cookies with the same flags.'
     'AUTH-C3' = 'Authenticated state-changing routes must demand the X-CSRF-Token header.'
@@ -53,6 +60,8 @@ function Get-AuthClaims {
         @{ Text = 'Refresh rotates both tokens and needs a session.'; Needs = @('AUTH-T6', 'AUTH-T7') }
         @{ Text = 'A refresh token cannot be used past its expiry, and a session ends at its absolute limit.'; Needs = @('AUTH-T9', 'AUTH-T10') }
         @{ Text = 'Reusing an old refresh token ends the whole session, and simultaneous refreshes never split a session.'; Needs = @('AUTH-T8', 'AUTH-T11', 'AUTH-T12') }
+        @{ Text = 'A refreshed session keeps the life it was given at login: 24 hours for a browser session, 30 days for "remember me".'; Needs = @('AUTH-T13', 'AUTH-T14') }
+        @{ Text = 'Admin routes need a session and the admin role, and a deleted account is refused cleanly.'; Needs = @('AUTH-P1', 'AUTH-P2', 'AUTH-P3', 'AUTH-P4', 'AUTH-P5') }
         @{ Text = 'Only the named website origin receives CORS permission.'; Needs = @('AUTH-E2', 'AUTH-E3') }
     )
 }

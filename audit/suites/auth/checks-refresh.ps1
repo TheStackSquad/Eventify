@@ -49,6 +49,9 @@ function Test-AuthRefresh {
     $r1 = Invoke-AuthHttp -Method POST -Path '/auth/refresh' -Jar $a.Jar
     $second = Get-CookieValue $a.Jar 'refresh_token'
     $null = Invoke-Sql ("UPDATE refresh_tokens SET created_at = now() - interval '31 days' WHERE token_hash = {0}" -f (Get-SqlLiteral (Get-TokenSha $first)))
+    # once the migration adds session_started_at, the limit counts from the session start: move that back for the whole chain
+    $hasStart = [int](Invoke-Sql "SELECT count(*) FROM information_schema.columns WHERE table_name = 'refresh_tokens' AND column_name = 'session_started_at'")
+    if ($hasStart -gt 0) { $null = Invoke-Sql ("UPDATE refresh_tokens SET session_started_at = now() - interval '31 days' WHERE token_hash IN ({0}, {1})" -f (Get-SqlLiteral (Get-TokenSha $first)), (Get-SqlLiteral (Get-TokenSha $second))) }
     $r2 = Invoke-AuthHttp -Method POST -Path '/auth/refresh' -Headers @{ Cookie = "refresh_token=$second" }
     Check 'AUTH-T10' 'a session that began more than 30 days ago cannot be refreshed' '401' "first refresh $($r1.Status), refresh 31 days into the session: $($r2.Status)" (($r1.Status -eq 200) -and ($second -ne $first) -and ($r2.Status -eq 401))
 
