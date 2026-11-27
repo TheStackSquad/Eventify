@@ -16,7 +16,7 @@ const POLICY = {
   secrets: "block",
   tests: "block",
   audit: "block",
-  lint: "warn",
+  lint: "block",
   gobuild: "block",
   gotests: "block",
 };
