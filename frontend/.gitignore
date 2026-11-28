@@ -58,3 +58,7 @@ Thumbs.db
 backend.exe
 main.exe
 *.exe
+# Playwright
+/e2e/.auth/
+/test-results/
+/playwright-report/

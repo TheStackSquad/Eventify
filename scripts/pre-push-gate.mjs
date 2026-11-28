@@ -164,16 +164,30 @@ step("tests are tracked in git", "tracked", () => {
 const SECRET_PATTERNS = [
   ["FastCAC API key", /fc_(?:test|live)_[A-Za-z0-9_-]{20,}/],
   ["Stripe/Paystack secret key", /sk_(?:test|live)_[A-Za-z0-9]{20,}/],
-  ["private key block", /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/],
+  [
+    "private key block",
+    /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/,
+  ],
   ["AWS access key id", /AKIA[0-9A-Z]{16}/],
   ["Slack token", /xox[baprs]-[A-Za-z0-9-]{10,}/],
+  [
+    "JSON Web Token (session or API token)",
+    /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/,
+  ],
 ];
 const SECRET_SKIP_PATH = /(^|\/)(__tests__|__fixtures__)\/|^audit\/results\/|package-lock\.json$|\.(example|sample)$/;
+
+// Credential and session files must never be committed, whatever they contain.
+const DENY_PATH = /(^|\/)(\.auth|auth-state)\/|(^|\/)storage-?state[^/]*\.json$|\.(pem|p12|pfx)$|(^|\/)id_(rsa|ed25519)(\.pub)?$/i;
+const ALLOW_PATH = /^audit\/docker\/keys\//; // rig-only keys that are already tracked
 
 step("no secrets in the pushed changes", "secrets", () => {
   const hits = [];
   for (const f of changed) {
-    if (/(^|\/)\.env(\.[^/]*)?$/.test(f) && !/\.(example|sample)$/.test(f)) hits.push(`${f}: environment file`);
+    if (/(^|\/)\.env(\.[^/]*)?$/.test(f) && !/\.(example|sample)$/.test(f))
+      hits.push(`${f}: environment file`);
+    if (DENY_PATH.test(f) && !ALLOW_PATH.test(f))
+      hits.push(`${f}: credential or session file`);
   }
   for (const { file, text } of addedLines) {
     if (SECRET_SKIP_PATH.test(file) || text.includes("gate-allow-secret")) continue;
