@@ -85,3 +85,5 @@ DECISIONS v1 (ORD agent + SUB/rig agent, applied by the owner)
 - Claims: migration 000020 (unique index on lower(email), F416) and 000021 (login_attempts.last_attempt_at to timestamptz, F403). Findings F400-F421: audit/suites/auth/FINDINGS-AUTH.md.
 - router.go: AUTH removes the rate_limiting block from GET /health (F413). No other shared file is edited.
 - Reminder to ORD: golang-migrate never applies a number below the database version. If 000017 or 000018 merge after 000020/000021, renumber them above main's highest; the Doctor's "order vs main" check fails when this happens.
+
+- AUTH claims migration 000022 (refresh_tokens.session_started_at and a trigger that copies it down the token chain, F406). The next free number is 000023.
