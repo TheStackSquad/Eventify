@@ -22,6 +22,8 @@ func (h *VendorHandler) ListVendors(c *gin.Context) {
 		}
 	}
 
+	page, limit := models.ClampPaging(queryParams.Get("page"), queryParams.Get("limit"))
+
 	vendors, err := h.VendorService.GetVendors(c.Request.Context(), filters)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to retrieve vendors list")
@@ -33,14 +35,25 @@ func (h *VendorHandler) ListVendors(c *gin.Context) {
 		vendors = []models.Vendor{}
 	}
 
+	// COUNT(*) OVER() puts the total number of matching vendors on every row of the page.
+	total := 0
+	if len(vendors) > 0 {
+		total = int(vendors[0].TotalCount)
+	}
+
 	public := make([]models.PublicVendorResponse, len(vendors))
 	for i := range vendors {
 		public[i] = vendors[i].ToPublicResponse()
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"vendors":    public,
-		"pagination": gin.H{"totalCount": len(public)},
+		"vendors": public,
+		"pagination": gin.H{
+			"totalCount":  total,
+			"currentPage": page,
+			"pageSize":    limit,
+			"hasMore":     page*limit < total,
+		},
 	})
 }
 

@@ -49,6 +49,7 @@ type Vendor struct {
 	IsBusinessVerified   sql.NullBool     `json:"isBusinessVerified" db:"is_business_verified"`
 	SubscriptionTier     SubscriptionTier `json:"subscriptionTier" db:"subscription_tier"`
 	AvgRating            sql.NullFloat64  `json:"-" db:"avg_rating"`
+	TotalCount           int64            `json:"-" db:"total_count"`
 }
 
 func CalculatePVS(v *Vendor) int32 {
