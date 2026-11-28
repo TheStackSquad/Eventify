@@ -5,17 +5,19 @@ import {
   replaceUrlParams,
 } from "@/utils/constants/globalConstants";
 
-// Fetch vendors with pagination and filters
+// Fetch vendors with pagination and filters. Empty or undefined filters are not sent
+// (URLSearchParams would turn undefined into the text "undefined").
 export async function fetchVendorsApi(filters = {}, signal) {
-  const queryParams = new URLSearchParams({
-    page: filters.page || 1,
-    limit: filters.limit || 12,
-    ...filters,
+  const queryParams = new URLSearchParams();
+  Object.entries({ page: 1, limit: 12, ...filters }).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      queryParams.set(key, String(value));
+    }
   });
 
   const response = await backendInstance.get(
     `${API_ENDPOINTS.VENDORS.LIST}?${queryParams}`,
-    { signal }
+    { signal },
   );
 
   return {

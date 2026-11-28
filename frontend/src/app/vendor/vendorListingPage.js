@@ -2,14 +2,13 @@
 
 "use client";
 
-import React, { useState, useDeferredValue, useMemo } from "react";
+import React, { useState, useDeferredValue, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useVendors } from "@/utils/hooks/useVendorData";
 import { VENDOR_DEFAULTS } from "@/utils/constants/globalConstants";
 import LoadingSpinner from "@/components/common/loading/loadingSpinner";
 import VendorListingView from "@/components/vendorUI/components/lists/vendorListingView";
 import HeroUI from "@/components/vendorUI/components/layout/heroUI";
-
 
 const INITIAL_FILTERS = VENDOR_DEFAULTS.INITIAL_STATE.filters;
 const INITIAL_PAGINATION = {
@@ -22,62 +21,80 @@ const VendorListingPage = () => {
   const [page, setPage] = useState(INITIAL_PAGINATION.currentPage);
   const router = useRouter();
 
-  // ✅ OPTIMIZATION: Defer search term to prevent blocking main thread
-  // This allows typing to stay responsive even when filtering 500+ vendors
+  // Defer search/category/location so typing stays responsive on long lists
   const deferredSearch = useDeferredValue(filters.search || "");
-
-  // ✅ OPTIMIZATION: Defer category/location filters for heavy lists
   const deferredCategory = useDeferredValue(filters.category);
   const deferredLocation = useDeferredValue(filters.location);
 
-  // Build request params with deferred values for API call
   const requestParams = useMemo(
     () => ({
       search: deferredSearch,
       category: deferredCategory,
       location: deferredLocation,
-      // Other filters can remain immediate (sorting, etc.)
       sortBy: filters.sortBy,
-      page: page,
+      page,
       limit: INITIAL_PAGINATION.pageSize,
     }),
     [deferredSearch, deferredCategory, deferredLocation, filters.sortBy, page],
   );
 
-  // Call the hook with deferred params
-  const { data, isLoading, isFetching, isError, error } =
+  const { data, isLoading, isFetching, isPlaceholderData, isError, error } =
     useVendors(requestParams);
 
-  // Derive variables after hook call
-  const vendors = data?.vendors || [];
+  // Pages loaded so far for the CURRENT filters. "Load more" appends the next page.
+  const filtersKey = [
+    deferredSearch,
+    deferredCategory ?? "",
+    deferredLocation ?? "",
+    filters.sortBy ?? "",
+  ].join("|");
+  const [loaded, setLoaded] = useState({ key: filtersKey, pages: {} });
+
+  useEffect(() => {
+    // useVendors keeps the previous response while the next one loads; never file that one.
+    if (!data?.vendors || isPlaceholderData) return;
+    // File the response under the page the SERVER says it is, not the one we asked for.
+    const servedPage = data.pagination?.currentPage ?? page;
+    setLoaded((prev) => ({
+      key: filtersKey,
+      pages: {
+        ...(prev.key === filtersKey ? prev.pages : {}),
+        [servedPage]: data.vendors,
+      },
+    }));
+  }, [data, isPlaceholderData, page, filtersKey]);
+
+  const vendors = useMemo(() => {
+    const pages = loaded.key === filtersKey ? loaded.pages : {};
+    const merged = Object.keys(pages)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .flatMap((n) => pages[n]);
+    if (merged.length === 0) return data?.vendors || [];
+    const seen = new Set(); // a vendor can shift pages if rankings change between requests
+    return merged.filter((v) => (seen.has(v.id) ? false : seen.add(v.id)));
+  }, [loaded, filtersKey, data]);
+
   const totalCount = data?.pagination?.totalCount || 0;
   const hasData = vendors.length > 0;
-  const hasMoreVendors = page * INITIAL_PAGINATION.pageSize < totalCount;
+  const hasMoreVendors =
+    data?.pagination?.hasMore ??
+    page * INITIAL_PAGINATION.pageSize < totalCount;
   const isFirstPageLoading = isLoading && !hasData;
 
-  // ✅ OPTIMIZATION: Detect when UI is "catching up" to user input
-  // This allows us to show visual feedback during the deferred update
-  const isSearchPending = filters.search !== deferredSearch;
-  const isCategoryPending = filters.category !== deferredCategory;
-  const isLocationPending = filters.location !== deferredLocation;
+  // Show that the UI is catching up to the user's input
   const isAnyFilterPending =
-    isSearchPending || isCategoryPending || isLocationPending;
-
-  // Combine loading states for UI
+    filters.search !== deferredSearch ||
+    filters.category !== deferredCategory ||
+    filters.location !== deferredLocation;
   const generalLoading = isFetching || isAnyFilterPending;
 
-  // Handler functions
   const handleFilterChange = (newFilters) => {
-    setPage(1); // Reset to first page on filter change
-    setFilters((prev) => ({
-      ...prev,
-      ...newFilters,
-    }));
+    setPage(1); // a new search or filter starts again from page 1
+    setFilters((prev) => ({ ...prev, ...newFilters }));
   };
 
   const handleSearch = (searchTerm) => {
-    // Input updates immediately (stays responsive)
-    // But API call uses deferred value (prevents blocking)
     handleFilterChange({ search: searchTerm });
   };
 
@@ -96,7 +113,6 @@ const VendorListingPage = () => {
     router.push("/dashboard");
   };
 
-  // Conditional UI Returns
   if (isFirstPageLoading) {
     return (
       <LoadingSpinner
@@ -137,7 +153,6 @@ const VendorListingPage = () => {
     );
   }
 
-  // Main Content Render
   return (
     <div className="min-h-screen bg-slate-50">
       <HeroUI />
@@ -151,12 +166,12 @@ const VendorListingPage = () => {
           onRegisterClick={handleRegisterClick}
           onLoadMore={handleLoadMore}
           isLoading={generalLoading}
-          isSearchPending={isSearchPending} // ✅ NEW: Pass pending state
+          isSearchPending={isAnyFilterPending}
           isError={isError}
           pagination={{
             currentPage: page,
             hasMore: hasMoreVendors,
-            totalCount: totalCount,
+            totalCount,
           }}
         />
       </main>
