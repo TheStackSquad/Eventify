@@ -8,9 +8,9 @@ Status "Confirmed" means a check in this suite failed against the code on 2026-1
 | F401 | Med | Fixed | An unknown email gets its answer faster than a known one (no password hashing happens) | AUTH-L4 |
 | F402 | Med | Suspected | Anyone can lock a victim's account for 10 minutes with 5 wrong passwords | AUTH-K |
 | F403 | Med | Fixed | login_attempts.last_attempt_at has no time zone; behaviour under a Lagos-time server to be tested | AUTH-S3, AUTH-K |
-| F404 | Med | Suspected | Two refreshes at once with one token both succeed and mint different tokens | AUTH-T8 |
-| F405 | Med | Suspected | Refresh ignores the stored expiry of the token | AUTH-T9 |
-| F406 | Med | Suspected | A session never reaches an absolute end: every refresh restarts the 30-day life | AUTH-T10 |
+| F404 | Med | Mitigated (single-instance lock; race never reproduced, T8 guards it) | Two refreshes at once with one token both succeed and mint different tokens | AUTH-T8 |
+| F405 | Med | Fixed | Refresh ignores the stored expiry of the token | AUTH-T9 |
+| F406 | Med | Fixed | A session never reaches an absolute end: every refresh restarts the 30-day life | AUTH-T10 |
 | F407 | Med | Suspected | Old access tokens keep working for up to 24 hours after a password reset | AUTH-R |
 | F408 | Med | Fixed | Logging out with a Bearer token does not revoke it | AUTH-T5 |
 | F409 | Med | Suspected | Reset tokens are stored in plain text | AUTH-R |
@@ -24,5 +24,6 @@ Status "Confirmed" means a check in this suite failed against the code on 2026-1
 | F417 | Med | Fixed | A sign-up can choose its own user id | AUTH-A3 |
 | F418 | Low | Fixed | A password longer than 72 bytes gives a 500 | AUTH-A7 |
 | F419 | Med | Fixed | Failed logins for emails that do not exist write rows to login_attempts | AUTH-L3 |
-| F420 | Low | Suspected | AdminMiddleware compares errors with errors.Is on a fresh error, so a deleted admin gets 500 instead of 403 | AUTH-P |
+| F420 | Low | Fixed | AdminMiddleware compares errors with errors.Is on a fresh error, so a deleted admin gets 500 instead of 403 | AUTH-P |
 | F421 | Med | Suspected | Two simultaneous resets with one token can both succeed | AUTH-R |
+| F422 | Med | Suspected | refresh_tokens.parent_id is ON DELETE CASCADE: deleting an expired root token deletes its live descendants and logs the user out | AUTH-T |

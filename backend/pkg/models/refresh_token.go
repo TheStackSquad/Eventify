@@ -13,6 +13,8 @@ type RefreshToken struct {
 	Revoked     bool       `json:"revoked" db:"revoked"`
 	ExpiresAt   time.Time  `json:"expiresAt" db:"expires_at"`
 	CreatedAt   time.Time  `json:"createdAt" db:"created_at"`
+    // When the session this token belongs to began; copied down the chain by a database trigger (F406).
+    SessionStartedAt time.Time `json:"sessionStartedAt" db:"session_started_at"`
 	// NEW: Tracks if the token has been used already (for Grace Period)
 	ConsumedAt  *time.Time `json:"consumedAt,omitempty" db:"consumed_at"`
 	// NEW: Tracks the "Session Family Tree" (for Reuse Detection)

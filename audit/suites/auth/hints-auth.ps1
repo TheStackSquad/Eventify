@@ -19,6 +19,18 @@ $AuthHints = @{
     'AUTH-K1' = 'Five wrong passwords must lock the account for 10 minutes, even for the right password.'
     'AUTH-K2' = 'F403: the time is written as the server local time into a column without a time zone, then read back as UTC. Write UTC and use timestamptz.'
     'AUTH-K3' = 'F403: with the time stored wrongly, the lock lasts longer than 10 minutes on a server that does not run in UTC.'
+    'AUTH-T8' = 'F404: RefreshToken reads whether the token was consumed and then consumes it in a separate step, so simultaneous refreshes each mint a new token pair and the session splits into several valid children. Make the consume step atomic (UPDATE ... WHERE consumed_at IS NULL RETURNING) and let the loser take the grace-window path. A pass here means no split was seen in 3 rounds.'
+    'AUTH-T9' = 'F405: RefreshToken never reads refresh_tokens.expires_at, so the 24-hour life stored for a session login is ignored and only the 30-day JWT expiry applies. Refuse a token whose stored expiry has passed.'
+    'AUTH-T10' = 'F406: the 30-day absolute limit is measured from the created_at of the current token, which restarts at every refresh, so a session never ends. Measure from the first login of the chain.'
+    'AUTH-T11' = 'Reusing a refresh token after its grace window must revoke the whole chain and answer 403 SECURITY_VIOLATION.'
+    'AUTH-T12' = 'A repeat refresh with the same old token inside the grace window must return the same new tokens, so no second session appears.'
+    'AUTH-T13' = 'F405: every refresh gives the new token 30 days, so a browser session stored with a 24-hour life silently becomes a 30-day session. A rotated token must live as long as the one it replaces.'
+    'AUTH-T14' = 'A "remember me" session must keep its 30-day life across a refresh (a guard against making the T13 fix too strict).'
+    'AUTH-P1' = 'Admin routes must answer 401 without a session.'
+    'AUTH-P2' = 'AdminMiddleware must refuse a customer with 403.'
+    'AUTH-P3' = 'An admin action must be refused for a customer before it runs.'
+    'AUTH-P4' = 'An admin must reach the admin routes.'
+    'AUTH-P5' = 'F420: AdminMiddleware compares the lookup error with errors.Is on a fresh errors.New, which never matches, so a user deleted after login gets a 500. The repository must return a shared ErrUserNotFound and the middleware must compare with it.'
     'AUTH-C1' = 'Session cookies must be HttpOnly with SameSite; the CSRF cookie must stay readable by the page.'
     'AUTH-C2' = 'F414: Secure depends on COOKIE_SECURE (default off). Production must set it, and logout must clear cookies with the same flags.'
     'AUTH-C3' = 'Authenticated state-changing routes must demand the X-CSRF-Token header.'
@@ -46,6 +58,10 @@ function Get-AuthClaims {
         @{ Text = 'Forged, unsigned and re-signed tokens are refused.'; Needs = @('AUTH-T3') }
         @{ Text = 'Logout kills the access and the refresh token, whichever way the client authenticated.'; Needs = @('AUTH-T4', 'AUTH-T5') }
         @{ Text = 'Refresh rotates both tokens and needs a session.'; Needs = @('AUTH-T6', 'AUTH-T7') }
+        @{ Text = 'A refresh token cannot be used past its expiry, and a session ends at its absolute limit.'; Needs = @('AUTH-T9', 'AUTH-T10') }
+        @{ Text = 'Reusing an old refresh token ends the whole session, and simultaneous refreshes never split a session.'; Needs = @('AUTH-T8', 'AUTH-T11', 'AUTH-T12') }
+        @{ Text = 'A refreshed session keeps the life it was given at login: 24 hours for a browser session, 30 days for "remember me".'; Needs = @('AUTH-T13', 'AUTH-T14') }
+        @{ Text = 'Admin routes need a session and the admin role, and a deleted account is refused cleanly.'; Needs = @('AUTH-P1', 'AUTH-P2', 'AUTH-P3', 'AUTH-P4', 'AUTH-P5') }
         @{ Text = 'Only the named website origin receives CORS permission.'; Needs = @('AUTH-E2', 'AUTH-E3') }
     )
 }
@@ -54,6 +70,7 @@ function Get-AuthLimits {
     @(
         '- This run uses a local backend and the rig database; no tunnel is used.',
         '- Rate limiting is not exercised: the limiter skips localhost, so those checks need rig mode (a later piece).',
-        '- Refresh races, token expiry, session lifetime and the password-reset flow are covered by later pieces.'
+        '- Expiry and session-lifetime checks move rows back in time in the database, because waiting 30 days is not possible.',
+        '- The password-reset flow and the rate limits (rig mode) are covered by later pieces.'
     )
 }

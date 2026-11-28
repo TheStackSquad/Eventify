@@ -45,7 +45,7 @@ func AdminMiddleware(authRepo repoauth.AuthRepository) gin.HandlerFunc {
 		if err != nil {
 			log.Error().Err(err).Str("user_id", userIDLog).Msg("Database error during admin check")
 
-			if errors.Is(err, errors.New("user not found")) {
+			if errors.Is(err, repoauth.ErrUserNotFound) {
 				c.JSON(http.StatusForbidden, gin.H{"message": "Access denied: User not found."})
 			} else {
 				c.JSON(http.StatusInternalServerError, gin.H{"message": "Internal error checking user role."})

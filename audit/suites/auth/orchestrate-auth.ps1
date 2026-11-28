@@ -46,7 +46,7 @@ $Ctx = @{ User = $null }
 $script:StepFailureReported = $false
 
 foreach ($file in 'error\error-helpers.ps1', 'matrix\helpers.ps1', 'matrix\setup.ps1', 'matrix\report.ps1',
-                  'suites\auth\auth-helpers.ps1', 'suites\auth\checks-account.ps1', 'suites\auth\checks-session.ps1', 'suites\auth\checks-lockout.ps1', 'suites\auth\hints-auth.ps1') {
+                  'suites\auth\auth-helpers.ps1', 'suites\auth\checks-account.ps1', 'suites\auth\checks-session.ps1', 'suites\auth\checks-lockout.ps1', 'suites\auth\checks-refresh.ps1', 'suites\auth\checks-session-life.ps1', 'suites\auth\checks-roles.ps1', 'suites\auth\hints-auth.ps1') {
     $path = Join-Path $AuditDir $file
     if (-not (Test-Path -LiteralPath $path)) { Write-Host "Missing helper file: $path" -ForegroundColor Red; Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue; exit 2 }
     . $path
@@ -74,6 +74,9 @@ try {
         Invoke-AuthGroup 'Cookies and CSRF (AUTH-C)'    { Test-AuthCookies }
         Invoke-AuthGroup 'Tokens and sessions (AUTH-T)' { Test-AuthTokens }
         Invoke-AuthGroup 'Lockout and login timing (AUTH-K, AUTH-L)' { Test-AuthLockout }
+        Invoke-AuthGroup 'Refresh and session lifetime (AUTH-T)' { Test-AuthRefresh }
+        Invoke-AuthGroup 'Session life after a refresh (AUTH-T)' { Test-AuthSessionLife }
+        Invoke-AuthGroup 'Roles and admin routes (AUTH-P)' { Test-AuthRoles }
         Invoke-AuthGroup 'Edge: health and CORS (AUTH-E)' { Test-AuthEdge }
     }
 }

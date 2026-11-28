@@ -37,6 +37,7 @@ type authWriteService struct {
 
 	tokenCache       map[string]*cachedTokenPair
 	tokenCacheMutex  sync.RWMutex
+    refreshLocks     [64]sync.Mutex
 }
 
 type cachedTokenPair struct {
@@ -221,6 +222,12 @@ func (s *authWriteService) RefreshToken(
 	}
 
 	tokenHash := hex.EncodeToString(sha256Hash(oldTokenStr))
+
+    // One refresh at a time per token (F404): a second request for the same token waits, then finds it consumed
+    // and takes the grace-window path, which returns the tokens the first request issued.
+    lock := &s.refreshLocks[(int(tokenHash[0])*31+int(tokenHash[1]))%len(s.refreshLocks)]
+    lock.Lock()
+    defer lock.Unlock()
 	storedToken, err := s.refreshTokenRepo.GetByHash(ctx, tokenHash)
 	if err != nil || storedToken == nil {
 		return uuid.Nil, nil, ErrSessionExpired
@@ -232,7 +239,18 @@ func (s *authWriteService) RefreshToken(
 
 	userID := storedToken.UserID
 
-	if time.Since(storedToken.CreatedAt) >= absoluteTimeout {
+	// F405: a token past the expiry stored with it is dead, whatever its signed lifetime says.
+    if !storedToken.ExpiresAt.IsZero() && !time.Now().Before(storedToken.ExpiresAt) {
+        _ = s.refreshTokenRepo.RevokeRefreshToken(ctx, userID, oldTokenStr)
+        return uuid.Nil, nil, ErrSessionExpired
+    }
+
+    // F406: the absolute limit counts from the first login of the session, not from the newest token.
+    sessionStart := storedToken.SessionStartedAt
+    if sessionStart.IsZero() {
+        sessionStart = storedToken.CreatedAt
+    }
+    if time.Since(sessionStart) >= absoluteTimeout {
 		log.Info().Str("user_id", userID.String()).Msg("Session reached absolute timeout")
 		_ = s.refreshTokenRepo.RevokeRefreshToken(ctx, userID, oldTokenStr)
 		return uuid.Nil, nil, ErrSessionExpired
@@ -251,7 +269,17 @@ func (s *authWriteService) RefreshToken(
 		}
 	}
 
-	if storedToken.ConsumedAt != nil {
+	// A rotated token lives as long as the one it replaces (24 hours for a browser session, 30 days for "remember me"),
+    // and never past the absolute end of the session (F405, F406).
+    childLife := int(storedToken.ExpiresAt.Sub(storedToken.CreatedAt).Seconds())
+    if childLife <= 0 {
+        childLife = persistentRefreshTTL
+    }
+    if left := int((absoluteTimeout - time.Since(sessionStart)).Seconds()); left > 0 && left < childLife {
+        childLife = left
+    }
+
+    if storedToken.ConsumedAt != nil {
 		timeSinceConsumed := time.Since(*storedToken.ConsumedAt)
 
 		if timeSinceConsumed >= RotationGracePeriod {
@@ -273,7 +301,7 @@ func (s *authWriteService) RefreshToken(
 		}
 
 		log.Debug().Msg("Cache miss within grace period, generating new tokens")
-		tokens, err := s.generateTokenPair(ctx, userID.String(), 0, &storedToken.ID, ipAddress, userAgent)
+        tokens, err := s.generateTokenPair(ctx, userID.String(), childLife, &storedToken.ID, ipAddress, userAgent)
 		if err != nil {
 			return uuid.Nil, nil, err
 		}
@@ -290,10 +318,10 @@ func (s *authWriteService) RefreshToken(
 
 	if err := s.refreshTokenRepo.ConsumeToken(ctx, storedToken.ID); err != nil {
 		log.Error().Err(err).Msg("Failed to mark token as consumed")
-		return uuid.Nil, nil, err
-	}
+        return uuid.Nil, nil, err
+    }
 
-	tokens, err := s.generateTokenPair(ctx, userID.String(), 0, &storedToken.ID, ipAddress, userAgent)
+    tokens, err := s.generateTokenPair(ctx, userID.String(), childLife, &storedToken.ID, ipAddress, userAgent)
 	if err != nil {
 		return uuid.Nil, nil, err
 	}
